@@ -48,3 +48,5 @@ component_config/sample-config/
 *.manifest
 *.spec
 config.json
+properties.json
+table_mappings.json
