@@ -17,6 +17,13 @@
       "description": "Set to true to refresh (or fetch for the first time) database objects and schema options. NOTE: This step is necessary before first execution, and setting to true does not run the extraction"
       "propertyOrder": 100
     },
+    "tableMappingsJson": {
+      "type": "string",
+      "title": "Table mappings JSON Specification",
+      "default": "",
+      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping in Keboola."
+      "propertyOrder": 150
+    },
     "host": {
       "type": "string",
       "title": "Host",
