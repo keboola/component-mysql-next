@@ -1,0 +1,11 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+.idea
+.project
+.pydevproject
+venv/
+
+# kbc datafolder
+data/
+component_config/sample-config/
