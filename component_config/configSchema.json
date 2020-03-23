@@ -2,6 +2,7 @@
   "type": "object",
   "title": "Connection Details",
   "required": [
+    "fetchObjectsOnly",
     "host",
     "port",
     "username",
@@ -9,58 +10,64 @@
     "sshTunnel"
   ],
   "properties": {
+    "fetchObjectsOnly": {
+      "type": "boolean",
+      "title": "Fetch Database Objects and Schemas?",
+      "default": false,
+      "description": "Set to true to refresh (or fetch for the first time) database objects and schema options. NOTE: This step is necessary before first execution, and setting to true does not run the extraction"
+      "propertyOrder": 100
+    },
     "host": {
       "type": "string",
       "title": "Host",
       "description": "The host name or IP for your MySQL instance or cluster",
-      "propertyOrder": 10
+      "propertyOrder": 200
     },
     "port": {
       "type": "number",
       "title": "Port",
       "description": "The port on which the MySQL database accepts connections, the default port is 3306",
       "default": 3306,
-      "propertyOrder": 20
+      "propertyOrder": 300
     },
     "username": {
       "type": "string",
       "title": "Username",
       "description": "The Keboola user configured for your MySQL database, for use only with your extractor",
-      "propertyOrder": 30
+      "propertyOrder": 400
     },
     "#password": {
       "type": "string",
       "title": "Password",
       "description": "Strong password you set for your Keboola MySQL user",
       "format": "password",
-      "propertyOrder": 40
+      "propertyOrder": 500
     },
     "sshTunnel": {
       "type": "boolean",
       "title": "Use SSH Tunnel?",
       "description": "Set to true to connect using a configured SSH tunnel, otherwise keep false and be sure you have whitelisted Keboola's IPs. If false, other SSH parameters will be ignored and are not necessary.",
       "default": false,
-      "propertyOrder": 50
+      "propertyOrder": 600
     },
     "sshHost": {
       "type": "string",
       "title": "SSH Host",
       "description": "The host name or host IP associated with your SSH server (Note: Don't use load balancer as host)",
-      "propertyOrder": 60
+      "propertyOrder": 700
     },
     "sshPort": {
       "type": "number",
       "title": "SSH Port",
       "description": "The SSH server's port number, the default port is 22",
       "default": 22,
-      "propertyOrder": 70
+      "propertyOrder": 800
     },
     "sshPublicKey": {
       "type": "string",
       "title": "SSH Server Public Key",
       "description": "The public key for the key pair associated with your SSH server",
-      "default": 22,
-      "propertyOrder": 80
+      "propertyOrder": 900
     }
   }
 }
