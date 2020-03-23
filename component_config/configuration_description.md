@@ -22,7 +22,13 @@ Keboola storage. We record the place we last left off among those binary log fil
 
 #### Setting Up the Database Connection
 In order to connect to MySQL, you will supply your host name or IP, port (usually 3306), username and password. The
-username and password you specify will essentially act as a Keboola service account. To create this user
+username and password you specify will essentially act as a Keboola service account. To create this user, you will need
+to run the following SQL command against your instance:
+```sql
+create user keboola@'%' identified by '{insert strong password here}';
+grant replication client, replication slave, select ON *.* TO keboola@'%';
+```
+If you follow the above, you will use Username 'keboola' during configuration, and the password you set for Password.
 
 If you are authenticating without using an SSH tunnel, you will need to whitelist Keboola IPs (see [here](https://help.keboola.com/components/ip-addresses)).
 If you are connecting via an SSH tunnel, specify 'ssh_tunnel' as True and supply the necessary parameters for your SSH
