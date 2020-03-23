@@ -17,16 +17,9 @@
       "description": "Set to true to refresh (or fetch for the first time) database objects and schema options. NOTE: This step is necessary before first execution, and setting to true does not run the extraction",
       "propertyOrder": 100
     },
-    "tableMappingsJson": {
-      "type": "string",
-      "title": "Table mappings JSON Specification",
-      "default": "",
-      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping in Keboola.",
-      "propertyOrder": 150
-    },
     "host": {
       "type": "string",
-      "title": "Host",
+      "title": "MySQL Host",
       "description": "The host name or IP for your MySQL instance or cluster",
       "propertyOrder": 200
     },
@@ -63,6 +56,12 @@
       "description": "The host name or host IP associated with your SSH server (Note: Don't use load balancer as host)",
       "propertyOrder": 700
     },
+    "sshUser": {
+      "type": "string",
+      "title": "SSH Username",
+      "description": "The SSH User for connecting to your SSH server",
+      "propertyOrder": 750
+    },
     "sshPort": {
       "type": "number",
       "title": "SSH Port",
@@ -75,6 +74,13 @@
       "title": "SSH Server Public Key",
       "description": "The public key for the key pair associated with your SSH server",
       "propertyOrder": 900
+    },
+    "tableMappingsJson": {
+      "type": "string",
+      "title": "Table mappings JSON Specification",
+      "default": "",
+      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping in Keboola.",
+      "propertyOrder": 950
     }
   }
 }

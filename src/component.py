@@ -142,9 +142,7 @@ def schema_for_column(c):
         result.format = 'date-time'
 
     else:
-        result = Schema(None,
-                        inclusion='unsupported',
-                        description='Unsupported column type {}'.format(column_type))
+        result = Schema(None, inclusion='unsupported', description='Unsupported column type {}'.format(column_type))
     return result
 
 
@@ -251,10 +249,7 @@ def discover_catalog(mysql_conn, config):
                 key_properties = [c.column_name for c in cols if column_is_key_prop(c, schema)]
 
                 if not is_view:
-                    md_map = metadata.write(md_map,
-                                            (),
-                                            'table-key-properties',
-                                            key_properties)
+                    md_map = metadata.write(md_map, (), 'table-key-properties', key_properties)
 
                 entry = CatalogEntry(table=table_name, stream=table_name, metadata=metadata.to_list(md_map),
                                      tap_stream_id=common.generate_tap_stream_id(table_schema, table_name),
@@ -439,7 +434,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
             is_view = common.get_is_view(stream)
 
             if is_view:
-                raise Exception("Unable to replicate stream({}) with binlog because it is a view.".format(stream.stream))
+                raise Exception("Unable to replicate stream({}) with binlog because it's a view.".format(stream.stream))
 
             LOGGER.info("LOG_BASED stream %s will resume its historical sync", stream.tap_stream_id)
 
@@ -679,6 +674,8 @@ class Component(KBCEnvHandler):
     def __init__(self, debug: bool = False, data_path: str = None):
         KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
                                log_level=logging.DEBUG if debug else logging.INFO)
+        self.files_out_path = os.path.join(data_path, 'out', 'files')
+        self.files_in_path = os.path.join(data_path, 'in', 'files')
         # override debug from config
         if self.cfg_params.get(KEY_DEBUG):
             debug = True
@@ -699,15 +696,17 @@ class Component(KBCEnvHandler):
 
     def _check_file_inputs(self) -> str:
         """Return path name of file inputs if any."""
-        file_input = os.path.join(self.data_path, 'in', 'files')
+        file_input = self.files_in_path
         has_file_inputs = any(os.path.isfile(os.path.join(file_input, file)) for file in os.listdir(file_input))
 
         if has_file_inputs:
             return file_input
 
-    def write_table_mappings_file(self):
-        """Write table mappings file to output destination."""
-        pass
+    def write_table_mappings_file(self, table_mapping: Catalog, file_name: str = 'table_mappings.json'):
+        """Write table mappings to output file destination."""
+        write_destination = os.path.join(self.files_out_path, file_name)
+        with open(write_destination, 'w') as mapping_file:
+            mapping_file.write(table_mapping.dumps())
 
     def run(self):
         """Execute main component extraction process."""
@@ -721,7 +720,6 @@ class Component(KBCEnvHandler):
             "user": params[KEY_MYSQL_USER],
             "password": params[KEY_MYSQL_PWD]
         }
-        print(config_params)
 
         mysql_client = MySQLConnection(config_params)
         # TODO: Consider logging server details here.
@@ -738,8 +736,8 @@ class Component(KBCEnvHandler):
         if params[KEY_OBJECTS_ONLY]:
             # Run only schema discovery process.
             LOGGER.info('Fetching only object and field names, not running full extraction.')
-            output_table_mapping = do_discover(mysql_client, params)
-            print(output_table_mapping)
+            table_mapping = discover_catalog(mysql_client, params)
+            self.write_table_mappings_file(table_mapping)
         elif table_mappings:
             # Run extractor data sync.
             prior_state = self.get_state_file() or {}
@@ -747,10 +745,13 @@ class Component(KBCEnvHandler):
                 LOGGER.info('Using prior state file to execute sync.')
             else:
                 LOGGER.info('No prior state found, will need to execute full sync.')
-            # do_sync(mysql_client, params, table_mappings, prior_state)
+            catalog = Catalog.from_dict(table_mappings)
+            output_rows = []
+            do_sync(mysql_client, params, catalog, prior_state)
         else:
-            LOGGER.info('You have either specified incorrect input parameters, or have not chosen to either specify a'
-                        'table mappings file manually or via the File Input Mappings configuration.')
+            LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either specify '
+                         'a table mappings file manually or via the File Input Mappings configuration.')
+            exit(1)
 
 
 if __name__ == "__main__":
