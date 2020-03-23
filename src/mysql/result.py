@@ -1,34 +1,127 @@
-from kbc.result import KBCTableDef
-from kbc.result import ResultWriter
+"""
+Write result to CSV.
+"""
+import argparse
+import collections
+import csv
+import io
+import json
+import logging
+import os
+import sys
+from datetime import datetime
 
-COMPANY_PK = ['companyId']
-DEAL_PK = ['dealId']
-DEAL_STAGE_HIST_PK = ['Deal_ID', 'sourceVid', 'sourceId', 'timestamp']
+from jsonschema.validators import Draft4Validator
+import src.core as core
+
+LOGGER = logging.getLogger(__name__)
 
 
-class DealsWriter(ResultWriter):
-    """
-    Overridden constructor method of ResultWriter. It creates extra ResultWriter instance that handles processing of
-    the nested object 'deals_stage_history'. That writer is then called from within the write method.
-    """
-    def __init__(self, out_path, columns, buffer=8192):
-        # specify result table
-        deal_res_table = KBCTableDef('deals', columns, DEAL_PK)
-        ResultWriter.__init__(self, out_path, deal_res_table, fix_headers=True, buffer_size=buffer)
+def emit_state(state):
+    if state is not None:
+        line = json.dumps(state)
+        LOGGER.debug('Emitting state {}'.format(line))
+        sys.stdout.write("{}\n".format(line))
+        sys.stdout.flush()
 
-        ext_user_table = KBCTableDef('deals_stage_history', [], DEAL_STAGE_HIST_PK)
-        self.deals_stage_history_wr = ResultWriter(out_path, ext_user_table,
-                                                   exclude_fields=['properties.dealstage.versions'],
-                                                   flatten_objects=False,
-                                                   user_value_cols={'Deal_ID'}, buffer_size=buffer)
 
-    def write(self, data, file_name=None, user_values=None, object_from_arrays=False, write_header=True):
-        # write ext users
-        d_stage_history = data.get('properties').get('dealstage').get('versions')
-        if d_stage_history and str(
-                d_stage_history) != 'nan' and len(d_stage_history) > 0:
-            self.deals_stage_history_wr.write_all(d_stage_history,
-                                                  user_values={'Deal_ID': self._get_pkey_values(data, {})})
-            self.results = {**self.results, **self.deals_stage_history_wr.results}
+def flatten(d, parent_key='', sep='__'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.MutableMapping):
+            items.extend(flatten(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, str(v) if type(v) is list else v))
+    return dict(items)
 
-        super().write(data)
+
+def persist_messages(delimiter, quotechar, messages, destination_path):
+    state = None
+    schemas = {}
+    key_properties = {}
+    headers = {}
+    validators = {}
+
+    now = datetime.now().strftime('%Y%m%dT%H%M%S')
+
+    for message in messages:
+        try:
+            o = core.parse_message(message).asdict()
+        except json.decoder.JSONDecodeError:
+            LOGGER.error("Unable to parse:\n{}".format(message))
+            raise
+        message_type = o['type']
+        if message_type == 'RECORD':
+            if o['stream'] not in schemas:
+                raise Exception("A record for stream {}"
+                                "was encountered before a corresponding schema".format(o['stream']))
+
+            validators[o['stream']].validate(o['record'])
+
+            filename = o['stream'] + '-' + now + '.csv'
+            filename = os.path.expanduser(os.path.join(destination_path, filename))
+            file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
+
+            flattened_record = flatten(o['record'])
+
+            if o['stream'] not in headers and not file_is_empty:
+                with open(filename, 'r') as csvfile:
+                    reader = csv.reader(csvfile,
+                                        delimiter=delimiter,
+                                        quotechar=quotechar)
+                    first_line = next(reader)
+                    headers[o['stream']] = first_line if first_line else flattened_record.keys()
+            else:
+                headers[o['stream']] = flattened_record.keys()
+
+            with open(filename, 'a') as csvfile:
+                writer = csv.DictWriter(csvfile,
+                                        headers[o['stream']],
+                                        extrasaction='ignore',
+                                        delimiter=delimiter,
+                                        quotechar=quotechar)
+                if file_is_empty:
+                    writer.writeheader()
+
+                writer.writerow(flattened_record)
+
+            state = None
+        elif message_type == 'STATE':
+            LOGGER.debug('Setting state to {}'.format(o['value']))
+            state = o['value']
+        elif message_type == 'SCHEMA':
+            stream = o['stream']
+            schemas[stream] = o['schema']
+            validators[stream] = Draft4Validator(o['schema'])
+            key_properties[stream] = o['key_properties']
+        else:
+            LOGGER.warning("Unknown message type {} in message {}"
+                           .format(o['type'], o))
+
+    return state
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', help='Config file')
+    args = parser.parse_args()
+
+    if args.config:
+        with open(args.config) as input_json:
+            config = json.load(input_json)
+    else:
+        config = {}
+
+    input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
+    state = persist_messages(config.get('delimiter', ','),
+                             config.get('quotechar', '"'),
+                             input_messages,
+                             config.get('destination_path', ''))
+
+    emit_state(state)
+    LOGGER.debug("Exiting normally")
+
+
+if __name__ == '__main__':
+    main()
