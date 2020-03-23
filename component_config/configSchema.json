@@ -6,16 +6,13 @@
     "port",
     "username",
     "#password",
-    "sshTunnel",
-    "sshHost",
-    "sshPort",
-    "sshPublicKey"
+    "sshTunnel"
   ],
   "properties": {
     "host": {
       "type": "string",
       "title": "Host",
-      "description": "",
+      "description": "The host name or IP for your MySQL instance or cluster",
       "propertyOrder": 10
     },
     "port": {
@@ -28,20 +25,20 @@
     "username": {
       "type": "string",
       "title": "Username",
-      "description": "",
+      "description": "The Keboola user configured for your MySQL database, for use only with your extractor",
       "propertyOrder": 30
     },
     "#password": {
       "type": "string",
       "title": "Password",
-      "description": "",
+      "description": "Strong password you set for your Keboola MySQL user",
       "format": "password",
       "propertyOrder": 40
     },
     "sshTunnel": {
       "type": "boolean",
       "title": "Use SSH Tunnel?",
-      "description": "",
+      "description": "Set to true to connect using a configured SSH tunnel, otherwise keep false and be sure you have whitelisted Keboola's IPs. If false, other SSH parameters will be ignored and are not necessary.",
       "default": false,
       "propertyOrder": 50
     },
@@ -56,14 +53,14 @@
       "title": "SSH Port",
       "description": "The SSH server's port number, the default port is 22",
       "default": 22,
-      "propertyOrder": 60
+      "propertyOrder": 70
     },
     "sshPublicKey": {
       "type": "string",
       "title": "SSH Server Public Key",
       "description": "The public key for the key pair associated with your SSH server",
       "default": 22,
-      "propertyOrder": 60
+      "propertyOrder": 80
     }
   }
 }
