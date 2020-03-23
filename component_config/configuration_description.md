@@ -7,7 +7,7 @@ allows for choice of replication style at the table level, supporting log-based 
 #### Log-Based Replication for Change Data Capture
 Log-based replication is a type of change data capture (CDC) where incremental changes made to a database are detected
 by reading the binary logs (AKA binlogs in MySQL) to pick up only changes since the last execution of this pipeline.
-More specifically, all INSERT, UPDATE, and DELETE statement changes are appropriately recorded 
+More specifically, all INSERT, UPDATE, and DELETE statements are appropriately recorded for database change capture.
 This replication style is actually the fastest method for identifying change (faster than key-based replication in
 almost every case) and has the ability to capture hard deletes (so long as they are run as a DELETE, not a TRUNCATE or 
 DROP statement), unlike key-based replication. Deleted records will be left with a "deletion marker", identified by a
