@@ -11,12 +11,10 @@ from kbc.env_handler import KBCEnvHandler
 from kbc.result import KBCTableDef
 from kbc.result import ResultWriter
 
-# ####### EXAMPLE TO REMOVE
-from hs import hs_client, hs_result
-from hs.hs_client import HubspotClient
-from hs.hs_result import DealsWriter
+from mysql import client, result
+from mysql.client import HubspotClient
+from mysql.result import DealsWriter
 
-# ####### EXAMPLE TO REMOVE
 
 # global constants'
 SUPPORTED_ENDPOINTS = ['companies', 'deals']
