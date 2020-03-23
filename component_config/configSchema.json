@@ -12,7 +12,7 @@
   "properties": {
     "fetchObjectsOnly": {
       "type": "boolean",
-      "title": "Fetch Database Objects and Schemas?",
+      "title": "Fetch Database Object Names and Schemas Only?",
       "default": false,
       "description": "Set to true to refresh (or fetch for the first time) database objects and schema options. NOTE: This step is necessary before first execution, and setting to true does not run the extraction"
       "propertyOrder": 100
