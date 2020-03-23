@@ -5,8 +5,20 @@ This configuration works for MySQL databases hosted on AWS RDS, Aurora MySQL, an
 allows for choice of replication style at the table level, supporting log-based incremental replication.
 
 #### Log-Based Replication for Change Data Capture
-MySQL Next allows for choice of replication style at the table level, supporting log-based incremental replication and
-full-table replication (key-based replication coming soon).
+Log-based replication is a type of change data capture (CDC) where incremental changes made to a database are detected
+by reading the binary logs (AKA binlogs in MySQL) to pick up only changes since the last execution of this pipeline.
+More specifically, all INSERT, UPDATE, and DELETE statement changes are appropriately recorded 
+This replication style is actually the fastest method for identifying change (faster than key-based replication in
+almost every case) and has the ability to capture hard deletes (so long as they are run as a DELETE, not a TRUNCATE or 
+DROP statement), unlike key-based replication. Deleted records will be left with a "deletion marker", identified by a
+timestamp for the time the record was deleted in the special _KBC_DELETED_TIME column.
+
+Generally speaking, a full sync is run during the first execution with log-based replication. From there, markers are
+recorded to essentially keep track of the max of each table where the work was left off. From there, log-based
+replication truly kicks in. All row-based binary logs for append, update and deletion events are captured and written to
+Keboola storage. We record the place we last left off among those binary log files, and continue from there.
+
+*Note*: A full table replication must be run if schema changes are necessary, i.e. adding a new column.
 
 #### Setting Up the Database Connection
 In order to connect to MySQL, you will supply your host name or IP, port (usually 3306), username and password. The
@@ -32,6 +44,7 @@ The above only needs to be set up during initial setup for replication. You can 
 `call mysql.rds_show_configuration;` to see your existing binlog retention hours value, if any.
 
 #### Setting Up the Configuration File
+[TODO]
 
 #### Pulling Existing Schema Definitions
 The extractor has the ability to pull existing schema definitions. If you set the parameter discover_schema to True, the
