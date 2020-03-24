@@ -9,9 +9,8 @@ from src.core.logger import get_logger
 LOGGER = get_logger()
 
 
-class Message():
+class Message:
     """Base class for messages."""
-
     def asdict(self):  # pylint: disable=no-self-use
         raise Exception('Not implemented')
 

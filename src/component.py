@@ -3,8 +3,16 @@
 Executes component endpoint executions based on dependent api_mappings.json file in same path. This file should have
 a set structure, see example below:
 
+# Primary To-do items
+TODO: Integrate SSH tunnel compatibility
+TODO: Confirm successfully works in container including imports
+TODO: Update output file names to something consistent
+TODO: Write manifest files, including logic for if incremental or not.
+
+# Secondary To-do items
 TODO: Response for table mappings
 TODO: Integrate SSL, if all else works and there is a need
+TODO: Add testing framework
 """
 from collections import namedtuple
 import copy
@@ -18,20 +26,19 @@ import sys
 
 import src.core as core
 import src.core.metrics as metrics
+import src.mysql.result as result_writer
 
 from src.core import metadata
 from src.core.schema import Schema
 from src.core.catalog import Catalog, CatalogEntry
+from src.core.utils import ListStream
 
 import src.mysql.replication.binlog as binlog
 import src.mysql.replication.common as common
 import src.mysql.replication.full_table as full_table
 import src.mysql.replication.incremental as incremental
 
-# from datetime import datetime
 from kbc.env_handler import KBCEnvHandler
-# from kbc.result import KBCTableDef
-# from kbc.result import ResultWriter
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -68,7 +75,7 @@ KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.0.2'
+APP_VERSION = '0.1.0'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -708,6 +715,12 @@ class Component(KBCEnvHandler):
         with open(write_destination, 'w') as mapping_file:
             mapping_file.write(table_mapping.dumps())
 
+    @staticmethod
+    def write_result(result: list, output_file: str = 'results.json'):
+        """Write table mappings to output file destination."""
+        with open(output_file, 'w') as mapping_file:
+            mapping_file.write(json.dumps(result))
+
     def run(self):
         """Execute main component extraction process."""
         params = self.cfg_params
@@ -741,13 +754,30 @@ class Component(KBCEnvHandler):
         elif table_mappings:
             # Run extractor data sync.
             prior_state = self.get_state_file() or {}
+            print('prior state:')
+            print(prior_state)
+
             if prior_state:
                 LOGGER.info('Using prior state file to execute sync.')
             else:
                 LOGGER.info('No prior state found, will need to execute full sync.')
             catalog = Catalog.from_dict(table_mappings)
-            output_rows = []
-            do_sync(mysql_client, params, catalog, prior_state)
+
+            # do_sync(mysql_client, params, catalog, prior_state)
+
+            with ListStream() as stdout_stream:
+                do_sync(mysql_client, params, catalog, prior_state)
+            # print('stdout stream:')
+            # print(stdout_stream.get_result())
+            result = stdout_stream.get_result()
+
+            final_state = stdout_stream.get_state()
+            self.write_state_file(final_state)
+            print(final_state)
+
+            output_file = 'results.json'
+            # self.write_result(result, output_file=output_file)
+            result_writer.write(self.tables_out_path, result)
         else:
             LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either specify '
                          'a table mappings file manually or via the File Input Mappings configuration.')

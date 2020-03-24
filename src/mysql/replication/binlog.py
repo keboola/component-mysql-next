@@ -27,7 +27,7 @@ from pymysqlreplication.row_event import (
 
 LOGGER = logging.getLogger(__name__)
 
-SDC_DELETED_AT = "_sdc_deleted_at"
+KBC_DELETED_AT = "_kbc_deleted_time"
 UPDATE_BOOKMARK_PERIOD = 1000
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
 
@@ -35,12 +35,12 @@ mysql_timestamp_types = {FIELD_TYPE.TIMESTAMP, FIELD_TYPE.TIMESTAMP2}
 
 
 def add_automatic_properties(catalog_entry, columns):
-    catalog_entry.schema.properties[SDC_DELETED_AT] = Schema(
+    catalog_entry.schema.properties[KBC_DELETED_AT] = Schema(
         type=["null", "string"],
         format="date-time"
         )
 
-    columns.append(SDC_DELETED_AT)
+    columns.append(KBC_DELETED_AT)
 
     return columns
 
@@ -230,7 +230,7 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
 
     for row in event.rows:
         vals = row['values']
-        vals[SDC_DELETED_AT] = None
+        vals[KBC_DELETED_AT] = None
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
         record_message = row_to_singer_record(catalog_entry, stream_version, db_column_types, filtered_vals,
@@ -248,7 +248,7 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
 
     for row in event.rows:
         vals = row['after_values']
-        vals[SDC_DELETED_AT] = None
+        vals[KBC_DELETED_AT] = None
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
         record_message = row_to_singer_record(catalog_entry,
@@ -272,7 +272,7 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
         event_ts = datetime.datetime.utcfromtimestamp(event.timestamp).replace(tzinfo=pytz.UTC)
         vals = row['values']
 
-        vals[SDC_DELETED_AT] = event_ts
+        vals[KBC_DELETED_AT] = event_ts
 
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
