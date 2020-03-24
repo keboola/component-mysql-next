@@ -5,7 +5,7 @@ freezegun
 jsonschema
 mock
 mysql-replication
-pendulum
+pendulum==1.2.0
 pymysql
 python-dateutil
 pytz

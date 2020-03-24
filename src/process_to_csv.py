@@ -1,26 +1,25 @@
 """
-Write result to CSV.
+Output to CSV.
 """
 import argparse
-import collections
-import csv
 import io
-import json
-import logging
 import os
 import sys
-# from datetime import datetime
+import json
+import csv
+from datetime import datetime
+import collections
 
 from jsonschema.validators import Draft4Validator
 import src.core as core
 
-LOGGER = logging.getLogger(__name__)
+logger = core.get_logger()
 
 
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
-        LOGGER.debug('Emitting state {}'.format(line))
+        logger.debug('Emitting state {}'.format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
@@ -36,31 +35,30 @@ def flatten(d, parent_key='', sep='__'):
     return dict(items)
 
 
-def persist_messages(destination_path, messages, delimiter, quotechar):
+def persist_messages(delimiter, quotechar, messages, destination_path):
     state = None
     schemas = {}
     key_properties = {}
     headers = {}
     validators = {}
 
-    # now = datetime.now().strftime('%Y%m%dT%H%M%S')
+    now = datetime.now().strftime('%Y%m%dT%H%M%S')
 
     for message in messages:
         try:
             o = core.parse_message(message).asdict()
         except json.decoder.JSONDecodeError:
-            LOGGER.error("Unable to parse:\n{}".format(message))
+            logger.error("Unable to parse:\n{}".format(message))
             raise
         message_type = o['type']
-
         if message_type == 'RECORD':
             if o['stream'] not in schemas:
                 raise Exception("A record for stream {}"
                                 "was encountered before a corresponding schema".format(o['stream']))
 
             validators[o['stream']].validate(o['record'])
-            filename = o['stream'] + '.csv'
-            # filename = o['stream'] + '-' + now + '.csv'
+
+            filename = o['stream'] + '-' + now + '.csv'
             filename = os.path.expanduser(os.path.join(destination_path, filename))
             file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
 
@@ -68,14 +66,19 @@ def persist_messages(destination_path, messages, delimiter, quotechar):
 
             if o['stream'] not in headers and not file_is_empty:
                 with open(filename, 'r') as csvfile:
-                    reader = csv.reader(csvfile, delimiter=delimiter, quotechar=quotechar)
+                    reader = csv.reader(csvfile,
+                                        delimiter=delimiter,
+                                        quotechar=quotechar)
                     first_line = next(reader)
                     headers[o['stream']] = first_line if first_line else flattened_record.keys()
             else:
                 headers[o['stream']] = flattened_record.keys()
 
             with open(filename, 'a') as csvfile:
-                writer = csv.DictWriter(csvfile, headers[o['stream']], extrasaction='ignore', delimiter=delimiter,
+                writer = csv.DictWriter(csvfile,
+                                        headers[o['stream']],
+                                        extrasaction='ignore',
+                                        delimiter=delimiter,
                                         quotechar=quotechar)
                 if file_is_empty:
                     writer.writeheader()
@@ -84,7 +87,7 @@ def persist_messages(destination_path, messages, delimiter, quotechar):
 
             state = None
         elif message_type == 'STATE':
-            LOGGER.debug('Setting state to {}'.format(o['value']))
+            logger.debug('Setting state to {}'.format(o['value']))
             state = o['value']
         elif message_type == 'SCHEMA':
             stream = o['stream']
@@ -92,30 +95,10 @@ def persist_messages(destination_path, messages, delimiter, quotechar):
             validators[stream] = Draft4Validator(o['schema'])
             key_properties[stream] = o['key_properties']
         else:
-            LOGGER.warning("Unknown message type {} in message {}".format(o['type'], o))
+            logger.warning("Unknown message type {} in message {}"
+                           .format(o['type'], o))
 
     return state
-
-
-def write_stdin(destination_path: str, delimiter: str = ',', quotechar: str = '"'):
-    """Write results to CSV output destination."""
-    input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    state = persist_messages(destination_path, input_messages, delimiter=delimiter, quotechar=quotechar)
-    emit_state(state)
-    LOGGER.info('Finish write execution normally.')
-
-
-def write(destination_path: str, result: str = None, delimiter: str = ',', quotechar: str = '"'):
-    """Write results to CSV output destination."""
-    if result:
-        input_messages = result
-    else:
-        # If no result specified, use stdin buffer.
-        input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-
-    state = persist_messages(destination_path, input_messages, delimiter=delimiter, quotechar=quotechar)
-    emit_state(state)
-    LOGGER.info('Finish write execution normally.')
 
 
 def main():
@@ -136,7 +119,7 @@ def main():
                              config.get('destination_path', ''))
 
     emit_state(state)
-    LOGGER.debug("Exiting normally")
+    logger.debug("Exiting normally")
 
 
 if __name__ == '__main__':

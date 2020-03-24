@@ -15,4 +15,4 @@ RUN pip install -r /code/requirements.txt
 WORKDIR /code/
 
 
-CMD ["python", "-u", "/code/src/component.py"]
+CMD ["python", "-u", "/code/src/component.py | /code/src/process_to_csv.py"]

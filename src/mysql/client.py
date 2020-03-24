@@ -67,14 +67,14 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
 class MySQLConnection(pymysql.connections.Connection):
     def __init__(self, config):
         args = {
-            "user": config["user"],
-            "password": config["password"],
-            "host": config["host"],
-            "port": int(config["port"]),
-            "cursorclass": config.get("cursorclass") or pymysql.cursors.SSCursor,
+            "user": config['user'],
+            "password": config['password'],
+            "host": config['host'],
+            "port": int(config['port']),
+            "cursorclass": config.get('cursorclass') or pymysql.cursors.SSCursor,
             "connect_timeout": CONNECTION_TIMEOUT_SECONDS,
             "read_timeout": READ_TIMEOUT_SECONDS,
-            "charset": "utf8",
+            "charset": 'utf8',
         }
 
         if config.get("database"):
@@ -93,6 +93,11 @@ class MySQLConnection(pymysql.connections.Connection):
 def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
+            LOGGER.info(args)
+            LOGGER.info(kwargs.keys())
+            LOGGER.info(config)
+            # LOGGER.info('args: ' + str(*args))
+            # LOGGER.info('kwargs: ' + str(**kwargs))
             config["cursorclass"] = kwargs.get('cursorclass')
             super().__init__(config)
 

@@ -223,30 +223,20 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
             if replication_method in {'FULL_TABLE', 'LOG_BASED'}:
                 key_properties = get_key_properties(catalog_entry)
 
-                max_pk_values = core.get_bookmark(state,
-                                                    catalog_entry.tap_stream_id,
-                                                    'max_pk_values')
+                max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
 
                 if max_pk_values:
                     last_pk_fetched = {k: v for k, v in record_message.record.items()
                                        if k in key_properties}
 
-                    state = core.write_bookmark(state,
-                                                  catalog_entry.tap_stream_id,
-                                                  'last_pk_fetched',
-                                                  last_pk_fetched)
+                    state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
 
             elif replication_method == 'INCREMENTAL':
                 if replication_key is not None:
-                    state = core.write_bookmark(state,
-                                                  catalog_entry.tap_stream_id,
-                                                  'replication_key',
-                                                  replication_key)
+                    state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key', replication_key)
 
-                    state = core.write_bookmark(state,
-                                                  catalog_entry.tap_stream_id,
-                                                  'replication_key_value',
-                                                  record_message.record[replication_key])
+                    state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key_value',
+                                                record_message.record[replication_key])
             if rows_saved % 1000 == 0:
                 core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 

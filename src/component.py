@@ -1,10 +1,14 @@
 """Component main class for data extraction.
 
 Executes component endpoint executions based on dependent api_mappings.json file in same path. This file should have
-a set structure, see example below:
+a set structure, see example below.
+
+Essentially at the table table and column level, add "replication-method" of: FULL_TABLE, INCREMENTAL, or ROW_BASED.
+If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-do items
 TODO: Integrate SSH tunnel compatibility
+TODO: Fix log-based because it is not working
 TODO: Confirm successfully works in container including imports
 TODO: Update output file names to something consistent
 TODO: Write manifest files, including logic for if incremental or not.
@@ -31,7 +35,6 @@ import src.mysql.result as result_writer
 from src.core import metadata
 from src.core.schema import Schema
 from src.core.catalog import Catalog, CatalogEntry
-from src.core.utils import ListStream
 
 import src.mysql.replication.binlog as binlog
 import src.mysql.replication.common as common
@@ -47,7 +50,7 @@ try:
     from mysql.client import connect_with_backoff, MySQLConnection
 except ImportError as import_err:
     LOGGER.warning('Running component locally, some features may not reflect their behavior in Keboola as we are not'
-                   'running inside of a Docker container.')
+                   'running inside of a Docker container. Err: {}'.format(import_err))
     from src.mysql.client import connect_with_backoff, MySQLConnection
 
 current_path = os.path.dirname(__file__)
@@ -68,6 +71,7 @@ KEY_SSH_PORT = 'sshPort'
 KEY_SSH_PUBLIC_KEY = 'sshPublicKey'
 
 MAPPINGS_FILE = 'table_mappings.json'
+CONNECT_TIMEOUT = 30
 
 # Keep for debugging
 KEY_STDLOG = 'stdlogging'
@@ -248,9 +252,8 @@ def discover_catalog(mysql_conn, config):
 
                     md_map = metadata.write(md_map, (), 'is-view', is_view)
 
-                column_is_key_prop = lambda c, s: (
-                    c.column_key == 'PRI' and
-                    s.properties[c.column_name].inclusion != 'unsupported'
+                column_is_key_prop = lambda c, s: (  # noqa: E731
+                    c.column_key == 'PRI' and s.properties[c.column_name].inclusion != 'unsupported'
                 )
 
                 key_properties = [c.column_name for c in cols if column_is_key_prop(c, schema)]
@@ -482,6 +485,7 @@ def get_binlog_streams(mysql_conn, catalog, config, state):
         stream_metadata = metadata.to_map(stream.metadata)
         replication_method = stream_metadata.get((), {}).get('replication-method')
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
+        LOGGER.debug(stream_state)
 
         if replication_method == 'LOG_BASED' and not binlog_stream_requires_historical(stream, state):
             binlog_streams.append(stream)
@@ -731,7 +735,8 @@ class Component(KBCEnvHandler):
             "host": params[KEY_MYSQL_HOST],
             "port": params[KEY_MYSQL_PORT],
             "user": params[KEY_MYSQL_USER],
-            "password": params[KEY_MYSQL_PWD]
+            "password": params[KEY_MYSQL_PWD],
+            "connect_timeout": CONNECT_TIMEOUT
         }
 
         mysql_client = MySQLConnection(config_params)
@@ -754,8 +759,6 @@ class Component(KBCEnvHandler):
         elif table_mappings:
             # Run extractor data sync.
             prior_state = self.get_state_file() or {}
-            print('prior state:')
-            print(prior_state)
 
             if prior_state:
                 LOGGER.info('Using prior state file to execute sync.')
@@ -763,21 +766,19 @@ class Component(KBCEnvHandler):
                 LOGGER.info('No prior state found, will need to execute full sync.')
             catalog = Catalog.from_dict(table_mappings)
 
-            # do_sync(mysql_client, params, catalog, prior_state)
+            do_sync(mysql_client, config_params, catalog, prior_state)
 
-            with ListStream() as stdout_stream:
-                do_sync(mysql_client, params, catalog, prior_state)
-            # print('stdout stream:')
-            # print(stdout_stream.get_result())
-            result = stdout_stream.get_result()
+            # with ListStream() as stdout_stream:
+            #     do_sync(mysql_client, config_params, catalog, prior_state)
+            #
+            # result = stdout_stream.get_result()
 
-            final_state = stdout_stream.get_state()
-            self.write_state_file(final_state)
-            print(final_state)
+            # final_state = stdout_stream.get_state()
+            # self.write_state_file(final_state)
 
-            output_file = 'results.json'
+            # output_file = 'results.json'
             # self.write_result(result, output_file=output_file)
-            result_writer.write(self.tables_out_path, result)
+            result_writer.write(self.tables_out_path)
         else:
             LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either specify '
                          'a table mappings file manually or via the File Input Mappings configuration.')
@@ -791,14 +792,14 @@ if __name__ == "__main__":
         debug_arg = False
     try:
         # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        debug_data_path = os.path.join(module_path, 'data')
-
-        comp = Component(debug_arg, data_path=debug_data_path)
-        comp.run()
+        # debug_data_path = os.path.join(module_path, 'data')
+        #
+        # comp = Component(debug_arg, data_path=debug_data_path)
+        # comp.run()
 
         # TODO: Add standard call back in below once ready to move to Docker.
-        # comp = Component(debug_arg)
-        # comp.run()
+        comp = Component(debug_arg)
+        comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)
