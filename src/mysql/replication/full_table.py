@@ -3,12 +3,19 @@ Full table replication sync.
 """
 import datetime
 import logging
-import src.core as core
-from src.core import metadata
 
-from src.mysql.client import connect_with_backoff
-import src.mysql.replication.binlog as binlog
-import src.mysql.replication.common as common
+try:
+    import core as core
+    from core import metadata
+    from mysql.client import connect_with_backoff
+    import mysql.replication.binlog as binlog
+    import mysql.replication.common as common
+except ImportError:
+    import src.core as core
+    from src.core import metadata
+    from src.mysql.client import connect_with_backoff
+    import src.mysql.replication.binlog as binlog
+    import src.mysql.replication.common as common
 
 LOGGER = logging.getLogger(__name__)
 
@@ -223,13 +230,7 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
             select_sql += pk_clause
             params = {}
 
-            common.sync_query(cur,
-                              catalog_entry,
-                              state,
-                              select_sql,
-                              columns,
-                              stream_version,
-                              params)
+            common.sync_query(cur, catalog_entry, state, select_sql, columns, stream_version, params)
 
     # clear max pk value and last pk fetched upon successful sync
     core.clear_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')

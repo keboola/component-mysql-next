@@ -8,10 +8,16 @@ import time
 import pytz
 import pymysql
 
-import src.core as core
-import src.core.metrics as metrics
-from src.core import metadata
-from src.core import utils
+try:
+    import core as core
+    import core.metrics as metrics
+    from core import metadata
+    from core import utils
+except ImportError:
+    import src.core as core
+    import src.core.metrics as metrics
+    from src.core import metadata
+    from src.core import utils
 
 LOGGER = logging.getLogger(__name__)
 
@@ -209,11 +215,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
         while row:
             counter.increment()
             rows_saved += 1
-            record_message = row_to_singer_record(catalog_entry,
-                                                  stream_version,
-                                                  row,
-                                                  columns,
-                                                  time_extracted)
+            record_message = row_to_singer_record(catalog_entry, stream_version, row, columns, time_extracted)
             core.write_message(record_message)
 
             md_map = metadata.to_map(catalog_entry.metadata)

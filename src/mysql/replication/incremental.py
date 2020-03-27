@@ -3,11 +3,17 @@ Incremental replication via key-based replication.
 """
 import logging
 import pendulum
-import src.core as core
-from src.core import metadata
 
-from src.mysql.client import connect_with_backoff
-import src.mysql.replication.common as common
+try:
+    import core as core
+    from core import metadata
+    from mysql.client import connect_with_backoff
+    import mysql.replication.common as common
+except ImportError:
+    import src.core as core
+    from src.core import metadata
+    from src.mysql.client import connect_with_backoff
+    import src.mysql.replication.common as common
 
 LOGGER = logging.getLogger(__name__)
 

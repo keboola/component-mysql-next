@@ -7,19 +7,28 @@ import json
 import logging
 import pytz
 
-import src.core as core
-from src.core import utils
-from src.core.schema import Schema
-
 import pymysql.connections
 import pymysql.err
-import src.mysql.replication.common as common
-from src.mysql.client import connect_with_backoff, make_connection_wrapper
 
 from pymysqlreplication.constants import FIELD_TYPE
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import RotateEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
+
+try:
+    import core as core
+    from core import utils
+    from core.schema import Schema
+
+    import mysql.replication.common as common
+    from mysql.client import connect_with_backoff, make_connection_wrapper
+except ImportError:
+    import src.core as core
+    from src.core import utils
+    from src.core.schema import Schema
+
+    import src.mysql.replication.common as common
+    from src.mysql.client import connect_with_backoff, make_connection_wrapper
 
 LOGGER = logging.getLogger(__name__)
 
