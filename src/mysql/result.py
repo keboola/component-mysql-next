@@ -130,27 +130,31 @@ def write_from_file(destination_path: str, source_data_path: str, delimiter: str
     LOGGER.debug("Exiting normally")
 
 
-def create_manifests(results: List[KBCResult], headless=False, incremental=True):
+def create_manifests(entry: dict, data_path: str, headless=False, incremental=True):
     """Write manifest files for the results produced by the results writer.
 
-    :param results: List of result objects
+    :param entry: Dict entry from catalog
+    :param data_path: Path to the result output files
     :param headless: Flag whether results contain sliced headless tables and hence
     the `.column` attribute should be
     used in manifest file.
     :param incremental:
     :return:
     """
-    for r in results:
-        if not headless:
-            write_table_manifest(r.full_path, r.table_def.destination, r.table_def.pk, None, incremental,
-                                 r.table_def.metadata, r.table_def.column_metadata)
-        else:
-            write_table_manifest(r.full_path, r.table_def.destination, r.table_def.pk, r.table_def.columns,
-                                 incremental, r.table_def.metadata, r.table_def.column_metadata)
+    primary_keys = entry.get('primary_keys')
+    table_name = entry.get('table_name')
+    result_full_path = os.path.join(data_path, table_name + '.csv')
+
+    # for r in results:
+    if not headless:
+        write_table_manifest(result_full_path, table_name, primary_keys, None, incremental)
+    else:
+        logging.error('Headless not yet implemented')
+        exit(1)
+        # write_table_manifest(result_full_path, table_name, primary_keys, r.table_def.columns, incremental)
 
 
-def write_table_manifest(file_name, destination: str = '', primary_key=None, columns=None, incremental=None,
-                         metadata=None, column_metadata=None, delete_where=None):
+def write_table_manifest(file_name, destination: str = '', primary_key=None, columns=None, incremental=None):
     """Write manifest for output table Manifest is used for the table to be stored in KBC Storage.
 
     Args:
@@ -159,9 +163,6 @@ def write_table_manifest(file_name, destination: str = '', primary_key=None, col
         primary_key: List with names of columns used for primary key.
         columns: List of columns for headless CSV files
         incremental: Set to true to enable incremental loading
-        metadata: Dictionary of table metadata keys and values
-        column_metadata: Dict of dict of column metadata keys and values
-        delete_where: Dict with settings for deleting rows
     """
     manifest = {}
     if destination:

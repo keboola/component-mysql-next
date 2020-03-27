@@ -23,7 +23,7 @@ def write_catalog(catalog):
 # pylint: disable=too-many-instance-attributes
 class CatalogEntry:
     """Table mapping catalog."""
-    def __init__(self, tap_stream_id=None, stream=None,
+    def __init__(self, tap_stream_id=None, stream=None, primary_keys: list = None,
                  key_properties=None, schema=None, replication_key=None,
                  is_view=None, database=None, table=None, row_count=None,
                  stream_alias=None, metadata=None, replication_method=None):
@@ -40,6 +40,8 @@ class CatalogEntry:
         self.row_count = row_count
         self.stream_alias = stream_alias
         self.metadata = metadata
+
+        self.primary_keys = primary_keys
 
     def __str__(self):
         return str(self.__dict__)
@@ -60,6 +62,8 @@ class CatalogEntry:
             result['database_name'] = self.database
         if self.table:
             result['table_name'] = self.table
+        if self.primary_keys:
+            result['primary_keys'] = self.primary_keys
         if self.replication_key is not None:
             result['replication_key'] = self.replication_key
         if self.replication_method is not None:
@@ -92,6 +96,7 @@ class Catalog:
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
+
     @classmethod
     def load(cls, filename):
         with open(filename) as fp:  # pylint: disable=invalid-name
@@ -117,6 +122,7 @@ class Catalog:
             entry.is_view = stream.get('is_view')
             entry.stream_alias = stream.get('stream_alias')
             entry.metadata = stream.get('metadata')
+            entry.primary_keys = stream.get('primary_keys')
             entry.replication_method = stream.get('replication_method')
             streams.append(entry)
         return Catalog(streams)

@@ -231,6 +231,28 @@ def discover_catalog(mysql_conn, config):
                     'is_view': table_type == 'VIEW'
                 }
 
+                # Get primary keys
+                pk_sql = """
+                SELECT
+                    k.column_name
+                FROM
+                    information_schema.table_constraints t
+                    INNER JOIN information_schema.key_column_usage k
+                        USING(constraint_name, table_schema, table_name)
+                WHERE
+                    t.constraint_type='PRIMARY KEY'
+                    AND t.table_schema = '{}'
+                    AND t.table_name='{}';""".format(db, table)
+                cur.execute(pk_sql)
+
+                rec = cur.fetchone()
+                table_primary_keys = []
+                while rec is not None:
+                    table_primary_keys.append(rec[0])
+                    rec = cur.fetchone()
+
+                table_info[db][table]['primary_keys'] = table_primary_keys
+
             cur.execute("""
                 SELECT table_schema,
                        table_name,
@@ -263,6 +285,7 @@ def discover_catalog(mysql_conn, config):
                 md_map = metadata.write(md_map, (), 'database-name', table_schema)
 
                 is_view = table_info[table_schema][table_name]['is_view']
+                primary_keys = table_info[table_schema][table_name]['primary_keys']
 
                 if table_schema in table_info and table_name in table_info[table_schema]:
                     row_count = table_info[table_schema][table_name].get('row_count')
@@ -283,7 +306,7 @@ def discover_catalog(mysql_conn, config):
 
                 entry = CatalogEntry(table=table_name, stream=table_name, metadata=metadata.to_list(md_map),
                                      tap_stream_id=common.generate_tap_stream_id(table_schema, table_name),
-                                     schema=schema)
+                                     schema=schema, primary_keys=primary_keys)
 
                 entries.append(entry)
 
@@ -810,9 +833,9 @@ class Component(KBCEnvHandler):
                 catalog = Catalog.from_dict(table_mappings)
 
                 output_path = os.path.join(current_path, 'output.txt')
-                with open(output_path, 'w') as output:
-                    with redirect_stdout(output):
-                        do_sync(mysql_client, config_params, catalog, prior_state)
+                # with open(output_path, 'w') as output:
+                #     with redirect_stdout(output):
+                #         do_sync(mysql_client, config_params, catalog, prior_state)
 
                 # with ListStream() as stdout_stream:
                 #     do_sync(mysql_client, config_params, catalog, prior_state)
@@ -825,7 +848,9 @@ class Component(KBCEnvHandler):
                 # output_file = 'results.json'
                 # self.write_result(result, output_file=output_file)
 
-                result_writer.write_from_file(self.tables_out_path, output_path)
+                # result_writer.write_from_file(self.tables_out_path, output_path)
+                for entry in catalog.to_dict()['streams']:
+                    result_writer.create_manifests(entry, self.tables_out_path, incremental=True)
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')
