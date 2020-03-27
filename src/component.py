@@ -7,14 +7,11 @@ Essentially at the table table and column level, add "replication-method" of: FU
 If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-do items
-TODO: Integrate SSH tunnel compatibility DONE
-TODO: Fix log-based because it is not working
-TODO: Confirm successfully works in container including imports
-TODO: Update output file names to something consistent
+TODO: Fix log-based hanging when logs are scanned at self._sock.recv_into(b)
 TODO: Write manifest files, including logic for if incremental or not.
 
 # Secondary To-do items
-TODO: Response for table mappings
+TODO: Table Mappings - Handle prior user inputs
 TODO: Integrate SSL, if all else works and there is a need
 TODO: Add testing framework
 """

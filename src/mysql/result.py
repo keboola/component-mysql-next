@@ -130,6 +130,65 @@ def write_from_file(destination_path: str, source_data_path: str, delimiter: str
     LOGGER.debug("Exiting normally")
 
 
+def create_manifests(results: List[KBCResult], headless=False, incremental=True):
+    """Write manifest files for the results produced by the results writer.
+
+    :param results: List of result objects
+    :param headless: Flag whether results contain sliced headless tables and hence
+    the `.column` attribute should be
+    used in manifest file.
+    :param incremental:
+    :return:
+    """
+    for r in results:
+        if not headless:
+            write_table_manifest(r.full_path, r.table_def.destination, r.table_def.pk, None, incremental,
+                                 r.table_def.metadata, r.table_def.column_metadata)
+        else:
+            write_table_manifest(r.full_path, r.table_def.destination, r.table_def.pk, r.table_def.columns,
+                                 incremental, r.table_def.metadata, r.table_def.column_metadata)
+
+
+def write_table_manifest(file_name, destination: str = '', primary_key=None, columns=None, incremental=None,
+                         metadata=None, column_metadata=None, delete_where=None):
+    """Write manifest for output table Manifest is used for the table to be stored in KBC Storage.
+
+    Args:
+        file_name: Local file name of the CSV with table data.
+        destination: String name of the table in Storage.
+        primary_key: List with names of columns used for primary key.
+        columns: List of columns for headless CSV files
+        incremental: Set to true to enable incremental loading
+        metadata: Dictionary of table metadata keys and values
+        column_metadata: Dict of dict of column metadata keys and values
+        delete_where: Dict with settings for deleting rows
+    """
+    manifest = {}
+    if destination:
+        if isinstance(destination, str):
+            manifest['destination'] = destination
+        else:
+            raise TypeError("Destination must be a string")
+    if primary_key:
+        if isinstance(primary_key, list):
+            manifest['primary_key'] = primary_key
+        else:
+            raise TypeError("Primary key must be a list")
+    if columns:
+        if isinstance(columns, list):
+            manifest['columns'] = columns
+        else:
+            raise TypeError("Columns must by a list")
+    if incremental:
+        manifest['incremental'] = True
+    # manifest = self.process_metadata(manifest, metadata)
+    # manifest = self.process_column_metadata(manifest, column_metadata)
+    # manifest = self.process_delete(manifest, delete_where)
+
+    with open(file_name + '.manifest', 'w') as manifest_file:
+        json.dump(manifest, manifest_file)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', help='Config file')

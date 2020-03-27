@@ -41,14 +41,9 @@ venv/
 .env
 ENV/
 
-# kbc datafolder
-data/
-component_config/sample-config/
-
 *.manifest
 *.spec
-config.json
-properties.json
-table_mappings.json
-results.json
-output.txt
+*.json
+*.csv
+*.txt
+*.xml
