@@ -101,15 +101,18 @@ def persist_messages(destination_path, messages, delimiter, quotechar):
     return state
 
 
-def write_stdin(destination_path: str, delimiter: str = ',', quotechar: str = '"'):
+def write_stdin(destination_path: str, state_output_path: str, delimiter: str = ',', quotechar: str = '"'):
     """Write results to CSV output destination."""
     input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
     state = persist_messages(destination_path, input_messages, delimiter=delimiter, quotechar=quotechar)
+
+    write_state(state, state_output_path)
     emit_state(state)
     LOGGER.info('Finish write execution normally.')
 
 
-def write(destination_path: str, result: str = None, delimiter: str = ',', quotechar: str = '"'):
+def write(destination_path: str, state_output_path: str, result: str = None,
+          delimiter: str = ',', quotechar: str = '"'):
     """Write results to CSV output destination."""
     if result:
         input_messages = result
@@ -118,16 +121,27 @@ def write(destination_path: str, result: str = None, delimiter: str = ',', quote
         input_messages = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
     state = persist_messages(destination_path, input_messages, delimiter=delimiter, quotechar=quotechar)
+
+    write_state(state, state_output_path)
     emit_state(state)
     LOGGER.info('Finish write execution normally.')
 
 
-def write_from_file(destination_path: str, source_data_path: str, delimiter: str = ',', quotechar: str = '"'):
+def write_from_file(destination_path: str, source_data_path: str, state_output_path: str,
+                    delimiter: str = ',', quotechar: str = '"'):
     """Get result to write from output file"""
     with open(source_data_path, 'r', encoding='utf-8') as input_messages:
         state = persist_messages(destination_path, input_messages, delimiter=delimiter, quotechar=quotechar)
+
+    write_state(state, state_output_path)
     emit_state(state)
-    LOGGER.debug("Exiting normally")
+    LOGGER.debug("Finish write execution normally")
+
+
+def write_state(state: dict, state_output_path: str):
+    """Write final state to state JSON file."""
+    with open(state_output_path, 'w') as state_out_file:
+        json.dump(state, state_out_file)
 
 
 def create_manifests(entry: dict, data_path: str, headless=False, incremental=True):

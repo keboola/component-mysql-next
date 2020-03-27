@@ -8,12 +8,12 @@ If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-do items
 TODO: Fix log-based hanging when logs are scanned at self._sock.recv_into(b)
-TODO: Write manifest files, including logic for if incremental or not.
 
 # Secondary To-do items
 TODO: Table Mappings - Handle prior user inputs
-TODO: Integrate SSL, if all else works and there is a need
 TODO: Add testing framework
+TODO: Integrate SSL, if all else works and there is a need
+TODO: Add _kbc_synced for time row was synced
 """
 import copy
 import itertools
@@ -730,6 +730,7 @@ class Component(KBCEnvHandler):
                                log_level=logging.DEBUG if debug else logging.INFO)
         self.files_out_path = os.path.join(data_path, 'out', 'files')
         self.files_in_path = os.path.join(data_path, 'in', 'files')
+        self.state_out_file_path = os.path.join(self.data_path, 'out', 'state.json')
         # override debug from config
         if self.cfg_params.get(KEY_DEBUG):
             debug = True
@@ -833,22 +834,12 @@ class Component(KBCEnvHandler):
                 catalog = Catalog.from_dict(table_mappings)
 
                 output_path = os.path.join(current_path, 'output.txt')
-                # with open(output_path, 'w') as output:
-                #     with redirect_stdout(output):
-                #         do_sync(mysql_client, config_params, catalog, prior_state)
+                with open(output_path, 'w') as output:
+                    with redirect_stdout(output):
+                        do_sync(mysql_client, config_params, catalog, prior_state)
 
-                # with ListStream() as stdout_stream:
-                #     do_sync(mysql_client, config_params, catalog, prior_state)
-                #
-                # result = stdout_stream.get_result()
-
-                # final_state = stdout_stream.get_state()
-                # self.write_state_file(final_state)
-
-                # output_file = 'results.json'
-                # self.write_result(result, output_file=output_file)
-
-                # result_writer.write_from_file(self.tables_out_path, output_path)
+                result_writer.write_from_file(self.tables_out_path, output_path,
+                                              state_output_path=self.state_out_file_path)
                 for entry in catalog.to_dict()['streams']:
                     result_writer.create_manifests(entry, self.tables_out_path, incremental=True)
             else:
