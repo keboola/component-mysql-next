@@ -11,7 +11,10 @@ import dateutil.parser
 import pytz
 import backoff as backoff_module
 
-from src.core.catalog import Catalog
+try:
+    from core.catalog import Catalog
+except ImportError:
+    from src.core.catalog import Catalog
 
 DATETIME_PARSE = "%Y-%m-%dT%H:%M:%SZ"
 DATETIME_FMT = "%04Y-%m-%dT%H:%M:%S.%fZ"

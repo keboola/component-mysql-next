@@ -4,8 +4,13 @@ import pytz
 import ciso8601
 import simplejson as json
 
-import src.core.utils as u
-from src.core.logger import get_logger
+try:
+    import core.utils as u
+    from core.logger import get_logger
+except ImportError:
+    import src.core.utils as u
+    from src.core.logger import get_logger
+
 LOGGER = get_logger()
 
 

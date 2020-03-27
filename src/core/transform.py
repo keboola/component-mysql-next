@@ -3,9 +3,14 @@ import logging
 import re
 from jsonschema import RefResolver
 
-import src.core.metadata
-from src.core.logger import get_logger
-from src.core.utils import (strftime, strptime_to_utc)
+try:
+    import core.metadata
+    from core.logger import get_logger
+    from core.utils import (strftime, strptime_to_utc)
+except ImportError:
+    import src.core.metadata
+    from src.core.logger import get_logger
+    from src.core.utils import (strftime, strptime_to_utc)
 
 LOGGER = get_logger()
 

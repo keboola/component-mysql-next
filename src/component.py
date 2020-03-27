@@ -18,30 +18,49 @@ TODO: Response for table mappings
 TODO: Integrate SSL, if all else works and there is a need
 TODO: Add testing framework
 """
-from collections import namedtuple
 import copy
 import itertools
 import json
 import logging
 import os
+import paramiko
 import pendulum
 import pymysql
 import sys
 
-import src.core as core
-import src.core.metrics as metrics
-import src.mysql.result as result_writer
-
-from src.core import metadata
-from src.core.schema import Schema
-from src.core.catalog import Catalog, CatalogEntry
-
-import src.mysql.replication.binlog as binlog
-import src.mysql.replication.common as common
-import src.mysql.replication.full_table as full_table
-import src.mysql.replication.incremental as incremental
+from collections import namedtuple
+from contextlib import nullcontext
+from io import StringIO
+from sshtunnel import SSHTunnelForwarder
 
 from kbc.env_handler import KBCEnvHandler
+
+try:
+    import core as core
+    import core.metrics as metrics
+    import mysql.result as result_writer
+
+    from core import metadata
+    from core.schema import Schema
+    from core.catalog import Catalog, CatalogEntry
+
+    import mysql.replication.binlog as binlog
+    import mysql.replication.common as common
+    import mysql.replication.full_table as full_table
+    import mysql.replication.incremental as incremental
+except ImportError:
+    import src.core as core
+    import src.core.metrics as metrics
+    import src.mysql.result as result_writer
+
+    from src.core import metadata
+    from src.core.schema import Schema
+    from src.core.catalog import Catalog, CatalogEntry
+
+    import src.mysql.replication.binlog as binlog
+    import src.mysql.replication.common as common
+    import src.mysql.replication.full_table as full_table
+    import src.mysql.replication.incremental as incremental
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -69,8 +88,12 @@ KEY_USE_SSH_TUNNEL = 'sshTunnel'
 KEY_SSH_HOST = 'sshHost'
 KEY_SSH_PORT = 'sshPort'
 KEY_SSH_PUBLIC_KEY = 'sshPublicKey'
+KEY_SSH_PRIVATE_KEY = '#sshPrivateKey'
+KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
+SSH_BIND_PORT = 8080
+LOCAL_ADDRESS = '127.0.0.1'
 CONNECT_TIMEOUT = 30
 
 # Keep for debugging
@@ -732,57 +755,80 @@ class Component(KBCEnvHandler):
         table_mappings = {}
 
         config_params = {
-            "host": params[KEY_MYSQL_HOST],
-            "port": params[KEY_MYSQL_PORT],
+            "host": LOCAL_ADDRESS,
+            "port": SSH_BIND_PORT,
             "user": params[KEY_MYSQL_USER],
             "password": params[KEY_MYSQL_PWD],
             "connect_timeout": CONNECT_TIMEOUT
         }
 
-        mysql_client = MySQLConnection(config_params)
-        # TODO: Consider logging server details here.
-
-        if file_input_path:
-            manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
-            LOGGER.info('Fetching table mappings from file input mapping configuration: {}.'.format(
-                manual_table_mappings_file))
-            with open(manual_table_mappings_file, 'r') as mappings_file:
-                table_mappings = json.load(mappings_file)
-        elif KEY_TABLE_MAPPINGS_JSON:
-            table_mappings = KEY_TABLE_MAPPINGS_JSON
-
-        if params[KEY_OBJECTS_ONLY]:
-            # Run only schema discovery process.
-            LOGGER.info('Fetching only object and field names, not running full extraction.')
-            table_mapping = discover_catalog(mysql_client, params)
-            self.write_table_mappings_file(table_mapping)
-        elif table_mappings:
-            # Run extractor data sync.
-            prior_state = self.get_state_file() or {}
-
-            if prior_state:
-                LOGGER.info('Using prior state file to execute sync.')
-            else:
-                LOGGER.info('No prior state found, will need to execute full sync.')
-            catalog = Catalog.from_dict(table_mappings)
-
-            do_sync(mysql_client, config_params, catalog, prior_state)
-
-            # with ListStream() as stdout_stream:
-            #     do_sync(mysql_client, config_params, catalog, prior_state)
-            #
-            # result = stdout_stream.get_result()
-
-            # final_state = stdout_stream.get_state()
-            # self.write_state_file(final_state)
-
-            # output_file = 'results.json'
-            # self.write_result(result, output_file=output_file)
-            result_writer.write(self.tables_out_path)
+        if self.cfg_params[KEY_USE_SSH_TUNNEL]:
+            pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(self.cfg_params[KEY_SSH_PRIVATE_KEY]))
+            context_manager = SSHTunnelForwarder(
+                (self.cfg_params[KEY_SSH_HOST], self.cfg_params[KEY_SSH_PORT]),
+                ssh_username=self.cfg_params[KEY_SSH_USERNAME],
+                ssh_pkey=pkey_from_input,
+                remote_bind_address=(self.cfg_params[KEY_MYSQL_HOST], self.cfg_params[KEY_MYSQL_PORT]),
+                local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
+                logger=LOGGER,
+                ssh_config_file=None
+            )
         else:
-            LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either specify '
-                         'a table mappings file manually or via the File Input Mappings configuration.')
-            exit(1)
+            context_manager = nullcontext(None)
+
+        with context_manager as server:
+            if server:  # True if set an SSH tunnel returns false if using the null context.
+                LOGGER.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
+            else:
+                LOGGER.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
+
+            mysql_client = MySQLConnection(config_params)
+            # TODO: Consider logging server details here.
+
+            if file_input_path:
+                manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
+                LOGGER.info('Fetching table mappings from file input mapping configuration: {}.'.format(
+                    manual_table_mappings_file))
+                with open(manual_table_mappings_file, 'r') as mappings_file:
+                    table_mappings = json.load(mappings_file)
+            elif KEY_TABLE_MAPPINGS_JSON:
+                table_mappings = KEY_TABLE_MAPPINGS_JSON
+
+            if params[KEY_OBJECTS_ONLY]:
+                # Run only schema discovery process.
+                LOGGER.info('Fetching only object and field names, not running full extraction.')
+                table_mapping = discover_catalog(mysql_client, params)
+
+                # TODO: Retain prior selected choices by user.
+
+                self.write_table_mappings_file(table_mapping)
+            elif table_mappings:
+                # Run extractor data sync.
+                prior_state = self.get_state_file() or {}
+
+                if prior_state:
+                    LOGGER.info('Using prior state file to execute sync.')
+                else:
+                    LOGGER.info('No prior state found, will need to execute full sync.')
+                catalog = Catalog.from_dict(table_mappings)
+
+                do_sync(mysql_client, config_params, catalog, prior_state)
+
+                # with ListStream() as stdout_stream:
+                #     do_sync(mysql_client, config_params, catalog, prior_state)
+                #
+                # result = stdout_stream.get_result()
+
+                # final_state = stdout_stream.get_state()
+                # self.write_state_file(final_state)
+
+                # output_file = 'results.json'
+                # self.write_result(result, output_file=output_file)
+                result_writer.write(self.tables_out_path)
+            else:
+                LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
+                             'specify a table mappings file manually or via the File Input Mappings configuration.')
+                exit(1)
 
 
 if __name__ == "__main__":
@@ -792,14 +838,14 @@ if __name__ == "__main__":
         debug_arg = False
     try:
         # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        # debug_data_path = os.path.join(module_path, 'data')
-        #
-        # comp = Component(debug_arg, data_path=debug_data_path)
-        # comp.run()
+        debug_data_path = os.path.join(module_path, 'data')
+
+        comp = Component(debug_arg, data_path=debug_data_path)
+        comp.run()
 
         # TODO: Add standard call back in below once ready to move to Docker.
-        comp = Component(debug_arg)
-        comp.run()
+        # comp = Component(debug_arg)
+        # comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)

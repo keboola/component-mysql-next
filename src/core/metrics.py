@@ -34,7 +34,11 @@ import json
 import re
 import time
 from collections import namedtuple
-from src.core.logger import get_logger
+
+try:
+    from core.logger import get_logger
+except ImportError:
+    from src.core.logger import get_logger
 
 DEFAULT_LOG_INTERVAL = 60
 

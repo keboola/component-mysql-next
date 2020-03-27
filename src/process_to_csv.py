@@ -9,9 +9,12 @@ import json
 import csv
 from datetime import datetime
 import collections
-
 from jsonschema.validators import Draft4Validator
-import src.core as core
+
+try:
+    import core as core
+except ImportError:
+    import src.core as core
 
 logger = core.get_logger()
 
