@@ -5,8 +5,10 @@ freezegun
 jsonschema
 mock
 mysql-replication
+paramiko
 pendulum==1.2.0
 pymysql
 python-dateutil
 pytz
 simplejson
+sshtunnel

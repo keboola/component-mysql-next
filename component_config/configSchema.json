@@ -75,6 +75,12 @@
       "description": "The public key for the key pair associated with your SSH server",
       "propertyOrder": 900
     },
+    "#sshPrivateKey": {
+      "type": "string",
+      "title": "SSH Server Private Key",
+      "description": "The private key for the key pair associated with your SSH server (encrypted and secured)",
+      "propertyOrder": 920
+    },
     "tableMappingsJson": {
       "type": "string",
       "title": "Table mappings JSON Specification",
