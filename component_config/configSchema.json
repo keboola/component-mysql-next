@@ -86,7 +86,7 @@
       "type": "string",
       "title": "Table mappings JSON Specification",
       "default": "",
-      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping in Keboola.",
+      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping.",
       "propertyOrder": 950
     }
   }
