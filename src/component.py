@@ -7,7 +7,7 @@ Essentially at the table table and column level, add "replication-method" of: FU
 If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-do items
-TODO: Integrate SSH tunnel compatibility
+TODO: Integrate SSH tunnel compatibility DONE
 TODO: Fix log-based because it is not working
 TODO: Confirm successfully works in container including imports
 TODO: Update output file names to something consistent
@@ -29,7 +29,7 @@ import pymysql
 import sys
 
 from collections import namedtuple
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
 from io import StringIO
 from sshtunnel import SSHTunnelForwarder
 
@@ -812,7 +812,10 @@ class Component(KBCEnvHandler):
                     LOGGER.info('No prior state found, will need to execute full sync.')
                 catalog = Catalog.from_dict(table_mappings)
 
-                do_sync(mysql_client, config_params, catalog, prior_state)
+                output_path = os.path.join(current_path, 'output.txt')
+                with open(output_path, 'w') as output:
+                    with redirect_stdout(output):
+                        do_sync(mysql_client, config_params, catalog, prior_state)
 
                 # with ListStream() as stdout_stream:
                 #     do_sync(mysql_client, config_params, catalog, prior_state)
@@ -824,7 +827,8 @@ class Component(KBCEnvHandler):
 
                 # output_file = 'results.json'
                 # self.write_result(result, output_file=output_file)
-                result_writer.write(self.tables_out_path)
+
+                result_writer.write_from_file(self.tables_out_path, output_path)
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')
