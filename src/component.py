@@ -786,9 +786,10 @@ class Component(KBCEnvHandler):
         }
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
-            # LOGGER.info(self.cfg_params[KEY_SSH_PRIVATE_KEY][:50])
-            LOGGER.info(self.cfg_params[KEY_SSH_PRIVATE_KEY][-40:])
-            pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(self.cfg_params[KEY_SSH_PRIVATE_KEY]))
+            input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
+            print(input_key.size)
+            print(len(input_key))
+            pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
             context_manager = SSHTunnelForwarder(
                 (self.cfg_params[KEY_SSH_HOST], self.cfg_params[KEY_SSH_PORT]),
                 ssh_username=self.cfg_params[KEY_SSH_USERNAME],
