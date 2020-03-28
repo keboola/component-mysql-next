@@ -787,7 +787,6 @@ class Component(KBCEnvHandler):
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
             input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
-            print(input_key.size)
             print(len(input_key))
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
             context_manager = SSHTunnelForwarder(
