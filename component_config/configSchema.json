@@ -75,10 +75,10 @@
       "description": "The public key for the key pair associated with your SSH server",
       "propertyOrder": 900
     },
-    "#sshPrivateKey": {
+    "#sshBase64PrivateKey": {
       "type": "string",
-      "title": "SSH Server Private Key",
-      "description": "The private key for the key pair associated with your SSH server (encrypted and secured)",
+      "title": "Base64-Encoded SSH Server Private Key",
+      "description": "The base64-encoded private key for the key pair associated with your SSH server (encrypted and secured)",
       "format": "password",
       "propertyOrder": 920
     },

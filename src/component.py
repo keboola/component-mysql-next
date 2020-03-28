@@ -15,6 +15,8 @@ TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
 TODO: Add _kbc_synced for time row was synced
 """
+import base64
+import binascii
 import copy
 import itertools
 import json
@@ -786,8 +788,14 @@ class Component(KBCEnvHandler):
         }
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
-            input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
-            print(len(input_key))
+            b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
+            try:
+                input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
+            except binascii.Error as bin_err:
+                logging.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
+                              'key input variable. Detail: {}'.format(bin_err))
+                exit(1)
+
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
             context_manager = SSHTunnelForwarder(
                 (self.cfg_params[KEY_SSH_HOST], self.cfg_params[KEY_SSH_PORT]),
@@ -796,7 +804,7 @@ class Component(KBCEnvHandler):
                 remote_bind_address=(self.cfg_params[KEY_MYSQL_HOST], self.cfg_params[KEY_MYSQL_PORT]),
                 local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
                 logger=LOGGER,
-                ssh_config_file=None
+                allow_agent=False
             )
         else:
             context_manager = nullcontext(None)
@@ -859,12 +867,12 @@ if __name__ == "__main__":
         debug_arg = False
     try:
         # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        # debug_data_path = os.path.join(module_path, 'data')
-        # comp = Component(debug_arg, data_path=debug_data_path)
-        # comp.run()
-
-        comp = Component(debug_arg)
+        debug_data_path = os.path.join(module_path, 'data')
+        comp = Component(debug_arg, data_path=debug_data_path)
         comp.run()
+
+        # comp = Component(debug_arg)
+        # comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)
