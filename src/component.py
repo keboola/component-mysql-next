@@ -180,6 +180,7 @@ def schema_for_column(c):
 
 
 def create_column_metadata(cols):
+    """Write metadata to catalog entry for given columns."""
     mdata = {}
     mdata = metadata.write(mdata, (), 'selected-by-default', False)
     for c in cols:
@@ -218,7 +219,7 @@ def discover_catalog(mysql_conn, config):
                    table_name,
                    table_type,
                    table_rows
-                FROM information_schema.tables
+            FROM information_schema.tables
                 {}
             """.format(table_schema_clause))
 
@@ -344,9 +345,8 @@ def desired_columns(selected, table_schema):
 
     selected_but_unsupported = selected.intersection(unsupported)
     if selected_but_unsupported:
-        LOGGER.warning(
-            'Columns %s were selected but are not supported. Skipping them.',
-            selected_but_unsupported)
+        LOGGER.warning('Columns %s were selected but are not supported. Skipping them: {}'.format(
+            selected_but_unsupported))
 
     selected_but_nonexistent = selected.difference(all_columns)
     if selected_but_nonexistent:
