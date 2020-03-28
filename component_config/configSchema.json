@@ -37,7 +37,8 @@
       "items": {
         "type": "string",
         "title": "Database"
-      }
+      },
+      "propertyOrder": 350
     },
     "username": {
       "type": "string",
