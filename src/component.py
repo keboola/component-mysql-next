@@ -728,8 +728,8 @@ class Component(KBCEnvHandler):
     def __init__(self, debug: bool = False, data_path: str = None):
         KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
                                log_level=logging.DEBUG if debug else logging.INFO)
-        self.files_out_path = os.path.join(data_path, 'out', 'files')
-        self.files_in_path = os.path.join(data_path, 'in', 'files')
+        self.files_out_path = os.path.join(self.data_path, 'out', 'files')
+        self.files_in_path = os.path.join(self.data_path, 'in', 'files')
         self.state_out_file_path = os.path.join(self.data_path, 'out', 'state.json')
         # override debug from config
         if self.cfg_params.get(KEY_DEBUG):
