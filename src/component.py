@@ -77,6 +77,7 @@ module_path = os.path.dirname(current_path)
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
 KEY_TABLE_MAPPINGS_JSON = 'tableMappingsJson'
+KEY_DATABASES = 'databases'
 KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
 KEY_MYSQL_USER = 'username'
@@ -201,10 +202,12 @@ def create_column_metadata(cols):
 
 def discover_catalog(mysql_conn, config):
     """Returns a Catalog describing the structure of the database."""
-    filter_dbs_config = config.get('filter_dbs')
+    filter_dbs_config = config.get(KEY_DATABASES)
+    print(KEY_DATABASES)
+    print('filters db config: {}'.format(filter_dbs_config))
 
     if filter_dbs_config:
-        filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config.split(",")])
+        filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config])
         table_schema_clause = "WHERE table_schema IN ({})".format(filter_dbs_clause)
     else:
         table_schema_clause = """

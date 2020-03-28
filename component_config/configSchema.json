@@ -30,6 +30,15 @@
       "default": 3306,
       "propertyOrder": 300
     },
+    "databases": {
+      "type": "array",
+      "title": "MySQL Database(s)",
+      "description": "MySQL Database(s) to Extract. If left empty, all non-system databases are pulled",
+      "items": {
+        "type": "string",
+        "title": "Database"
+      }
+    },
     "username": {
       "type": "string",
       "title": "Username",
