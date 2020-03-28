@@ -867,12 +867,12 @@ if __name__ == "__main__":
         debug_arg = False
     try:
         # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        debug_data_path = os.path.join(module_path, 'data')
-        comp = Component(debug_arg, data_path=debug_data_path)
-        comp.run()
-
-        # comp = Component(debug_arg)
+        # debug_data_path = os.path.join(module_path, 'data')
+        # comp = Component(debug_arg, data_path=debug_data_path)
         # comp.run()
+
+        comp = Component(debug_arg)
+        comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)
