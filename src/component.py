@@ -87,7 +87,7 @@ KEY_USE_SSH_TUNNEL = 'sshTunnel'
 KEY_SSH_HOST = 'sshHost'
 KEY_SSH_PORT = 'sshPort'
 KEY_SSH_PUBLIC_KEY = 'sshPublicKey'
-KEY_SSH_PRIVATE_KEY = '#sshPrivateKey'
+KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
