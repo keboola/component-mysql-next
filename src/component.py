@@ -98,6 +98,8 @@ KEY_STDLOG = 'stdlogging'
 KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
 MANDATORY_IMAGE_PARS = ()
+# TODO: Add user value for KBC_SYNCED for UTC sync time.
+KBC_SYNCED_AT = '_kbc_synced'
 
 APP_VERSION = '0.1.1'
 
@@ -784,6 +786,7 @@ class Component(KBCEnvHandler):
         }
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
+            LOGGER.info(self.cfg_params[KEY_SSH_PRIVATE_KEY][:50])
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(self.cfg_params[KEY_SSH_PRIVATE_KEY]))
             context_manager = SSHTunnelForwarder(
                 (self.cfg_params[KEY_SSH_HOST], self.cfg_params[KEY_SSH_PORT]),

@@ -32,7 +32,7 @@ except ImportError:
 
 LOGGER = logging.getLogger(__name__)
 
-KBC_DELETED_AT = "_kbc_deleted_time"
+KBC_DELETED_AT = "_kbc_deleted"
 UPDATE_BOOKMARK_PERIOD = 1000
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
 
@@ -316,7 +316,11 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
     current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn)
 
     for binlog_event in reader:
+        print('binlog event details:')
+        print(binlog_event.packet)
+        print(binlog_event.event_type)
         if isinstance(binlog_event, RotateEvent):
+            print('Rotation event...')
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
         else:
             tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
@@ -333,14 +337,17 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
 
             elif catalog_entry:
                 if isinstance(binlog_event, WriteRowsEvent):
+                    LOGGER.info('Handling write row event')
                     rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                          rows_saved, time_extracted)
 
                 elif isinstance(binlog_event, UpdateRowsEvent):
+                    LOGGER.info('Handling update row event')
                     rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted)
 
                 elif isinstance(binlog_event, DeleteRowsEvent):
+                    LOGGER.info('Handling delete row event')
                     rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted)
                 else:
