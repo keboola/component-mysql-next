@@ -92,11 +92,11 @@
       "format": "password",
       "propertyOrder": 920
     },
-    "tableMappingsJson": {
+    "base64TableMappingsJson": {
       "type": "string",
-      "title": "Table mappings JSON Specification",
+      "title": "Base64-Encoded Table mappings JSON Specification",
       "default": "",
-      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping.",
+      "description": "Optional, allows for the manual upload of a base64-encoded JSON specification for the database, only use if not using File Input mapping.",
       "propertyOrder": 950
     }
   }
