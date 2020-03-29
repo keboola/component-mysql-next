@@ -41,7 +41,7 @@ try:
 
     from core import metadata
     from core.catalog import Catalog, CatalogEntry
-    from src.core.logger import get_logger
+    # from src.core.logger import get_logger
     from core.schema import Schema
 
     import mysql.replication.binlog as binlog
@@ -55,7 +55,7 @@ except ImportError:
 
     from src.core import metadata
     from src.core.catalog import Catalog, CatalogEntry
-    from src.core.logger import get_logger
+    # from src.core.logger import get_logger
     from src.core.schema import Schema
 
     import src.mysql.replication.binlog as binlog
