@@ -822,8 +822,8 @@ class Component(KBCEnvHandler):
             # TODO: Consider logging server details here.
 
             if self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
-                table_mappings = base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
-                                                  validate=True).decode('utf-8')
+                table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
+                                                             validate=True).decode('utf-8'))
             elif file_input_path:
                 manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
                 LOGGER.info('Fetching table mappings from file input mapping configuration: {}.'.format(
