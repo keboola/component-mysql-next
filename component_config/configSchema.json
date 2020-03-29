@@ -7,6 +7,7 @@
     "port",
     "username",
     "#password",
+    "runIncrementalSync",
     "sshTunnel"
   ],
   "properties": {
@@ -53,6 +54,13 @@
       "format": "password",
       "propertyOrder": 500
     },
+    "runIncrementalSync": {
+      "type": "boolean",
+      "title": "Run Incremental Sync?",
+      "default": true,
+      "description": "Keep true to run incremental sync based on prior state (for all tables in your mappings specification where you have chosen incremental or log_based. If false, prior state is ignored and full database sync is run",
+      "propertyOrder": 550
+    },
     "sshTunnel": {
       "type": "boolean",
       "title": "Use SSH Tunnel?",
@@ -94,7 +102,7 @@
     },
     "base64TableMappingsJson": {
       "type": "string",
-      "title": "Base64-Encoded Table mappings JSON Specification",
+      "title": "Base64-Encoded Table Mappings JSON Specification",
       "default": "",
       "description": "Optional, allows for the manual upload of a base64-encoded JSON specification for the database, only use if not using File Input mapping.",
       "propertyOrder": 950

@@ -40,8 +40,9 @@ try:
     import mysql.result as result_writer
 
     from core import metadata
-    from core.schema import Schema
     from core.catalog import Catalog, CatalogEntry
+    from src.core.logger import get_logger
+    from core.schema import Schema
 
     import mysql.replication.binlog as binlog
     import mysql.replication.common as common
@@ -53,8 +54,9 @@ except ImportError:
     import src.mysql.result as result_writer
 
     from src.core import metadata
-    from src.core.schema import Schema
     from src.core.catalog import Catalog, CatalogEntry
+    from src.core.logger import get_logger
+    from src.core.schema import Schema
 
     import src.mysql.replication.binlog as binlog
     import src.mysql.replication.common as common
@@ -82,6 +84,7 @@ KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
 KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
+KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
 
 # Define optional parameters as constants for later use.
@@ -841,12 +844,17 @@ class Component(KBCEnvHandler):
                 self.write_table_mappings_file(table_mapping)
             elif table_mappings:
                 # Run extractor data sync.
-                prior_state = self.get_state_file() or {}
+                if self.cfg_params[KEY_INCREMENTAL_SYNC]:
+                    prior_state = self.get_state_file() or {}
+                else:
+                    prior_state = None
 
                 if prior_state:
-                    LOGGER.info('Using prior state file to execute sync.')
+                    LOGGER.info('Using prior state file to execute sync')
+                elif prior_state == {}:
+                    LOGGER.info('No prior state was found, will execute full data sync')
                 else:
-                    LOGGER.info('No prior state found, will need to execute full sync.')
+                    LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
                 catalog = Catalog.from_dict(table_mappings)
 
                 output_path = os.path.join(current_path, 'output.txt')
