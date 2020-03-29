@@ -76,7 +76,7 @@ module_path = os.path.dirname(current_path)
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
-KEY_TABLE_MAPPINGS_JSON = 'tableMappingsJson'
+KEY_TABLE_MAPPINGS_JSON = 'base64TableMappingsJson'
 KEY_DATABASES = 'databases'
 KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
@@ -203,8 +203,7 @@ def create_column_metadata(cols):
 def discover_catalog(mysql_conn, config):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
-    print(KEY_DATABASES)
-    print('filters db config: {}'.format(filter_dbs_config))
+    LOGGER.debug('filtering databases via config to: {}'.format(filter_dbs_config))
 
     if filter_dbs_config:
         filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config])
@@ -807,6 +806,7 @@ class Component(KBCEnvHandler):
                 remote_bind_address=(self.cfg_params[KEY_MYSQL_HOST], self.cfg_params[KEY_MYSQL_PORT]),
                 local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
                 logger=LOGGER,
+                ssh_config_file=None,
                 allow_agent=False
             )
         else:
@@ -821,14 +821,15 @@ class Component(KBCEnvHandler):
             mysql_client = MySQLConnection(config_params)
             # TODO: Consider logging server details here.
 
-            if file_input_path:
+            if self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
+                table_mappings = base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
+                                                  validate=True).decode('utf-8')
+            elif file_input_path:
                 manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
                 LOGGER.info('Fetching table mappings from file input mapping configuration: {}.'.format(
                     manual_table_mappings_file))
                 with open(manual_table_mappings_file, 'r') as mappings_file:
                     table_mappings = json.load(mappings_file)
-            elif KEY_TABLE_MAPPINGS_JSON:
-                table_mappings = KEY_TABLE_MAPPINGS_JSON
 
             if params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
