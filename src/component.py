@@ -15,6 +15,8 @@ TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
 TODO: Add _kbc_synced for time row was synced
 """
+import base64
+import binascii
 import copy
 import itertools
 import json
@@ -38,8 +40,9 @@ try:
     import mysql.result as result_writer
 
     from core import metadata
-    from core.schema import Schema
     from core.catalog import Catalog, CatalogEntry
+    # from src.core.logger import get_logger
+    from core.schema import Schema
 
     import mysql.replication.binlog as binlog
     import mysql.replication.common as common
@@ -51,8 +54,9 @@ except ImportError:
     import src.mysql.result as result_writer
 
     from src.core import metadata
-    from src.core.schema import Schema
     from src.core.catalog import Catalog, CatalogEntry
+    # from src.core.logger import get_logger
+    from src.core.schema import Schema
 
     import src.mysql.replication.binlog as binlog
     import src.mysql.replication.common as common
@@ -74,18 +78,20 @@ module_path = os.path.dirname(current_path)
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
-KEY_TABLE_MAPPINGS_JSON = 'tableMappingsJson'
+KEY_TABLE_MAPPINGS_JSON = 'base64TableMappingsJson'
+KEY_DATABASES = 'databases'
 KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
 KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
+KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
 
 # Define optional parameters as constants for later use.
 KEY_SSH_HOST = 'sshHost'
 KEY_SSH_PORT = 'sshPort'
 KEY_SSH_PUBLIC_KEY = 'sshPublicKey'
-KEY_SSH_PRIVATE_KEY = '#sshPrivateKey'
+KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
@@ -199,10 +205,11 @@ def create_column_metadata(cols):
 
 def discover_catalog(mysql_conn, config):
     """Returns a Catalog describing the structure of the database."""
-    filter_dbs_config = config.get('filter_dbs')
+    filter_dbs_config = config.get(KEY_DATABASES)
+    LOGGER.debug('filtering databases via config to: {}'.format(filter_dbs_config))
 
     if filter_dbs_config:
-        filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config.split(",")])
+        filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config])
         table_schema_clause = "WHERE table_schema IN ({})".format(filter_dbs_clause)
     else:
         table_schema_clause = """
@@ -786,8 +793,14 @@ class Component(KBCEnvHandler):
         }
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
-            input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
-            print(len(input_key))
+            b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
+            try:
+                input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
+            except binascii.Error as bin_err:
+                logging.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
+                              'key input variable. Detail: {}'.format(bin_err))
+                exit(1)
+
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
             context_manager = SSHTunnelForwarder(
                 (self.cfg_params[KEY_SSH_HOST], self.cfg_params[KEY_SSH_PORT]),
@@ -796,7 +809,8 @@ class Component(KBCEnvHandler):
                 remote_bind_address=(self.cfg_params[KEY_MYSQL_HOST], self.cfg_params[KEY_MYSQL_PORT]),
                 local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
                 logger=LOGGER,
-                ssh_config_file=None
+                ssh_config_file=None,
+                allow_agent=False
             )
         else:
             context_manager = nullcontext(None)
@@ -810,14 +824,15 @@ class Component(KBCEnvHandler):
             mysql_client = MySQLConnection(config_params)
             # TODO: Consider logging server details here.
 
-            if file_input_path:
+            if self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
+                table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
+                                                             validate=True).decode('utf-8'))
+            elif file_input_path:
                 manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
                 LOGGER.info('Fetching table mappings from file input mapping configuration: {}.'.format(
                     manual_table_mappings_file))
                 with open(manual_table_mappings_file, 'r') as mappings_file:
                     table_mappings = json.load(mappings_file)
-            elif KEY_TABLE_MAPPINGS_JSON:
-                table_mappings = KEY_TABLE_MAPPINGS_JSON
 
             if params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
@@ -829,12 +844,17 @@ class Component(KBCEnvHandler):
                 self.write_table_mappings_file(table_mapping)
             elif table_mappings:
                 # Run extractor data sync.
-                prior_state = self.get_state_file() or {}
+                if self.cfg_params[KEY_INCREMENTAL_SYNC]:
+                    prior_state = self.get_state_file() or {}
+                else:
+                    prior_state = None
 
                 if prior_state:
-                    LOGGER.info('Using prior state file to execute sync.')
+                    LOGGER.info('Using prior state file to execute sync')
+                elif prior_state == {}:
+                    LOGGER.info('No prior state was found, will execute full data sync')
                 else:
-                    LOGGER.info('No prior state found, will need to execute full sync.')
+                    LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
                 catalog = Catalog.from_dict(table_mappings)
 
                 output_path = os.path.join(current_path, 'output.txt')

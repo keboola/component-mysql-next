@@ -7,6 +7,7 @@
     "port",
     "username",
     "#password",
+    "runIncrementalSync",
     "sshTunnel"
   ],
   "properties": {
@@ -30,6 +31,16 @@
       "default": 3306,
       "propertyOrder": 300
     },
+    "databases": {
+      "type": "array",
+      "title": "MySQL Database(s)",
+      "description": "MySQL Database(s) to Extract. If left empty, all non-system databases are pulled",
+      "items": {
+        "type": "string",
+        "title": "Database"
+      },
+      "propertyOrder": 350
+    },
     "username": {
       "type": "string",
       "title": "Username",
@@ -42,6 +53,13 @@
       "description": "Strong password you set for your Keboola MySQL user",
       "format": "password",
       "propertyOrder": 500
+    },
+    "runIncrementalSync": {
+      "type": "boolean",
+      "title": "Run Incremental Sync?",
+      "default": true,
+      "description": "Keep true to run incremental sync based on prior state (for all tables in your mappings specification where you have chosen incremental or log_based. If false, prior state is ignored and full database sync is run",
+      "propertyOrder": 550
     },
     "sshTunnel": {
       "type": "boolean",
@@ -75,18 +93,18 @@
       "description": "The public key for the key pair associated with your SSH server",
       "propertyOrder": 900
     },
-    "#sshPrivateKey": {
+    "#sshBase64PrivateKey": {
       "type": "string",
-      "title": "SSH Server Private Key",
-      "description": "The private key for the key pair associated with your SSH server (encrypted and secured)",
+      "title": "Base64-Encoded SSH Server Private Key",
+      "description": "The base64-encoded private key for the key pair associated with your SSH server (encrypted and secured)",
       "format": "password",
       "propertyOrder": 920
     },
-    "tableMappingsJson": {
+    "base64TableMappingsJson": {
       "type": "string",
-      "title": "Table mappings JSON Specification",
+      "title": "Base64-Encoded Table Mappings JSON Specification",
       "default": "",
-      "description": "Optional, allows for the manual upload of a JSON specification for the database, only use if not using File Input mapping.",
+      "description": "Optional, allows for the manual upload of a base64-encoded JSON specification for the database, only use if not using File Input mapping.",
       "propertyOrder": 950
     }
   }
