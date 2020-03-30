@@ -70,7 +70,6 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
 
 class MySQLConnection(pymysql.connections.Connection):
     def __init__(self, config):
-        LOGGER.info('Config for MySQLConnection supplied is: {}'.format(config))
         args = {
             "user": config.get('user') or config.get('username'),
             "password": config.get('password') or config.get('#password'),
@@ -98,11 +97,6 @@ class MySQLConnection(pymysql.connections.Connection):
 def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
-            LOGGER.info(args)
-            LOGGER.info(kwargs.keys())
-            LOGGER.info(config)
-            # LOGGER.info('args: ' + str(*args))
-            # LOGGER.info('kwargs: ' + str(**kwargs))
             config["cursorclass"] = kwargs.get('cursorclass')
             super().__init__(config)
 

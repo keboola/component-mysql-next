@@ -46,10 +46,7 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
     headers = {}
     validators = {}
 
-    # now = datetime.now().strftime('%Y%m%dT%H%M%S')
-
     for message in messages:
-        # LOGGER.info('Attempting to ingest message: {}'.format(message))
         try:
             o = core.parse_message(message).asdict()
         except json.decoder.JSONDecodeError:
@@ -70,7 +67,6 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
             flattened_record = flatten(o['record'])
             LOGGER.info('Flattened record: {}'.format(flattened_record))
             if o['stream'] not in headers and not file_is_empty:
-                # LOGGER.info('Attempting to save to file name: {}'.format(filename))
                 with open(filename, 'r') as csv_file:
                     reader = csv.reader(csv_file, delimiter=delimiter, quotechar=quotechar)
                     first_line = next(reader)
@@ -120,7 +116,6 @@ def main():
         config = {}
 
     input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    # LOGGER.info('Full input messages: {}'.format(input_messages))
     state = persist_messages(config.get('delimiter', ','), config.get('quotechar', '"'), input_messages,
                              config.get('destination_path', ''))
 

@@ -244,7 +244,7 @@ def create_column_metadata(cols):
 def discover_catalog(mysql_conn, config):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
-    LOGGER.debug('filtering databases via config to: {}'.format(filter_dbs_config))
+    LOGGER.debug('Filtering databases via config to: {}'.format(filter_dbs_config))
 
     if filter_dbs_config:
         filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config])
