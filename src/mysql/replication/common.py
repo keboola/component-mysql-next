@@ -28,6 +28,10 @@ LOGGER = core.get_logger()
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
+SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
+KBC_SYNCED = '_kbc_synced_at'
+KBC_DELETED = '_kbc_deleted'
+
 
 def monkey_patch_datetime(datetime_str):
     value = original_convert_datetime(datetime_str)
@@ -152,9 +156,25 @@ def to_utc_datetime_str(val):
 
 
 def row_to_singer_record(catalog_entry, version, row, columns, time_extracted):
+    # Adding metadata for Keboola. Can presume not there since should only be called for full sync
+
+    kbc_metadata = (SYNC_STARTED_AT, None)
+    kbc_metadata_cols = (KBC_SYNCED, KBC_DELETED)
+    row_with_metadata = row + kbc_metadata
+    columns.extend(kbc_metadata_cols)
+    catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
+
     row_to_persist = ()
-    for idx, elem in enumerate(row):
+    LOGGER.info('Here is the full properties: {}'.format(catalog_entry.schema.properties))
+    LOGGER.info('And here is the input catalog entry: {}'.format(catalog_entry))
+    LOGGER.info('!!! And here is the set of columns for it: {}'.format(columns))
+    for idx, elem in enumerate(row_with_metadata):
+        LOGGER.info('Here is the index and element for the current pair: {} : {}'.format(idx, elem))
+        LOGGER.info('Now we have the column at index: {}'.format(columns[idx]))
+        LOGGER.info('And catalog entry without type specifically: {}'.format(catalog_entry.schema.properties[columns[idx]]))
         property_type = catalog_entry.schema.properties[columns[idx]].type
+        LOGGER.info('The property type thing is: {}'.format(property_type))
 
         if isinstance(elem, (datetime.datetime, datetime.date, datetime.timedelta)):
             the_utc_date = to_utc_datetime_str(elem)
@@ -178,11 +198,10 @@ def row_to_singer_record(catalog_entry, version, row, columns, time_extracted):
             row_to_persist += (elem,)
     rec = dict(zip(columns, row_to_persist))
 
-    return core.RecordMessage(
-        stream=catalog_entry.stream,
-        record=rec,
-        version=version,
-        time_extracted=time_extracted)
+    # rec[KBC_DELETED] = None
+    # rec[KBC_SYNCED] = utils.now()
+
+    return core.RecordMessage(stream=catalog_entry.stream, record=rec, version=version, time_extracted=time_extracted)
 
 
 def whitelist_bookmark_keys(bookmark_key_set, tap_stream_id, state):
@@ -203,6 +222,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
     cursor.execute(select_sql, params)
 
     row = cursor.fetchone()
+    LOGGER.info('Row processed, that maybe should have KBC metadata added to it: {}'.format(row))
     rows_saved = 0
 
     database_name = get_database_name(catalog_entry)

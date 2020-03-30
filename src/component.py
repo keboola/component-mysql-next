@@ -11,7 +11,6 @@ If INCREMENTAL, you need to specify a "replication-key".
 TODO: Table Mappings - Handle prior user inputs
 TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
-TODO: Add _kbc_synced for time row was synced
 """
 import base64
 import binascii
@@ -947,9 +946,6 @@ class Component(KBCEnvHandler):
                 else:
                     LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
                 catalog = Catalog.from_dict(table_mappings)
-                # print(table_mappings)
-                # table_def = KBCTableDef(destination)
-                # writer = ResultWriter(result_dir_path=self.tables_out_path, table_def)
 
                 for entry in catalog.to_dict()['streams']:
                     LOGGER.info('The entry is {} and out path is {} and '
@@ -959,14 +955,6 @@ class Component(KBCEnvHandler):
                                           incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
 
                 do_sync(mysql_client, params, catalog, prior_state)
-
-                # output_path = os.path.join(current_path, 'output.txt')
-                # with open(output_path, 'w') as output:
-                #     with redirect_stdout(output):
-                #         do_sync(mysql_client, config_params, catalog, prior_state)
-
-                # result_writer.write_from_file(self.tables_out_path, output_path,
-                #                               state_output_path=self.state_out_file_path)
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')

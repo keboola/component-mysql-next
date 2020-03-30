@@ -68,7 +68,7 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
             file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
 
             flattened_record = flatten(o['record'])
-
+            LOGGER.info('Flattened record: {}'.format(flattened_record))
             if o['stream'] not in headers and not file_is_empty:
                 # LOGGER.info('Attempting to save to file name: {}'.format(filename))
                 with open(filename, 'r') as csv_file:
@@ -102,6 +102,12 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
     return state
 
 
+def write_state(state: dict, state_output_path: str):
+    """Write final state to state JSON file."""
+    with open(state_output_path, 'w') as state_out_file:
+        json.dump(state, state_out_file)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', help='Config file')
@@ -118,6 +124,8 @@ def main():
     state = persist_messages(config.get('delimiter', ','), config.get('quotechar', '"'), input_messages,
                              config.get('destination_path', ''))
 
+    state_output_full_path = os.path.join(config.get('output_state_path'), 'state.json')
+    write_state(state, state_output_full_path)
     emit_state(state)
     LOGGER.info("Exiting normally")
 

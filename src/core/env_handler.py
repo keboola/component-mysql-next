@@ -270,7 +270,7 @@ class KBCEnvHandler:
             dict:
 
         """
-        LOGGER.info('Loading state file..')
+        LOGGER.info('Loading state file...')
         state_file_path = os.path.join(self.data_path, 'in', 'state.json')
         if not os.path.isfile(state_file_path):
             LOGGER.info('State file not found. First run?')
@@ -332,7 +332,7 @@ class KBCEnvHandler:
         else:
             destination = folder_name
 
-        LOGGER.info('Creating manifest file..')
+        LOGGER.info('Creating manifest file...')
         self.configuration.write_table_manifest(
             file_name=folder_path, destination=destination, primary_key=pkey, incremental=incremental, columns=header)
 

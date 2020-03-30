@@ -33,7 +33,6 @@ except ImportError:
 LOGGER = core.get_logger()
 socket.setdefaulttimeout(5.0)
 
-KBC_DELETED_AT = "_kbc_deleted"
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
 UPDATE_BOOKMARK_PERIOD = 1000
 
@@ -41,8 +40,10 @@ mysql_timestamp_types = {FIELD_TYPE.TIMESTAMP, FIELD_TYPE.TIMESTAMP2}
 
 
 def add_automatic_properties(catalog_entry, columns):
-    catalog_entry.schema.properties[KBC_DELETED_AT] = Schema(type=["null", "string"], format="date-time")
-    columns.append(KBC_DELETED_AT)
+    catalog_entry.schema.properties[common.KBC_SYNCED] = Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[common.KBC_DELETED] = Schema(type=["null", "string"], format="date-time")
+    columns.append(common.KBC_SYNCED)
+    columns.append(common.KBC_DELETED)
 
     return columns
 
@@ -231,8 +232,10 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
     db_column_types = get_db_column_types(event)
 
     for row in event.rows:
+        event_ts = datetime.datetime.utcfromtimestamp(event.timestamp).replace(tzinfo=pytz.UTC)
         vals = row['values']
-        vals[KBC_DELETED_AT] = None
+        vals[common.KBC_DELETED] = None
+        vals[common.KBC_SYNCED] = event_ts
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
         record_message = row_to_singer_record(catalog_entry, stream_version, db_column_types, filtered_vals,
@@ -249,8 +252,11 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
     db_column_types = get_db_column_types(event)
 
     for row in event.rows:
+        event_ts = datetime.datetime.utcfromtimestamp(event.timestamp).replace(tzinfo=pytz.UTC)
         vals = row['after_values']
-        vals[KBC_DELETED_AT] = None
+
+        vals[common.KBC_DELETED] = None
+        vals[common.KBC_SYNCED] = event_ts
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
         record_message = row_to_singer_record(catalog_entry,
@@ -274,14 +280,12 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
         event_ts = datetime.datetime.utcfromtimestamp(event.timestamp).replace(tzinfo=pytz.UTC)
         vals = row['values']
 
-        vals[KBC_DELETED_AT] = event_ts
+        vals[common.KBC_DELETED] = event_ts
+        vals[common.KBC_SYNCED] = event_ts
 
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_singer_record(catalog_entry,
-                                              stream_version,
-                                              db_column_types,
-                                              filtered_vals,
+        record_message = row_to_singer_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                               time_extracted)
 
         core.write_message(record_message)

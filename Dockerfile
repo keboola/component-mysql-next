@@ -14,4 +14,6 @@ RUN pip install -r /code/requirements.txt
 
 WORKDIR /code/
 
-RUN /code/scripts/run_pipeline.sh
+RUN chmod 777 /code/scripts/run_pipeline.sh
+
+CMD /code/scripts/run_pipeline.sh
