@@ -104,7 +104,7 @@ MANDATORY_IMAGE_PARS = ()
 # TODO: Add user value for KBC_SYNCED for UTC sync time.
 KBC_SYNCED_AT = '_kbc_synced'
 
-APP_VERSION = '0.1.1'
+APP_VERSION = '0.2.0'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 

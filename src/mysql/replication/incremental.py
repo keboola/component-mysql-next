@@ -17,9 +17,11 @@ except ImportError:
 LOGGER = core.get_logger()
 
 BOOKMARK_KEYS = {'replication_key', 'replication_key_value', 'version'}
+# TODO: Test incremental to determine if needs KBC metadata additions
 
 
 def sync_table(mysql_conn, catalog_entry, state, columns, limit=None):
+    LOGGER.warning('Note: Syncing incrementally with key is not yet fully supported, results may be incomplete')
     common.whitelist_bookmark_keys(BOOKMARK_KEYS, catalog_entry.tap_stream_id, state)
 
     catalog_metadata = metadata.to_map(catalog_entry.metadata)

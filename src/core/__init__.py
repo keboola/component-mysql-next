@@ -38,7 +38,6 @@ from .messages import (
     format_message,
     parse_message,
     write_message,
-    write_message_csv,
     write_record,
     write_records,
     write_schema,

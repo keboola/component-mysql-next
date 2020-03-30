@@ -12,7 +12,7 @@ import pymysql.err
 
 from pymysqlreplication.constants import FIELD_TYPE
 from pymysqlreplication import BinLogStreamReader
-from pymysqlreplication.event import RotateEvent, StopEvent, XidEvent
+from pymysqlreplication.event import RotateEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
 
 try:
@@ -100,7 +100,6 @@ def fetch_current_log_file_and_pos(mysql_conn):
 
             if result is None:
                 raise Exception("MySQL binary logging is not enabled.")
-            LOGGER.debug('Full result: {}'.format(result))
             current_log_file, current_log_pos = result[0:2]
 
             return current_log_file, current_log_pos
@@ -311,9 +310,6 @@ def generate_streams_map(binlog_streams):
 
 
 def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
-    # LOGGER.info('The state passed to binlog sync: {}'.format(state))
-    # LOGGER.info('_run_binlog_sync params: {}; {}; {}; {}'.format(mysql_conn, reader, binlog_streams_map, state))
-    # LOGGER.info('type of reader: {}'.format(type(reader)))
     time_extracted = utils.now()
 
     rows_saved = 0
@@ -324,14 +320,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
     binlogs_processed = 0
     for binlog_event in reader:
         binlogs_processed += 1
-        # LOGGER.debug('Processing binlog: {}'.format(binlogs_processed))
-        # LOGGER.debug('binlog event details:')
-        # LOGGER.debug(binlog_event.packet)
-        # LOGGER.debug(binlog_event.event_type)
-        # LOGGER.debug(binlog_event.position)
-        # LOGGER.debug('next binlog:')
-        # LOGGER.debug(binlog_event.next_binlog)
-        # LOGGER.debug(binlog_streams_map.items())
+
         if isinstance(binlog_event, RotateEvent):
             # print('Rotation event...')
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
@@ -351,7 +340,6 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
 
             elif catalog_entry:
                 if isinstance(binlog_event, WriteRowsEvent):
-                    # LOGGER.info('Handling write row event')
                     rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                          rows_saved, time_extracted)
 
@@ -361,7 +349,6 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
                                                           rows_saved, time_extracted)
 
                 elif isinstance(binlog_event, DeleteRowsEvent):
-                    # LOGGER.info('Handling delete row event')
                     rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted)
                 else:
@@ -374,10 +361,8 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
         # The iterator across python-mysql-replication's fetchone method should ultimately terminate
         # upon receiving an EOF packet. There seem to be some cases when a MySQL server will not send
         # one causing binlog replication to hang.
-        # LOGGER.info('Current log file is {}, reader log file is {}, reader log pos: {}, set current log pos: {}'.format(
-        #     current_log_file, reader.log_file, reader.log_pos, current_log_pos
-        # ))
-        # LOGGER.info('Rows saved: {} and update bookmark period: {}'.format(rows_saved, UPDATE_BOOKMARK_PERIOD))
+
+        # TODO: Consider moving log pos back slightly to avoid hanging process (maybe 200 or so)
         if current_log_file == reader.log_file and reader.log_pos >= current_log_pos:
             break
 
@@ -409,7 +394,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
         reader = BinLogStreamReader(
             connection_settings={},
             server_id=server_id,
-            slave_uuid='stitch-slave-{}'.format(server_id),
+            slave_uuid='kbc-slave-{}'.format(server_id),
             log_file=log_file,
             log_pos=log_pos,
             resume_stream=True,

@@ -166,15 +166,8 @@ def row_to_singer_record(catalog_entry, version, row, columns, time_extracted):
     catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
 
     row_to_persist = ()
-    LOGGER.info('Here is the full properties: {}'.format(catalog_entry.schema.properties))
-    LOGGER.info('And here is the input catalog entry: {}'.format(catalog_entry))
-    LOGGER.info('!!! And here is the set of columns for it: {}'.format(columns))
     for idx, elem in enumerate(row_with_metadata):
-        LOGGER.info('Here is the index and element for the current pair: {} : {}'.format(idx, elem))
-        LOGGER.info('Now we have the column at index: {}'.format(columns[idx]))
-        LOGGER.info('And catalog entry without type specifically: {}'.format(catalog_entry.schema.properties[columns[idx]]))
         property_type = catalog_entry.schema.properties[columns[idx]].type
-        LOGGER.info('The property type thing is: {}'.format(property_type))
 
         if isinstance(elem, (datetime.datetime, datetime.date, datetime.timedelta)):
             the_utc_date = to_utc_datetime_str(elem)
@@ -222,7 +215,6 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
     cursor.execute(select_sql, params)
 
     row = cursor.fetchone()
-    LOGGER.info('Row processed, that maybe should have KBC metadata added to it: {}'.format(row))
     rows_saved = 0
 
     database_name = get_database_name(catalog_entry)
