@@ -33,7 +33,7 @@ from io import StringIO
 from sshtunnel import SSHTunnelForwarder
 
 # from kbc.env_handler import KBCEnvHandler
-from kbc.result import KBCTableDef, ResultWriter
+# from kbc.result import KBCTableDef, ResultWriter
 
 try:
     import core as core
