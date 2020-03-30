@@ -948,9 +948,8 @@ class Component(KBCEnvHandler):
                 catalog = Catalog.from_dict(table_mappings)
 
                 for entry in catalog.to_dict()['streams']:
-                    LOGGER.info('The entry is {} and out path is {} and '
-                                'incremental is {}'.format(entry, self.tables_out_path,
-                                                           self.cfg_params[KEY_INCREMENTAL_SYNC]))
+                    LOGGER.info('Outputting data result to path "{}"; incremental is {}'.format(
+                        self.tables_out_path, self.cfg_params[KEY_INCREMENTAL_SYNC]))
                     self.create_manifests(entry, self.tables_out_path,
                                           incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
 

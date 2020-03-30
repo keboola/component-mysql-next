@@ -30,7 +30,7 @@ original_convert_date = pymysql.converters.convert_date
 
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_kbc_synced_at'
-KBC_DELETED = '_kbc_deleted'
+KBC_DELETED = '_kbc_deleted_at'
 
 
 def monkey_patch_datetime(datetime_str):
