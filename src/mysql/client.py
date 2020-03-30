@@ -4,12 +4,16 @@ Define MySQL connection, session parameters and backoff configuration.
 TODO: Integrate SSL here, if SSL is needed.
 """
 import backoff
-import logging
 import pymysql
 
-LOGGER = logging.getLogger(__name__)
+try:
+    from core.logger import get_logger
+except ImportError:
+    from src.core.logger import get_logger
 
-MAX_CONNECT_RETRIES = 7
+LOGGER = get_logger()
+
+MAX_CONNECT_RETRIES = 5
 BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
 READ_TIMEOUT_SECONDS = 3000

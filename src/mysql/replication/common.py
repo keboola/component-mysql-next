@@ -3,7 +3,6 @@ Common patterns for data replication.
 """
 import copy
 import datetime
-import logging
 import time
 import pytz
 import pymysql
@@ -19,7 +18,7 @@ except ImportError:
     from src.core import metadata
     from src.core import utils
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = core.get_logger()
 
 # NB: Upgrading pymysql from 0.7.11 --> 0.9.3 had the undocumented change
 # to how `0000-00-00 00:00:00` date/time types are returned. In 0.7.11,
@@ -216,7 +215,8 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
             counter.increment()
             rows_saved += 1
             record_message = row_to_singer_record(catalog_entry, stream_version, row, columns, time_extracted)
-            core.write_message(record_message)
+            core.write_message_csv(record_message)
+            # core.write_message(record_message)
 
             md_map = metadata.to_map(catalog_entry.metadata)
             stream_metadata = md_map.get((), {})

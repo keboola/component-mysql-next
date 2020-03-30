@@ -66,6 +66,11 @@ class RecordMessage(Message):
             result['time_extracted'] = u.strftime(as_utc)
         return result
 
+    def to_csv(self):
+        LOGGER.info(self.record.values())
+        LOGGER.info(','.join(str(record) for record in self.record.values()))
+        return ','.join(str(record) for record in self.record.values())
+
     def __str__(self):
         return str(self.asdict())
 
@@ -207,8 +212,24 @@ def format_message(message):
     return json.dumps(message.asdict(), use_decimal=True)
 
 
+def format_message_csv(message):
+    message_type = _required_key(message.asdict(), 'type')
+    if message_type == 'RECORD':
+        return message.to_csv()
+    else:
+        return ''
+
+
 def write_message(message):
     sys.stdout.write(format_message(message) + '\n')
+    sys.stdout.flush()
+
+
+def write_message_csv(message):
+    LOGGER.info('Write message CSV attempt {}'.format(message))
+    LOGGER.info(type(message))
+    # sys.stdout.write(format_message_csv(message))
+    sys.stdout.write(format_message_csv(message) + '\n')
     sys.stdout.flush()
 
 

@@ -2,14 +2,14 @@
 Provides an object model for a table mapping.
 """
 import json
-import logging
 import sys
 
 from . import metadata as metadata_module
 from .bookmarks import get_currently_syncing
+from .logger import get_logger
 from .schema import Schema
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = get_logger()
 
 
 def write_catalog(catalog):

@@ -4,7 +4,6 @@ Binary log row-based replication.
 import copy
 import datetime
 import json
-import logging
 import pytz
 
 import pymysql.connections
@@ -30,11 +29,11 @@ except ImportError:
     import src.mysql.replication.common as common
     from src.mysql.client import connect_with_backoff, make_connection_wrapper
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = core.get_logger()
 
 KBC_DELETED_AT = "_kbc_deleted"
-UPDATE_BOOKMARK_PERIOD = 1000
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
+UPDATE_BOOKMARK_PERIOD = 1000
 
 mysql_timestamp_types = {FIELD_TYPE.TIMESTAMP, FIELD_TYPE.TIMESTAMP2}
 
@@ -316,11 +315,11 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
     current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn)
 
     for binlog_event in reader:
-        print('binlog event details:')
-        print(binlog_event.packet)
-        print(binlog_event.event_type)
+        # print('binlog event details:')
+        # print(binlog_event.packet)
+        # print(binlog_event.event_type)
         if isinstance(binlog_event, RotateEvent):
-            print('Rotation event...')
+            # print('Rotation event...')
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
         else:
             tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)

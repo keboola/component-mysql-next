@@ -1,7 +1,6 @@
 """
 Incremental replication via key-based replication.
 """
-import logging
 import pendulum
 
 try:
@@ -15,7 +14,7 @@ except ImportError:
     from src.mysql.client import connect_with_backoff
     import src.mysql.replication.common as common
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = core.get_logger()
 
 BOOKMARK_KEYS = {'replication_key', 'replication_key_value', 'version'}
 

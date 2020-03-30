@@ -2,7 +2,6 @@
 Full table replication sync.
 """
 import datetime
-import logging
 
 try:
     import core as core
@@ -17,7 +16,7 @@ except ImportError:
     import src.mysql.replication.binlog as binlog
     import src.mysql.replication.common as common
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = core.get_logger()
 
 # Date-type fields included as may be potentially part of composite key.
 RESUMABLE_PK_TYPES = {'tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'char', 'varchar',

@@ -20,12 +20,11 @@ import binascii
 import copy
 import itertools
 import json
-import logging
 import os
+
 import paramiko
 import pendulum
 import pymysql
-import sys
 
 from collections import namedtuple
 from contextlib import nullcontext, redirect_stdout
@@ -33,48 +32,48 @@ from io import StringIO
 from sshtunnel import SSHTunnelForwarder
 
 from kbc.env_handler import KBCEnvHandler
+from kbc.result import KBCTableDef, ResultWriter
 
 try:
     import core as core
     import core.metrics as metrics
-    import mysql.result as result_writer
 
     from core import metadata
     from core.catalog import Catalog, CatalogEntry
-    # from src.core.logger import get_logger
+    from core.env_handler import KBCEnvHandler
     from core.schema import Schema
 
+    import mysql.result as result_writer
     import mysql.replication.binlog as binlog
     import mysql.replication.common as common
     import mysql.replication.full_table as full_table
     import mysql.replication.incremental as incremental
+
+    from mysql.client import connect_with_backoff, MySQLConnection
 except ImportError:
     import src.core as core
     import src.core.metrics as metrics
-    import src.mysql.result as result_writer
 
     from src.core import metadata
     from src.core.catalog import Catalog, CatalogEntry
-    # from src.core.logger import get_logger
+    from src.core.env_handler import KBCEnvHandler
     from src.core.schema import Schema
 
+    import src.mysql.result as result_writer
     import src.mysql.replication.binlog as binlog
     import src.mysql.replication.common as common
     import src.mysql.replication.full_table as full_table
     import src.mysql.replication.incremental as incremental
 
-logging.basicConfig(level=logging.INFO)
-LOGGER = logging.getLogger(__name__)
-
-try:
-    from mysql.client import connect_with_backoff, MySQLConnection
-except ImportError as import_err:
-    LOGGER.warning('Running component locally, some features may not reflect their behavior in Keboola as we are not'
-                   'running inside of a Docker container. Err: {}'.format(import_err))
     from src.mysql.client import connect_with_backoff, MySQLConnection
+
+LOGGER = core.get_logger()
 
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
+
+print(current_path)
+print(module_path)
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
@@ -95,7 +94,7 @@ KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
-SSH_BIND_PORT = 8080
+SSH_BIND_PORT = 3307
 LOCAL_ADDRESS = '127.0.0.1'
 CONNECT_TIMEOUT = 30
 
@@ -734,17 +733,13 @@ def log_server_params(mysql_conn):
 
 class Component(KBCEnvHandler):
     """Keboola extractor component."""
-    def __init__(self, debug: bool = False, data_path: str = None):
-        KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
-                               log_level=logging.DEBUG if debug else logging.INFO)
+    def __init__(self, data_path: str = None):
+        KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path)
+
         self.files_out_path = os.path.join(self.data_path, 'out', 'files')
         self.files_in_path = os.path.join(self.data_path, 'in', 'files')
         self.state_out_file_path = os.path.join(self.data_path, 'out', 'state.json')
-        # override debug from config
-        if self.cfg_params.get(KEY_DEBUG):
-            debug = True
-        if debug:
-            logging.getLogger().setLevel(logging.DEBUG)
+
         LOGGER.info('Running version %s', APP_VERSION)
         LOGGER.info('Loading configuration...')
 
@@ -797,7 +792,7 @@ class Component(KBCEnvHandler):
             try:
                 input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
             except binascii.Error as bin_err:
-                logging.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
+                LOGGER.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
                               'key input variable. Detail: {}'.format(bin_err))
                 exit(1)
 
@@ -856,16 +851,21 @@ class Component(KBCEnvHandler):
                 else:
                     LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
                 catalog = Catalog.from_dict(table_mappings)
+                # print(table_mappings)
+                # table_def = KBCTableDef(destination)
+                # writer = ResultWriter(result_dir_path=self.tables_out_path, table_def)
 
-                output_path = os.path.join(current_path, 'output.txt')
-                with open(output_path, 'w') as output:
-                    with redirect_stdout(output):
-                        do_sync(mysql_client, config_params, catalog, prior_state)
+                do_sync(mysql_client, config_params, catalog, prior_state)
 
-                result_writer.write_from_file(self.tables_out_path, output_path,
-                                              state_output_path=self.state_out_file_path)
-                for entry in catalog.to_dict()['streams']:
-                    result_writer.create_manifests(entry, self.tables_out_path, incremental=True)
+                # output_path = os.path.join(current_path, 'output.txt')
+                # with open(output_path, 'w') as output:
+                #     with redirect_stdout(output):
+                #         do_sync(mysql_client, config_params, catalog, prior_state)
+
+                # result_writer.write_from_file(self.tables_out_path, output_path,
+                #                               state_output_path=self.state_out_file_path)
+                # for entry in catalog.to_dict()['streams']:
+                #     result_writer.create_manifests(entry, self.tables_out_path, incremental=True)
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')
@@ -873,18 +873,14 @@ class Component(KBCEnvHandler):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        debug_arg = sys.argv[1]
-    else:
-        debug_arg = False
     try:
         # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        # debug_data_path = os.path.join(module_path, 'data')
-        # comp = Component(debug_arg, data_path=debug_data_path)
-        # comp.run()
-
-        comp = Component(debug_arg)
+        debug_data_path = os.path.join(module_path, 'data')
+        comp = Component(data_path=debug_data_path)
         comp.run()
+
+        # comp = Component()
+        # comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)
