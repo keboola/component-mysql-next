@@ -27,11 +27,12 @@ import pendulum
 import pymysql
 
 from collections import namedtuple
-from contextlib import nullcontext, redirect_stdout
+from contextlib import nullcontext
+# from contextlib import nullcontext, redirect_stdout
 from io import StringIO
 from sshtunnel import SSHTunnelForwarder
 
-from kbc.env_handler import KBCEnvHandler
+# from kbc.env_handler import KBCEnvHandler
 from kbc.result import KBCTableDef, ResultWriter
 
 try:
@@ -43,7 +44,7 @@ try:
     from core.env_handler import KBCEnvHandler
     from core.schema import Schema
 
-    import mysql.result as result_writer
+    # import mysql.result as result_writer
     import mysql.replication.binlog as binlog
     import mysql.replication.common as common
     import mysql.replication.full_table as full_table
@@ -59,7 +60,7 @@ except ImportError:
     from src.core.env_handler import KBCEnvHandler
     from src.core.schema import Schema
 
-    import src.mysql.result as result_writer
+    # import src.mysql.result as result_writer
     import src.mysql.replication.binlog as binlog
     import src.mysql.replication.common as common
     import src.mysql.replication.full_table as full_table
@@ -793,7 +794,7 @@ class Component(KBCEnvHandler):
                 input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
             except binascii.Error as bin_err:
                 LOGGER.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
-                              'key input variable. Detail: {}'.format(bin_err))
+                             'key input variable. Detail: {}'.format(bin_err))
                 exit(1)
 
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
