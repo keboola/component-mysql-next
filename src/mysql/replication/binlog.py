@@ -5,13 +5,14 @@ import copy
 import datetime
 import json
 import pytz
+import socket
 
 import pymysql.connections
 import pymysql.err
 
 from pymysqlreplication.constants import FIELD_TYPE
 from pymysqlreplication import BinLogStreamReader
-from pymysqlreplication.event import RotateEvent
+from pymysqlreplication.event import RotateEvent, StopEvent, XidEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
 
 try:
@@ -30,6 +31,7 @@ except ImportError:
     from src.mysql.client import connect_with_backoff, make_connection_wrapper
 
 LOGGER = core.get_logger()
+socket.setdefaulttimeout(5.0)
 
 KBC_DELETED_AT = "_kbc_deleted"
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
@@ -97,7 +99,7 @@ def fetch_current_log_file_and_pos(mysql_conn):
 
             if result is None:
                 raise Exception("MySQL binary logging is not enabled.")
-
+            LOGGER.debug('Full result: {}'.format(result))
             current_log_file, current_log_pos = result[0:2]
 
             return current_log_file, current_log_pos
@@ -305,8 +307,9 @@ def generate_streams_map(binlog_streams):
 
 
 def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
-    LOGGER.info('_run_binlog_sync params: {}; {}; {}; {}'.format(mysql_conn, reader, binlog_streams_map, state))
-    LOGGER.info('type of reader: {}'.format(type(reader)))
+    # LOGGER.info('The state passed to binlog sync: {}'.format(state))
+    # LOGGER.info('_run_binlog_sync params: {}; {}; {}; {}'.format(mysql_conn, reader, binlog_streams_map, state))
+    # LOGGER.info('type of reader: {}'.format(type(reader)))
     time_extracted = utils.now()
 
     rows_saved = 0
@@ -314,10 +317,17 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
 
     current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn)
 
+    binlogs_processed = 0
     for binlog_event in reader:
-        # print('binlog event details:')
-        # print(binlog_event.packet)
-        # print(binlog_event.event_type)
+        binlogs_processed += 1
+        # LOGGER.debug('Processing binlog: {}'.format(binlogs_processed))
+        # LOGGER.debug('binlog event details:')
+        # LOGGER.debug(binlog_event.packet)
+        # LOGGER.debug(binlog_event.event_type)
+        # LOGGER.debug(binlog_event.position)
+        # LOGGER.debug('next binlog:')
+        # LOGGER.debug(binlog_event.next_binlog)
+        # LOGGER.debug(binlog_streams_map.items())
         if isinstance(binlog_event, RotateEvent):
             # print('Rotation event...')
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
@@ -328,6 +338,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
             desired_columns = streams_map_entry.get('desired_columns')
 
             if not catalog_entry:
+                LOGGER.debug('No catalog entry, skip events number: {}'.format(events_skipped))
                 events_skipped = events_skipped + 1
 
                 if events_skipped % UPDATE_BOOKMARK_PERIOD == 0:
@@ -336,17 +347,17 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
 
             elif catalog_entry:
                 if isinstance(binlog_event, WriteRowsEvent):
-                    LOGGER.info('Handling write row event')
+                    # LOGGER.info('Handling write row event')
                     rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                          rows_saved, time_extracted)
 
                 elif isinstance(binlog_event, UpdateRowsEvent):
-                    LOGGER.info('Handling update row event')
+                    # LOGGER.info('Handling update row event')
                     rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted)
 
                 elif isinstance(binlog_event, DeleteRowsEvent):
-                    LOGGER.info('Handling delete row event')
+                    # LOGGER.info('Handling delete row event')
                     rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted)
                 else:
@@ -359,6 +370,10 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
         # The iterator across python-mysql-replication's fetchone method should ultimately terminate
         # upon receiving an EOF packet. There seem to be some cases when a MySQL server will not send
         # one causing binlog replication to hang.
+        # LOGGER.info('Current log file is {}, reader log file is {}, reader log pos: {}, set current log pos: {}'.format(
+        #     current_log_file, reader.log_file, reader.log_pos, current_log_pos
+        # ))
+        # LOGGER.info('Rows saved: {} and update bookmark period: {}'.format(rows_saved, UPDATE_BOOKMARK_PERIOD))
         if current_log_file == reader.log_file and reader.log_pos >= current_log_pos:
             break
 
@@ -385,7 +400,6 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
         LOGGER.info("No server_id provided, will use global server_id=%s", server_id)
 
     connection_wrapper = make_connection_wrapper(config)
-    LOGGER.info('Got passed connection wrapper')
 
     try:
         reader = BinLogStreamReader(
@@ -396,6 +410,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
             log_pos=log_pos,
             resume_stream=True,
             only_events=[RotateEvent, WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent],
+            freeze_schema=True,
             pymysql_wrapper=connection_wrapper
         )
         LOGGER.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)

@@ -215,8 +215,8 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
             counter.increment()
             rows_saved += 1
             record_message = row_to_singer_record(catalog_entry, stream_version, row, columns, time_extracted)
-            core.write_message_csv(record_message)
-            # core.write_message(record_message)
+            # core.write_message_csv(record_message)
+            core.write_message(record_message)
 
             md_map = metadata.to_map(catalog_entry.metadata)
             stream_metadata = md_map.get((), {})

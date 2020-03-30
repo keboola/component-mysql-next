@@ -70,9 +70,10 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
 
 class MySQLConnection(pymysql.connections.Connection):
     def __init__(self, config):
+        LOGGER.info('Config for MySQLConnection supplied is: {}'.format(config))
         args = {
-            "user": config['user'],
-            "password": config['password'],
+            "user": config.get('user') or config.get('username'),
+            "password": config.get('password') or config.get('#password'),
             "host": config['host'],
             "port": int(config['port']),
             "cursorclass": config.get('cursorclass') or pymysql.cursors.SSCursor,

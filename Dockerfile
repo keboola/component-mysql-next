@@ -14,5 +14,4 @@ RUN pip install -r /code/requirements.txt
 
 WORKDIR /code/
 
-
-CMD ["python", "-u", "/code/src/component.py"]
+RUN /code/scripts/run_pipeline.sh

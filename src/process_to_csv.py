@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Output to CSV.
 """
@@ -7,7 +8,7 @@ import os
 import sys
 import json
 import csv
-from datetime import datetime
+# from datetime import datetime
 import collections
 from jsonschema.validators import Draft4Validator
 
@@ -16,13 +17,13 @@ try:
 except ImportError:
     import src.core as core
 
-logger = core.get_logger()
+LOGGER = core.get_logger()
 
 
 def emit_state(state):
     if state is not None:
         line = json.dumps(state)
-        logger.debug('Emitting state {}'.format(line))
+        LOGGER.debug('Emitting state {}'.format(line))
         sys.stdout.write("{}\n".format(line))
         sys.stdout.flush()
 
@@ -45,13 +46,14 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
     headers = {}
     validators = {}
 
-    now = datetime.now().strftime('%Y%m%dT%H%M%S')
+    # now = datetime.now().strftime('%Y%m%dT%H%M%S')
 
     for message in messages:
+        # LOGGER.info('Attempting to ingest message: {}'.format(message))
         try:
             o = core.parse_message(message).asdict()
         except json.decoder.JSONDecodeError:
-            logger.error("Unable to parse:\n{}".format(message))
+            LOGGER.error("Unable to parse:\n{}".format(message))
             raise
         message_type = o['type']
         if message_type == 'RECORD':
@@ -68,20 +70,16 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
             flattened_record = flatten(o['record'])
 
             if o['stream'] not in headers and not file_is_empty:
-                with open(filename, 'r') as csvfile:
-                    reader = csv.reader(csvfile,
-                                        delimiter=delimiter,
-                                        quotechar=quotechar)
+                # LOGGER.info('Attempting to save to file name: {}'.format(filename))
+                with open(filename, 'r') as csv_file:
+                    reader = csv.reader(csv_file, delimiter=delimiter, quotechar=quotechar)
                     first_line = next(reader)
                     headers[o['stream']] = first_line if first_line else flattened_record.keys()
             else:
                 headers[o['stream']] = flattened_record.keys()
 
-            with open(filename, 'a') as csvfile:
-                writer = csv.DictWriter(csvfile,
-                                        headers[o['stream']],
-                                        extrasaction='ignore',
-                                        delimiter=delimiter,
+            with open(filename, 'a') as csv_file:
+                writer = csv.DictWriter(csv_file, headers[o['stream']], extrasaction='ignore', delimiter=delimiter,
                                         quotechar=quotechar)
                 if file_is_empty:
                     writer.writeheader()
@@ -90,7 +88,7 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
 
             state = None
         elif message_type == 'STATE':
-            logger.debug('Setting state to {}'.format(o['value']))
+            LOGGER.info('Setting state to {}'.format(o['value']))
             state = o['value']
         elif message_type == 'SCHEMA':
             stream = o['stream']
@@ -98,7 +96,7 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
             validators[stream] = Draft4Validator(o['schema'])
             key_properties[stream] = o['key_properties']
         else:
-            logger.warning("Unknown message type {} in message {}"
+            LOGGER.warning("Unknown message type {} in message {}"
                            .format(o['type'], o))
 
     return state
@@ -116,13 +114,12 @@ def main():
         config = {}
 
     input_messages = io.TextIOWrapper(sys.stdin.buffer, encoding='utf-8')
-    state = persist_messages(config.get('delimiter', ','),
-                             config.get('quotechar', '"'),
-                             input_messages,
+    # LOGGER.info('Full input messages: {}'.format(input_messages))
+    state = persist_messages(config.get('delimiter', ','), config.get('quotechar', '"'), input_messages,
                              config.get('destination_path', ''))
 
     emit_state(state)
-    logger.debug("Exiting normally")
+    LOGGER.info("Exiting normally")
 
 
 if __name__ == '__main__':

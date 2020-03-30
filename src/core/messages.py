@@ -67,8 +67,8 @@ class RecordMessage(Message):
         return result
 
     def to_csv(self):
-        LOGGER.info(self.record.values())
-        LOGGER.info(','.join(str(record) for record in self.record.values()))
+        # LOGGER.info(self.record.values())
+        # LOGGER.info(','.join(str(record) for record in self.record.values()))
         return ','.join(str(record) for record in self.record.values())
 
     def __str__(self):
@@ -174,6 +174,7 @@ def parse_message(msg):
     # lossy conversions.  However, this will affect
     # very few data points and we have chosen to
     # leave conversion as is for now.
+    LOGGER.info('Message to parse: {}'.format(msg))
     obj = json.loads(msg, use_decimal=True)
     msg_type = _required_key(obj, 'type')
 
@@ -187,14 +188,11 @@ def parse_message(msg):
                 time_extracted = None
 
             # time_extracted = dateutil.parser.parse(time_extracted)
-        return RecordMessage(stream=_required_key(obj, 'stream'),
-                             record=_required_key(obj, 'record'),
-                             version=obj.get('version'),
-                             time_extracted=time_extracted)
+        return RecordMessage(stream=_required_key(obj, 'stream'), record=_required_key(obj, 'record'),
+                             version=obj.get('version'), time_extracted=time_extracted)
 
     elif msg_type == 'SCHEMA':
-        return SchemaMessage(stream=_required_key(obj, 'stream'),
-                             schema=_required_key(obj, 'schema'),
+        return SchemaMessage(stream=_required_key(obj, 'stream'), schema=_required_key(obj, 'schema'),
                              key_properties=_required_key(obj, 'key_properties'),
                              bookmark_properties=obj.get('bookmark_properties'))
 
@@ -202,8 +200,7 @@ def parse_message(msg):
         return StateMessage(value=_required_key(obj, 'value'))
 
     elif msg_type == 'ACTIVATE_VERSION':
-        return ActivateVersionMessage(stream=_required_key(obj, 'stream'),
-                                      version=_required_key(obj, 'version'))
+        return ActivateVersionMessage(stream=_required_key(obj, 'stream'), version=_required_key(obj, 'version'))
     else:
         return None
 
@@ -226,8 +223,8 @@ def write_message(message):
 
 
 def write_message_csv(message):
-    LOGGER.info('Write message CSV attempt {}'.format(message))
-    LOGGER.info(type(message))
+    # LOGGER.info('Write message CSV attempt {}'.format(message))
+    # LOGGER.info(type(message))
     # sys.stdout.write(format_message_csv(message))
     sys.stdout.write(format_message_csv(message) + '\n')
     sys.stdout.flush()
@@ -237,9 +234,7 @@ def write_record(stream_name, record, stream_alias=None, time_extracted=None):
     """Write a single record for the given stream.
     write_record("users", {"id": 2, "email": "mike@stitchdata.com"})
     """
-    write_message(RecordMessage(stream=(stream_alias or stream_name),
-                                record=record,
-                                time_extracted=time_extracted))
+    write_message(RecordMessage(stream=(stream_alias or stream_name), record=record, time_extracted=time_extracted))
 
 
 def write_records(stream_name, records):
@@ -266,10 +261,10 @@ def write_schema(stream_name, schema, key_properties, bookmark_properties=None, 
 
     write_message(
         SchemaMessage(
-            stream=(stream_alias or stream_name),
-            schema=schema,
-            key_properties=key_properties,
-            bookmark_properties=bookmark_properties))
+            stream=(stream_alias or stream_name), schema=schema, key_properties=key_properties,
+            bookmark_properties=bookmark_properties
+        )
+    )
 
 
 def write_state(value):

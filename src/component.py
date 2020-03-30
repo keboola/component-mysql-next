@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Component main class for data extraction.
 
 Executes component endpoint executions based on dependent api_mappings.json file in same path. This file should have
@@ -5,9 +6,6 @@ a set structure, see example below.
 
 Essentially at the table table and column level, add "replication-method" of: FULL_TABLE, INCREMENTAL, or ROW_BASED.
 If INCREMENTAL, you need to specify a "replication-key".
-
-# Primary To-do items
-TODO: Fix log-based hanging when logs are scanned at self._sock.recv_into(b)
 
 # Secondary To-do items
 TODO: Table Mappings - Handle prior user inputs
@@ -25,11 +23,13 @@ import os
 import paramiko
 import pendulum
 import pymysql
+import pymysqlreplication
 
 from collections import namedtuple
 from contextlib import nullcontext
 # from contextlib import nullcontext, redirect_stdout
 from io import StringIO
+from signal import signal, SIGPIPE, SIG_DFL
 from sshtunnel import SSHTunnelForwarder
 
 # from kbc.env_handler import KBCEnvHandler
@@ -68,13 +68,11 @@ except ImportError:
 
     from src.mysql.client import connect_with_backoff, MySQLConnection
 
+signal(SIGPIPE, SIG_DFL)
 LOGGER = core.get_logger()
 
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
-
-print(current_path)
-print(module_path)
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
@@ -95,7 +93,7 @@ KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
-SSH_BIND_PORT = 3307
+SSH_BIND_PORT = 3308
 LOCAL_ADDRESS = '127.0.0.1'
 CONNECT_TIMEOUT = 30
 
@@ -134,6 +132,47 @@ Column = namedtuple('Column', [
     "column_type",
     "column_key"
 ])
+
+
+def new_read_binary_json_type_inlined(self, t, large):
+    if t == pymysqlreplication.packet.JSONB_TYPE_LITERAL:
+        value = self.read_uint32() if large else self.read_uint16()
+        if value == pymysqlreplication.packet.JSONB_LITERAL_NULL:
+            return None
+        if value == pymysqlreplication.packet.JSONB_LITERAL_TRUE:
+            return True
+        if value == pymysqlreplication.packet.JSONB_LITERAL_FALSE:
+            return False
+    if t == pymysqlreplication.packet.JSONB_TYPE_INT16:
+        return self.read_int16()
+    if t == pymysqlreplication.packet.JSONB_TYPE_UINT16:
+        return self.read_uint16()
+    if t == pymysqlreplication.packet.JSONB_TYPE_INT32:
+        return self.read_int32()
+    if t == pymysqlreplication.packet.JSONB_TYPE_UINT32:
+        return self.read_uint32()
+    raise ValueError('Json type %d is not handled' % t)
+
+
+pymysqlreplication.packet.BinLogPacketWrapper.read_binary_json_type_inlined = new_read_binary_json_type_inlined
+
+
+def new_read_offset_or_inline(packet, large):
+    t = packet.read_uint8()
+
+    if t in (pymysqlreplication.packet.JSONB_TYPE_LITERAL,
+             pymysqlreplication.packet.JSONB_TYPE_INT16,
+             pymysqlreplication.packet.JSONB_TYPE_UINT16):
+        return (t, None, packet.read_binary_json_type_inlined(t, large))
+    if large and t in (pymysqlreplication.packet.JSONB_TYPE_INT32,
+                       pymysqlreplication.packet.JSONB_TYPE_UINT32):
+        return (t, None, packet.read_binary_json_type_inlined(t, large))
+    if large:
+        return (t, packet.read_uint32(), None)
+    return (t, packet.read_uint16(), None)
+
+
+pymysqlreplication.packet.read_offset_or_inline = new_read_offset_or_inline
 
 
 def schema_for_column(c):
@@ -774,6 +813,62 @@ class Component(KBCEnvHandler):
         with open(output_file, 'w') as mapping_file:
             mapping_file.write(json.dumps(result))
 
+    def create_manifests(self, entry: dict, data_path: str, headless=False, incremental=True):
+        """Write manifest files for the results produced by the results writer.
+
+        :param entry: Dict entry from catalog
+        :param data_path: Path to the result output files
+        :param headless: Flag whether results contain sliced headless tables and hence
+        the `.column` attribute should be
+        used in manifest file.
+        :param incremental:
+        :return:
+        """
+        primary_keys = entry.get('primary_keys')
+        table_name = entry.get('table_name')
+        result_full_path = os.path.join(data_path, table_name + '.csv')
+
+        # for r in results:
+        if not headless:
+            self.write_table_manifest(result_full_path, table_name, primary_keys, None, incremental)
+        else:
+            LOGGER.error('Headless not yet implemented')
+            exit(1)
+            # write_table_manifest(result_full_path, table_name, primary_keys, r.table_def.columns, incremental)
+
+    @staticmethod
+    def write_table_manifest(file_name, destination: str = '', primary_key=None, columns=None, incremental=None):
+        """Write manifest for output table Manifest is used for the table to be stored in KBC Storage.
+
+        Args:
+            file_name: Local file name of the CSV with table data.
+            destination: String name of the table in Storage.
+            primary_key: List with names of columns used for primary key.
+            columns: List of columns for headless CSV files
+            incremental: Set to true to enable incremental loading
+        """
+        manifest = {}
+        if destination:
+            if isinstance(destination, str):
+                manifest['destination'] = destination
+            else:
+                raise TypeError("Destination must be a string")
+        if primary_key:
+            if isinstance(primary_key, list):
+                manifest['primary_key'] = primary_key
+            else:
+                raise TypeError("Primary key must be a list")
+        if columns:
+            if isinstance(columns, list):
+                manifest['columns'] = columns
+            else:
+                raise TypeError("Columns must by a list")
+        if incremental:
+            manifest['incremental'] = True
+
+        with open(file_name + '.manifest', 'w') as manifest_file:
+            json.dump(manifest, manifest_file)
+
     def run(self):
         """Execute main component extraction process."""
         params = self.cfg_params
@@ -856,7 +951,14 @@ class Component(KBCEnvHandler):
                 # table_def = KBCTableDef(destination)
                 # writer = ResultWriter(result_dir_path=self.tables_out_path, table_def)
 
-                do_sync(mysql_client, config_params, catalog, prior_state)
+                for entry in catalog.to_dict()['streams']:
+                    LOGGER.info('The entry is {} and out path is {} and '
+                                'incremental is {}'.format(entry, self.tables_out_path,
+                                                           self.cfg_params[KEY_INCREMENTAL_SYNC]))
+                    self.create_manifests(entry, self.tables_out_path,
+                                          incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+
+                do_sync(mysql_client, params, catalog, prior_state)
 
                 # output_path = os.path.join(current_path, 'output.txt')
                 # with open(output_path, 'w') as output:
@@ -865,8 +967,6 @@ class Component(KBCEnvHandler):
 
                 # result_writer.write_from_file(self.tables_out_path, output_path,
                 #                               state_output_path=self.state_out_file_path)
-                # for entry in catalog.to_dict()['streams']:
-                #     result_writer.create_manifests(entry, self.tables_out_path, incremental=True)
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')
@@ -876,12 +976,12 @@ class Component(KBCEnvHandler):
 if __name__ == "__main__":
     try:
         # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        debug_data_path = os.path.join(module_path, 'data')
-        comp = Component(data_path=debug_data_path)
-        comp.run()
-
-        # comp = Component()
+        # debug_data_path = os.path.join(module_path, 'data')
+        # comp = Component(data_path=debug_data_path)
         # comp.run()
+
+        comp = Component()
+        comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)

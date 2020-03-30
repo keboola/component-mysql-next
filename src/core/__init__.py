@@ -74,6 +74,10 @@ from .bookmarks import (
     get_currently_syncing,
 )
 
+from .env_handler import (
+    KBCEnvHandler
+)
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()
