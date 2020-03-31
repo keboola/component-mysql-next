@@ -93,7 +93,7 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
 
             state = None
         elif message_type == 'STATE':
-            LOGGER.info('Setting state to {}'.format(o['value']))
+            # LOGGER.info('Setting state to {}'.format(o['value']))
             state = o['value']
         elif message_type == 'SCHEMA':
             stream = o['stream']
@@ -272,6 +272,8 @@ def main():
         file_byte_size = os.stat(os.path.expanduser(os.path.join(destination_path, file))).st_size
         # LOGGER.info('byte size: {}'.format(file_byte_size))
         if file_byte_size > MAX_CSV_FILE_SIZE_BYTES:
+            LOGGER.info('File {} exceeds max bytes size {}, splitting CSV outputs'.format(file_name,
+                                                                                          MAX_CSV_FILE_SIZE_BYTES))
             new_table_destination = os.path.expanduser(os.path.join(destination_path, file_name, file))
             prior_table_destination = os.path.expanduser(os.path.join(destination_path, file))
             # LOGGER.info('Prior destination of file is {}'.format(prior_table_destination))
@@ -297,7 +299,9 @@ def main():
                 manifest.write(json.dumps(metadata))
             # else:
             #     LOGGER.warning('Manifest file specified to write to did not exist when attempting columns write')
-
+        else:
+            LOGGER.info('File {} does not exceed max bytes size {}, keeping as is'.format(file_name,
+                                                                                          MAX_CSV_FILE_SIZE_BYTES))
     # Write final state.
     state_output_full_path = os.path.join(config.get('output_state_path'), 'state.json')
     write_state(state, state_output_full_path)
