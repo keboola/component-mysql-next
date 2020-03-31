@@ -104,7 +104,7 @@ MANDATORY_IMAGE_PARS = ()
 # TODO: Add user value for KBC_SYNCED for UTC sync time.
 KBC_SYNCED_AT = '_kbc_synced'
 
-APP_VERSION = '0.2.0'
+APP_VERSION = '0.2.1'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -333,7 +333,7 @@ def discover_catalog(mysql_conn, config):
                 md_map = metadata.write(md_map, (), 'database-name', table_schema)
 
                 is_view = table_info[table_schema][table_name]['is_view']
-                primary_keys = table_info[table_schema][table_name]['primary_keys']
+                primary_keys = table_info[table_schema][table_name].get('primary_keys')
 
                 if table_schema in table_info and table_name in table_info[table_schema]:
                     row_count = table_info[table_schema][table_name].get('row_count')
@@ -365,7 +365,6 @@ def do_discover(mysql_conn, config):
     return discover_catalog(mysql_conn, config).dumps()
 
 
-# TODO: Maybe put in a singer-db-utils library.
 def desired_columns(selected, table_schema):
     """Return the set of column names we need to include in the SELECT.
     selected - set of column names marked as selected in the input catalog
@@ -390,7 +389,7 @@ def desired_columns(selected, table_schema):
 
     selected_but_unsupported = selected.intersection(unsupported)
     if selected_but_unsupported:
-        LOGGER.warning('Columns %s were selected but are not supported. Skipping them: {}'.format(
+        LOGGER.warning('Columns %s were selected but are not supported. ping them: {}'.format(
             selected_but_unsupported))
 
     selected_but_nonexistent = selected.difference(all_columns)
@@ -948,10 +947,11 @@ class Component(KBCEnvHandler):
                 catalog = Catalog.from_dict(table_mappings)
 
                 for entry in catalog.to_dict()['streams']:
-                    LOGGER.info('Outputting data result to path "{}"; incremental is {}'.format(
-                        self.tables_out_path, self.cfg_params[KEY_INCREMENTAL_SYNC]))
-                    self.create_manifests(entry, self.tables_out_path,
-                                          incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                    if entry['metadata'][0].get('selected'):
+                        LOGGER.info('Writing manifest for entry {} to path "{}"; incremental is {}'.format(
+                            entry.get('table_name'), self.tables_out_path, self.cfg_params[KEY_INCREMENTAL_SYNC]))
+                        self.create_manifests(entry, self.tables_out_path,
+                                              incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
 
                 do_sync(mysql_client, params, catalog, prior_state)
             else:

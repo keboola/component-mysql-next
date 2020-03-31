@@ -45,6 +45,7 @@ virtualenv/
 *.manifest
 *.spec
 *.json
+!output_config.json
 *.csv
 *.txt
 *.xml
