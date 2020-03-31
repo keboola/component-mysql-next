@@ -94,14 +94,9 @@ def verify_log_file_exists(mysql_conn, log_file, log_pos):
 def fetch_current_log_file_and_pos(mysql_conn):
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM multi_site.account")
-            LOGGER.info(cur.fetchone())
-            cur.execute("SHOW SLAVE STATUS")
-            LOGGER.info(cur.fetchone())
             cur.execute("SHOW MASTER STATUS")
-
             result = cur.fetchone()
-            LOGGER.info(result)
+
             if result is None:
                 raise Exception("MySQL binary logging is not enabled.")
             current_log_file, current_log_pos = result[0:2]

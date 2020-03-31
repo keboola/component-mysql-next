@@ -827,7 +827,7 @@ class Component(KBCEnvHandler):
 
         # for r in results:
         if not headless:
-            self.write_table_manifest(result_full_path, table_name, primary_keys, None, incremental)
+            self.write_table_manifest(result_full_path, '', primary_keys, None, incremental)
         else:
             LOGGER.error('Headless not yet implemented')
             exit(1)
@@ -946,7 +946,7 @@ class Component(KBCEnvHandler):
                 catalog = Catalog.from_dict(table_mappings)
 
                 for entry in catalog.to_dict()['streams']:
-                    if entry['metadata'][0].get('selected'):
+                    if entry['metadata'][0]['metadata'].get('selected'):
                         LOGGER.info('Writing manifest for entry {} to path "{}"; incremental is {}'.format(
                             entry.get('table_name'), self.tables_out_path, self.cfg_params[KEY_INCREMENTAL_SYNC]))
                         self.create_manifests(entry, self.tables_out_path,
