@@ -49,3 +49,4 @@ virtualenv/
 *.csv
 *.txt
 *.xml
+process_mappings.py

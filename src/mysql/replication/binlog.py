@@ -388,6 +388,9 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
         LOGGER.info("No server_id provided, will use global server_id=%s", server_id)
 
     connection_wrapper = make_connection_wrapper(config)
+    # LOGGER.info('Defining wrapper details: {}; {}; {}; {}'.format(connection_wrapper.host, connection_wrapper.user,
+    #                                                           connection_wrapper.password,
+    #                                                           connection_wrapper.bind_address))
 
     try:
         reader = BinLogStreamReader(

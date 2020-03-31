@@ -718,21 +718,21 @@ def sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state):
     core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 
 
-def sync_binlog_streams(mysql_conn, binlog_catalog, config, state):
+def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state):
     if binlog_catalog.streams:
         for stream in binlog_catalog.streams:
             write_schema_message(stream)
 
         with metrics.job_timer('sync_binlog') as timer:
-            binlog.sync_binlog_stream(mysql_conn, config, binlog_catalog.streams, state)
+            binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state)
 
 
-def do_sync(mysql_conn, config, catalog, state):
+def do_sync(mysql_conn, config, mysql_config, catalog, state):
     non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
     binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
 
     sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state)
-    sync_binlog_streams(mysql_conn, binlog_catalog, config, state)
+    sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state)
 
 
 def log_server_params(mysql_conn):
@@ -776,7 +776,7 @@ class Component(KBCEnvHandler):
         self.files_out_path = os.path.join(self.data_path, 'out', 'files')
         self.files_in_path = os.path.join(self.data_path, 'in', 'files')
         self.state_out_file_path = os.path.join(self.data_path, 'out', 'state.json')
-
+        self.params = self.cfg_params
         LOGGER.info('Running version %s', APP_VERSION)
         LOGGER.info('Loading configuration...')
 
@@ -786,6 +786,14 @@ class Component(KBCEnvHandler):
         except ValueError as err:
             LOGGER.exception(err)
             exit(1)
+
+        self.mysql_config_params = {
+            "host": LOCAL_ADDRESS,
+            "port": SSH_BIND_PORT,
+            "user": self.params[KEY_MYSQL_USER],
+            "password": self.params[KEY_MYSQL_PWD],
+            "connect_timeout": CONNECT_TIMEOUT
+        }
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
@@ -868,17 +876,15 @@ class Component(KBCEnvHandler):
 
     def run(self):
         """Execute main component extraction process."""
-        params = self.cfg_params
         file_input_path = self._check_file_inputs()
         table_mappings = {}
 
-        config_params = {
-            "host": LOCAL_ADDRESS,
-            "port": SSH_BIND_PORT,
-            "user": params[KEY_MYSQL_USER],
-            "password": params[KEY_MYSQL_PWD],
-            "connect_timeout": CONNECT_TIMEOUT
-        }
+        # all_params = {**self.params, **self.mysql_config_params}
+
+        # ssh_params = {
+        #     "ssh_address_or_host": self.cfg_params[KEY_SSH_HOST],
+        #     "ssh_pkey": pkey
+        # }
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
             b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
@@ -909,7 +915,7 @@ class Component(KBCEnvHandler):
             else:
                 LOGGER.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
-            mysql_client = MySQLConnection(config_params)
+            mysql_client = MySQLConnection(self.mysql_config_params)
             # TODO: Consider logging server details here.
 
             if self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
@@ -922,10 +928,10 @@ class Component(KBCEnvHandler):
                 with open(manual_table_mappings_file, 'r') as mappings_file:
                     table_mappings = json.load(mappings_file)
 
-            if params[KEY_OBJECTS_ONLY]:
+            if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
                 LOGGER.info('Fetching only object and field names, not running full extraction.')
-                table_mapping = discover_catalog(mysql_client, params)
+                table_mapping = discover_catalog(mysql_client, self.params)
 
                 # TODO: Retain prior selected choices by user.
 
@@ -952,7 +958,7 @@ class Component(KBCEnvHandler):
                         self.create_manifests(entry, self.tables_out_path,
                                               incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
 
-                do_sync(mysql_client, params, catalog, prior_state)
+                do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state)
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')

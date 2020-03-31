@@ -97,6 +97,7 @@ class MySQLConnection(pymysql.connections.Connection):
 def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
+            LOGGER.info
             config["cursorclass"] = kwargs.get('cursorclass')
             super().__init__(config)
 
