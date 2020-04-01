@@ -6,8 +6,8 @@ import sys
 
 from . import metadata as metadata_module
 from .bookmarks import get_currently_syncing
-from .logger import get_logger
 from .schema import Schema
+from .logger import get_logger
 
 LOGGER = get_logger()
 

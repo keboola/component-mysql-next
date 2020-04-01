@@ -68,7 +68,6 @@ except ImportError as e:
     from src.mysql.client import connect_with_backoff, MySQLConnection
 
 signal(SIGPIPE, SIG_DFL)
-LOGGER = core.get_logger()
 
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
@@ -967,6 +966,7 @@ class Component(KBCEnvHandler):
 
 if __name__ == "__main__":
     try:
+        LOGGER = core.get_logger()
         if os.path.dirname(current_path) == '/code':
             # Running in docker, assumes volume ./code
             comp = Component()
