@@ -12,7 +12,7 @@ except ImportError:
     from src.core.logger import get_logger
     from src.core.utils import (strftime, strptime_to_utc)
 
-LOGGER = get_logger()
+LOGGER = logging.getLogger(__name__)
 
 NO_INTEGER_DATETIME_PARSING = "no-integer-datetime-parsing"
 UNIX_SECONDS_INTEGER_DATETIME_PARSING = "unix-seconds-integer-datetime-parsing"

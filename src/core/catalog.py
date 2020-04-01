@@ -2,6 +2,7 @@
 Provides an object model for a table mapping.
 """
 import json
+import logging
 import sys
 
 from . import metadata as metadata_module
@@ -9,7 +10,7 @@ from .bookmarks import get_currently_syncing
 from .schema import Schema
 from .logger import get_logger
 
-LOGGER = get_logger()
+LOGGER = logging.getLogger(__name__)
 
 
 def write_catalog(catalog):

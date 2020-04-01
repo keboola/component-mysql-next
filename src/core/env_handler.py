@@ -3,6 +3,7 @@ KBC Environment Handler.
 """
 import csv
 import json
+import logging
 import os
 from _datetime import timedelta
 from collections import Counter
@@ -19,7 +20,7 @@ from kbc.result import KBCResult
 
 from .logger import get_logger
 
-LOGGER = get_logger()
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_DEL = ','
 DEFAULT_ENCLOSURE = '"'

@@ -3,8 +3,10 @@ Common patterns for data replication.
 """
 import copy
 import datetime
+import logging
 import time
 import pytz
+
 import pymysql
 
 try:
@@ -18,7 +20,7 @@ except ImportError:
     from src.core import metadata
     from src.core import utils
 
-LOGGER = core.get_logger()
+LOGGER = logging.getLogger(__name__)
 
 # NB: Upgrading pymysql from 0.7.11 --> 0.9.3 had the undocumented change
 # to how `0000-00-00 00:00:00` date/time types are returned. In 0.7.11,

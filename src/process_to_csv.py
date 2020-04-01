@@ -7,6 +7,7 @@ import collections
 import csv
 import io
 import json
+import logging
 import sys
 import os
 # from datetime import datetime
@@ -17,7 +18,7 @@ try:
 except ImportError:
     import src.core as core
 
-LOGGER = core.get_logger()
+LOGGER = logging.getLogger(__name__)
 MAX_CSV_FILE_SIZE_BYTES = 1000000000
 
 

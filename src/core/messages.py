@@ -1,3 +1,4 @@
+import logging
 import sys
 
 import pytz
@@ -11,7 +12,7 @@ except ImportError:
     import src.core.utils as u
     from src.core.logger import get_logger
 
-LOGGER = get_logger()
+LOGGER = logging.getLogger(__name__)
 
 
 class Message:

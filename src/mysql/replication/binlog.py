@@ -4,6 +4,7 @@ Binary log row-based replication.
 import copy
 import datetime
 import json
+import logging
 import pytz
 import socket
 
@@ -30,8 +31,7 @@ except ImportError:
     import src.mysql.replication.common as common
     from src.mysql.client import connect_with_backoff, make_connection_wrapper
 
-LOGGER = core.get_logger()
-socket.setdefaulttimeout(5.0)
+LOGGER = logging.getLogger(__name__)
 
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
 UPDATE_BOOKMARK_PERIOD = 1000

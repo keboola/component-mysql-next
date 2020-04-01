@@ -1,6 +1,7 @@
 """
 Incremental replication via key-based replication.
 """
+import logging
 import pendulum
 
 try:
@@ -14,7 +15,7 @@ except ImportError:
     from src.mysql.client import connect_with_backoff
     import src.mysql.replication.common as common
 
-LOGGER = core.get_logger()
+LOGGER = logging.getLogger(__name__)
 
 BOOKMARK_KEYS = {'replication_key', 'replication_key_value', 'version'}
 # TODO: Test incremental to determine if needs KBC metadata additions
