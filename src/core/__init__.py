@@ -26,8 +26,7 @@ from .metrics import (
     Timer,
     http_request_timer,
     job_timer,
-    record_counter,
-    timer
+    record_counter
 )
 
 from .messages import (

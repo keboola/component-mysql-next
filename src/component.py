@@ -50,7 +50,7 @@ try:
     import mysql.replication.incremental as incremental
 
     from mysql.client import connect_with_backoff, MySQLConnection
-except ImportError:
+except ImportError as e:
     import src.core as core
     import src.core.metrics as metrics
 
@@ -967,14 +967,16 @@ class Component(KBCEnvHandler):
 
 if __name__ == "__main__":
     try:
-        LOGGER.info(os.path.dirname(module_path))
-        # Note: If debugging, run docker-compose instead. Only use below two lines for early testing.
-        # debug_data_path = os.path.join(module_path, 'data')
-        # comp = Component(data_path=debug_data_path)
-        # comp.run()
+        if os.path.dirname(current_path) == '/code':
+            # Running in docker, assumes volume ./code
+            comp = Component()
+            comp.run()
+        else:
+            # Running locally, not in Docker
+            debug_data_path = os.path.join(module_path, 'data')
+            comp = Component(data_path=debug_data_path)
+            comp.run()
 
-        comp = Component()
-        comp.run()
     except Exception as generic_err:
         LOGGER.exception(generic_err)
         exit(1)

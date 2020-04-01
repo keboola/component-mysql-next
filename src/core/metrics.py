@@ -36,13 +36,9 @@ import time
 import timeit
 from collections import namedtuple
 
-try:
-    from core.logger import get_logger
-except ImportError:
-    from src.core.logger import get_logger
+from .logger import get_logger
 
 DEFAULT_LOG_INTERVAL = 60
-LOGGER = get_logger()
 
 
 class Status:
