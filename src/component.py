@@ -132,7 +132,6 @@ Column = namedtuple('Column', [
 ])
 
 
-@metrics.timer
 def new_read_binary_json_type_inlined(self, t, large):
     if t == pymysqlreplication.packet.JSONB_TYPE_LITERAL:
         value = self.read_uint32() if large else self.read_uint16()
@@ -156,7 +155,6 @@ def new_read_binary_json_type_inlined(self, t, large):
 pymysqlreplication.packet.BinLogPacketWrapper.read_binary_json_type_inlined = new_read_binary_json_type_inlined
 
 
-@metrics.timer
 def new_read_offset_or_inline(packet, large):
     t = packet.read_uint8()
 
@@ -175,7 +173,6 @@ def new_read_offset_or_inline(packet, large):
 pymysqlreplication.packet.read_offset_or_inline = new_read_offset_or_inline
 
 
-@metrics.timer
 def schema_for_column(c):
     """Returns the Schema object for the given Column."""
     data_type = c.data_type.lower()
@@ -225,7 +222,6 @@ def schema_for_column(c):
     return result
 
 
-@metrics.timer
 def create_column_metadata(cols):
     """Write metadata to catalog entry for given columns."""
     mdata = {}
@@ -244,7 +240,6 @@ def create_column_metadata(cols):
     return metadata.to_list(mdata)
 
 
-@metrics.timer
 def discover_catalog(mysql_conn, config):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
@@ -365,12 +360,10 @@ def discover_catalog(mysql_conn, config):
     return Catalog(entries)
 
 
-@metrics.timer
 def do_discover(mysql_conn, config):
     return discover_catalog(mysql_conn, config).dumps()
 
 
-@metrics.timer
 def desired_columns(selected, table_schema):
     """Return the set of column names we need to include in the SELECT.
     selected - set of column names marked as selected in the input catalog
@@ -413,7 +406,6 @@ def desired_columns(selected, table_schema):
     return selected.intersection(available).union(automatic)
 
 
-@metrics.timer
 def log_engine(mysql_conn, catalog_entry):
     is_view = common.get_is_view(catalog_entry)
     database_name = common.get_database_name(catalog_entry)
@@ -439,7 +431,6 @@ def log_engine(mysql_conn, catalog_entry):
                                 catalog_entry.table)
 
 
-@metrics.timer
 def is_valid_currently_syncing_stream(selected_stream, state):
     stream_metadata = metadata.to_map(selected_stream.metadata)
     replication_method = stream_metadata.get((), {}).get('replication-method')
@@ -453,7 +444,6 @@ def is_valid_currently_syncing_stream(selected_stream, state):
     return False
 
 
-@metrics.timer
 def binlog_stream_requires_historical(catalog_entry, state):
     log_file = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_file')
     log_pos = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_pos')
@@ -466,7 +456,6 @@ def binlog_stream_requires_historical(catalog_entry, state):
     return True
 
 
-@metrics.timer
 def resolve_catalog(discovered_catalog, streams_to_sync):
     result = Catalog(streams=[])
 
@@ -505,7 +494,6 @@ def resolve_catalog(discovered_catalog, streams_to_sync):
     return result
 
 
-@metrics.timer
 def get_non_binlog_streams(mysql_conn, catalog, config, state):
     """Returns the Catalog of data we're going to sync for all SELECT-based
     streams (i.e. INCREMENTAL, FULL_TABLE, and LOG_BASED that require a historical
@@ -575,7 +563,6 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
     return resolve_catalog(discovered, streams_to_sync)
 
 
-@metrics.timer
 def get_binlog_streams(mysql_conn, catalog, config, state):
     discovered = discover_catalog(mysql_conn, config)
 
@@ -594,7 +581,6 @@ def get_binlog_streams(mysql_conn, catalog, config, state):
     return resolve_catalog(discovered, binlog_streams)
 
 
-@metrics.timer
 def write_schema_message(catalog_entry, bookmark_properties=[]):
     key_properties = common.get_key_properties(catalog_entry)
 
@@ -606,7 +592,6 @@ def write_schema_message(catalog_entry, bookmark_properties=[]):
     ))
 
 
-@metrics.timer
 def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None):
     LOGGER.info("Stream %s is using incremental replication", catalog_entry.stream)
 
@@ -630,7 +615,6 @@ def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limi
     core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 
 
-@metrics.timer
 def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns):
     binlog.verify_binlog_config(mysql_conn)
 
@@ -677,7 +661,6 @@ def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns)
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
 
-@metrics.timer
 def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns):
     LOGGER.info("Stream %s is using full table replication", catalog_entry.stream)
     key_properties = common.get_key_properties(catalog_entry)
@@ -696,7 +679,6 @@ def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns):
     core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 
 
-@metrics.timer
 def sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state):
     for catalog_entry in non_binlog_catalog.streams:
         columns = list(catalog_entry.schema.properties.keys())
@@ -736,7 +718,6 @@ def sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state):
     core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 
 
-@metrics.timer
 def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state):
     if binlog_catalog.streams:
         for stream in binlog_catalog.streams:
@@ -746,7 +727,6 @@ def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state):
             binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state)
 
 
-@metrics.timer
 def do_sync(mysql_conn, config, mysql_config, catalog, state):
     non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
     binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
@@ -755,7 +735,6 @@ def do_sync(mysql_conn, config, mysql_config, catalog, state):
     sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state)
 
 
-@metrics.timer
 def log_server_params(mysql_conn):
     with connect_with_backoff(mysql_conn) as open_conn:
         try:
