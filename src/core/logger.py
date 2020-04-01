@@ -8,12 +8,14 @@ import logging_gelf.formatters
 
 def get_logger():
     """Return logger - Gelf if specified in environment, otherwise standard logging."""
+    logging.info('Environment variables: {}'.format(os.environ))
     if 'KBC_LOGGER_ADDR' in os.environ and 'KBC_LOGGER_PORT' in os.environ:
+        logging.info('Using the Gelf logger to log extraction outputs')
+        logging.basicConfig(level=logging.INFO)
         logger = logging.getLogger()
-        logging_gelf_handler = logging_gelf.handlers.GELFTCPSocketHandler(
-            host=os.getenv('KBC_LOGGER_ADDR'), port=int(os.getenv('KBC_LOGGER_PORT')))
-        logging_gelf_handler.setFormatter(
-            logging_gelf.formatters.GELFFormatter(null_character=True))
+        logging_gelf_handler = logging_gelf.handlers.GELFTCPSocketHandler(host=os.getenv('KBC_LOGGER_ADDR'),
+                                                                          port=int(os.getenv('KBC_LOGGER_PORT')))
+        logging_gelf_handler.setFormatter(logging_gelf.formatters.GELFFormatter(null_character=True))
         logger.addHandler(logging_gelf_handler)
 
         # remove default logging to stdout
