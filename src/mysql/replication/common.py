@@ -155,7 +155,7 @@ def to_utc_datetime_str(val):
     return utils.strftime(the_datetime.astimezone(tz=pytz.UTC))
 
 
-def row_to_singer_record(catalog_entry, version, row, columns, time_extracted):
+def row_to_data_record(catalog_entry, version, row, columns, time_extracted):
     # Adding metadata for Keboola. Can presume not there since should only be called for full sync
 
     kbc_metadata = (SYNC_STARTED_AT, None)
@@ -226,7 +226,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
         while row:
             counter.increment()
             rows_saved += 1
-            record_message = row_to_singer_record(catalog_entry, stream_version, row, columns, time_extracted)
+            record_message = row_to_data_record(catalog_entry, stream_version, row, columns, time_extracted)
             # core.write_message_csv(record_message)
             core.write_message(record_message)
 

@@ -7,7 +7,7 @@ from .utils import (
     strftime,
     strptime,
     update_state,
-    should_sync_field,
+    should_sync_field
 )
 
 from .logger import (
@@ -27,6 +27,7 @@ from .metrics import (
     http_request_timer,
     job_timer,
     record_counter,
+    timer
 )
 
 from .messages import (

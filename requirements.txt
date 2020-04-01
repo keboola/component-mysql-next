@@ -4,6 +4,7 @@ ciso8601
 dateparser
 freezegun
 jsonschema
+logging-gelf
 mock
 mysql-replication
 paramiko

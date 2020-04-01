@@ -1,6 +1,6 @@
 """
 Utilities for logging and parsing metrics.
-A Tap should use this library to log structured messages about the read
+An extractor should use this library to log structured messages about the read
 operations it makes.
 Counter is a general-purpose class that allows you to increment a
 "counter"-type metric. You initialize a Counter as a context manager, with
@@ -33,6 +33,7 @@ commonly used metrics.
 import json
 import re
 import time
+import timeit
 from collections import namedtuple
 
 try:
@@ -41,6 +42,7 @@ except ImportError:
     from src.core.logger import get_logger
 
 DEFAULT_LOG_INTERVAL = 60
+LOGGER = get_logger()
 
 
 class Status:
@@ -85,7 +87,7 @@ class Counter:
     points for a "counter" metric periodically and also when the context
     exits. The only thing you need to do is initialize the Counter and
     then call increment().
-    with singer.metrics.Counter('record_count', {'endpoint': 'users'}) as counter:
+    with core.metrics.Counter('record_count', {'endpoint': 'users'}) as counter:
        for user in get_users(...):
            # Print out the user
            counter.increment()
@@ -130,6 +132,15 @@ class Counter:
         return time.time() - self.last_log_time > self.log_interval
 
 
+def timer(function):
+    def new_function():
+        start_time = timeit.default_timer()
+        function()
+        elapsed = timeit.default_timer() - start_time
+        print('Function "{name}" took {time} seconds to complete.'.format(name=function.__name__, time=elapsed))
+    return new_function()
+
+
 class Timer:  # pylint: disable=too-few-public-methods
     """Produces metrics about the duration of operations.
     You use a Timer as a context manager wrapping around some operation.
@@ -138,7 +149,7 @@ class Timer:  # pylint: disable=too-few-public-methods
     It will automatically include a "status" tag that is "failed" if the
     context exits with an Exception or "success" if it exits cleanly. You
     can override this by setting timer.status within the context.
-    with singer.metrics.Timer('request_duration', {'endpoint': 'users'}):
+    with core.metrics.Timer('request_duration', {'endpoint': 'users'}):
        # Do some stuff
     This produces a metric like this:
     {
@@ -176,7 +187,7 @@ class Timer:  # pylint: disable=too-few-public-methods
 
 def record_counter(endpoint=None, log_interval=DEFAULT_LOG_INTERVAL):
     """Use for counting records retrieved from the source.
-    with singer.metrics.record_counter(endpoint="users") as counter:
+    with core.metrics.record_counter(endpoint="users") as counter:
          for record in my_records:
              # Do something with the record
              counter.increment()
@@ -189,7 +200,7 @@ def record_counter(endpoint=None, log_interval=DEFAULT_LOG_INTERVAL):
 
 def http_request_timer(endpoint):
     """Use for timing HTTP requests to an endpoint
-    with singer.metrics.http_request_timer("users") as timer:
+    with core.metrics.http_request_timer("users") as timer:
         # Make a request
     """
     tags = {}
@@ -200,7 +211,7 @@ def http_request_timer(endpoint):
 
 def job_timer(job_type=None):
     """Use for timing asynchronous jobs
-    with singer.metrics.job_timer(job_type="users") as timer:
+    with core.metrics.job_timer(job_type="users") as timer:
          # Make a request
     """
     tags = {}

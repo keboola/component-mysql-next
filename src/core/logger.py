@@ -2,13 +2,29 @@ import logging
 import logging.config
 import os
 
+import logging_gelf.handlers
+import logging_gelf.formatters
+
 
 def get_logger():
-    """Return a Logger instance appropriate for using in a Tap or a Target."""
+    """Return logger - Gelf if specified in environment, otherwise standard logging."""
+    if 'KBC_LOGGER_ADDR' in os.environ and 'KBC_LOGGER_PORT' in os.environ:
+        logger = logging.getLogger()
+        logging_gelf_handler = logging_gelf.handlers.GELFTCPSocketHandler(
+            host=os.getenv('KBC_LOGGER_ADDR'), port=int(os.getenv('KBC_LOGGER_PORT')))
+        logging_gelf_handler.setFormatter(
+            logging_gelf.formatters.GELFFormatter(null_character=True))
+        logger.addHandler(logging_gelf_handler)
+
+        # remove default logging to stdout
+        logger.removeHandler(logger.handlers[0])
+
+        return logger
+
     this_dir, _ = os.path.split(__file__)
     path = os.path.join(this_dir, 'logging.conf')
-
     logging.config.fileConfig(path, disable_existing_loggers=False)
+
     return logging.getLogger()
 
 

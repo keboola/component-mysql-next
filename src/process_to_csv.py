@@ -18,7 +18,7 @@ except ImportError:
     import src.core as core
 
 LOGGER = core.get_logger()
-MAX_CSV_FILE_SIZE_BYTES = 100000000
+MAX_CSV_FILE_SIZE_BYTES = 1000000000
 
 
 def emit_state(state):

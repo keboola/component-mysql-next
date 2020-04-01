@@ -125,7 +125,7 @@ def json_bytes_to_string(data):
     return data
 
 
-def row_to_singer_record(catalog_entry, version, db_column_map, row, time_extracted):
+def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracted):
     row_to_persist = {}
 
     for column_name, val in row.items():
@@ -153,11 +153,8 @@ def row_to_singer_record(catalog_entry, version, db_column_map, row, time_extrac
         else:
             row_to_persist[column_name] = val
 
-    return core.RecordMessage(
-        stream=catalog_entry.stream,
-        record=row_to_persist,
-        version=version,
-        time_extracted=time_extracted)
+    return core.RecordMessage(stream=catalog_entry.stream, record=row_to_persist, version=version,
+                              time_extracted=time_extracted)
 
 
 def get_min_log_pos_per_log_file(binlog_streams_map, state):
@@ -236,8 +233,8 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         vals[common.KBC_SYNCED] = event_ts
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_singer_record(catalog_entry, stream_version, db_column_types, filtered_vals,
-                                              time_extracted)
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+                                            time_extracted)
 
         core.write_message(record_message)
         rows_saved = rows_saved + 1
@@ -257,11 +254,8 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
         vals[common.KBC_SYNCED] = event_ts
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_singer_record(catalog_entry,
-                                              stream_version,
-                                              db_column_types,
-                                              filtered_vals,
-                                              time_extracted)
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+                                            time_extracted)
 
         core.write_message(record_message)
 
@@ -283,8 +277,8 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
 
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_singer_record(catalog_entry, stream_version, db_column_types, filtered_vals,
-                                              time_extracted)
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+                                            time_extracted)
 
         core.write_message(record_message)
 

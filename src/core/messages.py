@@ -39,7 +39,7 @@ class RecordMessage(Message):
       * version (optional, int) - For versioned streams, the version
         number. Note that this feature is experimental and most Taps and
         Targets should not need to use versioned streams.
-    msg = singer.RecordMessage(
+    msg = core.RecordMessage(
         stream='users',
         record={'id': 1, 'name': 'Mary'})
     """
@@ -76,7 +76,7 @@ class SchemaMessage(Message):
       * stream (string) - The name of the stream this schema describes.
       * schema (dict) - The JSON schema.
       * key_properties (list of strings) - List of primary key properties.
-    msg = singer.SchemaMessage(
+    msg = core.SchemaMessage(
         stream='users',
         schema={'type': 'object',
                 'properties': {
@@ -114,7 +114,7 @@ class StateMessage(Message):
     """STATE message.
     The STATE message has one field:
       * value (dict) - The value of the state.
-    msg = singer.StateMessage(
+    msg = core.StateMessage(
         value={'users': '2017-06-19T00:00:00'})
     """
     def __init__(self, value):
@@ -138,7 +138,7 @@ class ActivateVersionMessage(Message):
     Note that this feature is experimental. Most Taps and Targets should
     not need to use the "version" field of "RECORD" messages or the
     "ACTIVATE_VERSION" message at all.
-    msg = singer.ActivateVersionMessage(
+    msg = core.ActivateVersionMessage(
         stream='users',
         version=2)
     """
