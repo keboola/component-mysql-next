@@ -8,11 +8,6 @@ import logging
 import backoff
 import pymysql
 
-try:
-    from core.logger import get_logger
-except ImportError:
-    from src.core.logger import get_logger
-
 LOGGER = logging.getLogger(__name__)
 
 MAX_CONNECT_RETRIES = 5

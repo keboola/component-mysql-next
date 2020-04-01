@@ -267,10 +267,8 @@ def main():
     for file in os.listdir(destination_path):
         file_name, ext = os.path.splitext(file)
         if ext == '.manifest':
-            if file_name in output_file_names:
-                print(file_name)
-            else:
-                print('Missing {}, removing its manifest {}'.format(file_name, file))
+            if file_name not in output_file_names:
+                LOGGER.info('Missing {}, removing its manifest {}'.format(file_name, file))
                 os.remove(os.path.join(destination_path, file))
 
     # Split large CSV files.
@@ -278,18 +276,22 @@ def main():
         if os.path.splitext(file)[1] != '.csv':
             continue
 
-        LOGGER.info('File: {}; destination path: {}'.format(file, destination_path))
+        # LOGGER.info('File: {}; destination path: {}'.format(file, destination_path))
+
         file_name_ext = os.path.basename(file)
         file_name = os.path.splitext(file_name_ext)[0]
         file_byte_size = os.stat(os.path.expanduser(os.path.join(destination_path, file))).st_size
+
         # LOGGER.info('byte size: {}'.format(file_byte_size))
         if file_byte_size > MAX_CSV_FILE_SIZE_BYTES:
             LOGGER.info('File {} exceeds max bytes size {}, splitting CSV outputs'.format(file_name,
                                                                                           MAX_CSV_FILE_SIZE_BYTES))
             new_table_destination = os.path.expanduser(os.path.join(destination_path, file_name, file))
             prior_table_destination = os.path.expanduser(os.path.join(destination_path, file))
+
             # LOGGER.info('Prior destination of file is {}'.format(prior_table_destination))
             # LOGGER.info('Splitting file, table destination is: {}'.format(new_table_destination))
+
             if not os.path.exists(os.path.dirname(new_table_destination)):
                 os.makedirs(os.path.dirname(new_table_destination))
             with open(prior_table_destination, 'r') as output_data_file:
@@ -304,6 +306,7 @@ def main():
             LOGGER.info('Manifest file: {}'.format(manifest_file))
             # if os.path.isfile(manifest_file):
             #     LOGGER.info('Manifest file does exist')
+
             with open(manifest_file, 'r') as manifest:
                 metadata = json.load(manifest)
                 metadata['columns'] = list(headers[file_name])

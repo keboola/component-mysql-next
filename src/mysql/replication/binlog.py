@@ -6,7 +6,6 @@ import datetime
 import json
 import logging
 import pytz
-import socket
 
 import pymysql.connections
 import pymysql.err

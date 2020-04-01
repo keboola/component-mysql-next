@@ -67,6 +67,7 @@ except ImportError as e:
 
     from src.mysql.client import connect_with_backoff, MySQLConnection
 
+LOGGER = core.get_logger()
 signal(SIGPIPE, SIG_DFL)
 
 current_path = os.path.dirname(__file__)
@@ -520,6 +521,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
     for stream in selected_streams:
         stream_metadata = metadata.to_map(stream.metadata)
         replication_method = stream_metadata.get((), {}).get('replication-method')
+
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
 
         if not stream_state:
@@ -940,7 +942,7 @@ class Component(KBCEnvHandler):
                 if self.cfg_params[KEY_INCREMENTAL_SYNC]:
                     prior_state = self.get_state_file() or {}
                 else:
-                    prior_state = None
+                    prior_state = {}
 
                 if prior_state:
                     LOGGER.info('Using prior state file to execute sync')
@@ -966,7 +968,6 @@ class Component(KBCEnvHandler):
 
 if __name__ == "__main__":
     try:
-        LOGGER = core.get_logger()
         if os.path.dirname(current_path) == '/code':
             # Running in docker, assumes volume ./code
             comp = Component()
