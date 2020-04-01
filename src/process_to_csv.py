@@ -261,6 +261,17 @@ def main():
     state, headers = persist_messages(config.get('delimiter', ','), config.get('quotechar', '"'),
                                       input_messages, destination_path)
 
+    # Check if manifest file there without corresponding table... if so delete manifest file
+    output_file_names = [file for file in os.listdir(destination_path)]
+    for file in os.listdir(destination_path):
+        file_name, ext = os.path.splitext(file)
+        if ext == '.manifest':
+            if file_name in output_file_names:
+                print(file_name)
+            else:
+                print('Missing {}, removing its manifest {}'.format(file_name, file))
+                os.remove(os.path.join(destination_path, file))
+
     # Split large CSV files.
     for file in os.listdir(destination_path):
         if os.path.splitext(file)[1] != '.csv':

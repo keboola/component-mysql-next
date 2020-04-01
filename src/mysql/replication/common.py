@@ -226,8 +226,8 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
         while row:
             counter.increment()
             rows_saved += 1
+
             record_message = row_to_data_record(catalog_entry, stream_version, row, columns, time_extracted)
-            # core.write_message_csv(record_message)
             core.write_message(record_message)
 
             md_map = metadata.to_map(catalog_entry.metadata)
@@ -251,8 +251,12 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
 
                     state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key_value',
                                                 record_message.record[replication_key])
+
             if rows_saved % 1000 == 0:
                 core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+                if rows_saved % 1000000 == 0:
+                    LOGGER.info('Ingested row count has hit {} for table {}'.format(rows_saved,
+                                                                                    catalog_entry.tap_stream_id))
 
             row = cursor.fetchone()
 

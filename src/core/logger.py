@@ -8,7 +8,6 @@ import logging_gelf.formatters
 
 def get_logger():
     """Return logger - Gelf if specified in environment, otherwise standard logging."""
-    logging.info('Environment variables: {}'.format(os.environ))
     if 'KBC_LOGGER_ADDR' in os.environ and 'KBC_LOGGER_PORT' in os.environ:
         logging.info('Using the Gelf logger to log extraction outputs')
         logging.basicConfig(level=logging.INFO)
