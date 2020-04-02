@@ -992,9 +992,10 @@ class Component(KBCEnvHandler):
                             self.create_manifests(entry, self.tables_out_path,
                                                   incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
                         else:
-                            LOGGER.info('No manifest file found for table marked as selected, so no data was synced '
-                                        'from the database. This may be expected behavior if the table is empty, '
-                                        'or if no new rows were added (if running incrementally')
+                            LOGGER.info('No manifest file found for selected table {}, because no data was synced '
+                                        'from the database for this table. This may be expected behavior if the table '
+                                        'is empty or if no new rows were added (if running incrementally'.format(
+                                            entry_table_name))
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')

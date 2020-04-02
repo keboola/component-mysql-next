@@ -288,7 +288,6 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
 
     query_string = cursor.mogrify(select_sql, params)
-    time_extracted = utils.now()
 
     LOGGER.info('Running %s', query_string)
     # Chunk Changes Here
