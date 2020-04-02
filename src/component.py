@@ -996,6 +996,15 @@ class Component(KBCEnvHandler):
                                         'from the database for this table. This may be expected behavior if the table '
                                         'is empty or if no new rows were added (if running incrementally'.format(
                                             entry_table_name))
+
+                # QA: Walk through output destination
+                directories = []
+                files = []
+                for (_, dirs, file_names) in os.walk(self.tables_out_path):
+                    directories.extend(dirs)
+                    files.extend(file_names)
+                LOGGER.info('All directories sent to output: {}'.format(directories))
+                LOGGER.info('All files sent to output: {}'.format(files))
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')
