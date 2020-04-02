@@ -813,8 +813,8 @@ class Component(KBCEnvHandler):
                                 mapped_row['Ssl_version'],
                                 mapped_row['Ssl_cipher'])
 
-            except pymysql.err.InternalError as e:
-                LOGGER.warning("Encountered error checking server params. Error: (%s) %s", *e.args)
+            except pymysql.err.InternalError as ie:
+                LOGGER.warning("Encountered error checking server params. Error: (%s) %s", *ie.args)
     # End of sync methods
 
     def write_table_mappings_file(self, table_mapping: Catalog, file_name: str = 'table_mappings.json'):
@@ -883,6 +883,7 @@ class Component(KBCEnvHandler):
             manifest['incremental'] = True
 
         with open(file_name + '.manifest', 'w') as manifest_file:
+            LOGGER.debug('Writing manifest {} with manifest details {}'.format(file_name + '.manifest', str(manifest)))
             json.dump(manifest, manifest_file)
 
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
@@ -891,8 +892,6 @@ class Component(KBCEnvHandler):
         """Execute main component extraction process."""
         file_input_path = self._check_file_inputs()
         table_mappings = {}
-
-        # all_params = {**self.params, **self.mysql_config_params}
 
         # ssh_params = {
         #     "ssh_address_or_host": self.cfg_params[KEY_SSH_HOST],
@@ -973,6 +972,7 @@ class Component(KBCEnvHandler):
                         tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
                         for item, value in tables_and_columns.items():
                             tables_and_columns[item] = [column.strip() for column in ast.literal_eval(value)]
+                        LOGGER.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
 
                 for entry in catalog.to_dict()['streams']:
                     entry_table_name = entry.get('table_name')

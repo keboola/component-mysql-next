@@ -303,9 +303,11 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
             # Write to CSV of specific structure: table, headers (no header is written to this CSV)
             tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
             with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
-                LOGGER.info('Attempting write/append of data to {}'.format(tables_headers_path + 'table_headers.csv'))
                 writer = csv.writer(headers_csv, delimiter='\t')
                 writer.writerow([catalog_entry.table, headers])
+                LOGGER.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
+                    catalog_entry.table, headers
+                ))
 
         destination_output_path = os.path.join(tables_destination, catalog_entry.table, '')
 

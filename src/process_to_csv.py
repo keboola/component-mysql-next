@@ -168,12 +168,13 @@ def main():
     state, headers = persist_messages(config.get('delimiter', ','), config.get('quotechar', '"'),
                                       input_messages, destination_path)
 
-    # Check if manifest file there without corresponding table... if so delete manifest file
-    output_file_names = [file for file in os.listdir(destination_path)]
+    # Check if manifest file there without corresponding table (file or folder for split)... if so delete manifest file
+    output_object_names = [sys_object for sys_object in os.listdir(destination_path)]
     for file in os.listdir(destination_path):
         file_name, ext = os.path.splitext(file)
         if ext == '.manifest':
-            if file_name not in output_file_names:
+            table_name = file_name.split('.')[0]
+            if file_name not in output_object_names and table_name not in output_object_names:
                 LOGGER.info('Missing {}, removing its manifest {}'.format(file_name, file))
                 os.remove(os.path.join(destination_path, file))
 

@@ -14,11 +14,6 @@ import pytz
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from keboola import docker
-from typing import List
-
-from kbc.result import KBCResult
-
-from .logger import get_logger
 
 LOGGER = logging.getLogger(__name__)
 
@@ -27,8 +22,7 @@ DEFAULT_ENCLOSURE = '"'
 
 
 class KBCEnvHandler:
-    """
-    Class handling standard tasks for KBC component manipulation i.e. config load, validation
+    """Class handling standard tasks for KBC component manipulation i.e. config load, validation
 
     It contains some useful methods helping with boilerplate tasks.
     """
@@ -58,8 +52,6 @@ class KBCEnvHandler:
         self.tables_in_path = os.path.join(data_path, 'in', 'tables')
 
         self._mandatory_params = mandatory_params
-
-    # ==============================================================================
 
     def validate_config(self, mandatory_params=[]):
         """
@@ -211,14 +203,16 @@ class KBCEnvHandler:
         else:
             return []
 
-    def _get_par_missing_fields(self, mand_params, parameters):
+    @staticmethod
+    def _get_par_missing_fields(mand_params, parameters):
         missing_fields = []
         for field in mand_params:
             if not parameters.get(field):
                 missing_fields.append(field)
         return missing_fields
 
-    def get_storage_token(self):
+    @staticmethod
+    def get_storage_token():
         try:
             return os.environ["KBC_TOKEN"]
         except Exception:
@@ -297,46 +291,6 @@ class KBCEnvHandler:
         with open(os.path.join(self.configuration.data_dir, 'out', 'state.json'), 'w+') as state_file:
             json.dump(state_dict, state_file)
 
-    def create_sliced_tables(self, folder_name, pkey=None, incremental=False,
-                             src_delimiter=DEFAULT_DEL, src_enclosure=DEFAULT_ENCLOSURE, dest_bucket=None):
-        """
-        Creates prepares sliced tables from all files in DATA_PATH/out/tables/{folder_name} - i.e. removes all headers
-        and creates single manifest file based on provided parameters.
-
-        Args:
-            folder_name: folder name present in DATA_PATH directory that contains files for slices,
-        the same name will be used as table name
-            pkey: array of pkeys
-            incremental: boolean
-            src_delimiter: delimiter of the source file [,]
-            src_enclosure: enclosure of the source file ["]
-            dest_bucket: name of the destination bucket, eg. in.c-input (optional)
-
-
-        """
-        LOGGER.info('Creating sliced tables for [{}]..'.format(folder_name))
-
-        folder_path = os.path.join(self.tables_out_path, folder_name)
-
-        if not os.path.isdir(folder_path):
-            raise ValueError("Specified folder ({}) does not exist in the data folder ({})".format(
-                folder_name, self.data_path))
-
-        # get files
-        files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if os.path.isfile(
-            os.path.join(folder_path, f))]
-
-        header = self.get_and_remove_headers_in_all(
-            files, src_delimiter, src_enclosure)
-        if dest_bucket:
-            destination = dest_bucket + '.' + folder_name
-        else:
-            destination = folder_name
-
-        LOGGER.info('Creating manifest file...')
-        self.configuration.write_table_manifest(
-            file_name=folder_path, destination=destination, primary_key=pkey, incremental=incremental, columns=header)
-
     def get_and_remove_headers_in_all(self, files, delimiter, enclosure):
         """
         Removes header from all specified files and return it as a list of strings
@@ -358,7 +312,8 @@ class KBCEnvHandler:
                     first_file, header, file, curr_header))
         return header
 
-    def _get_and_remove_headers(self, file, delimiter, enclosure):
+    @staticmethod
+    def _get_and_remove_headers(file, delimiter, enclosure):
         """
         Removes header from specified file and return it as a list of strings.
         Creates new updated file 'upd_'+origFileName and deletes the original
@@ -377,56 +332,9 @@ class KBCEnvHandler:
         os.remove(file)
         return header
 
-    def process_results(self, res_files, def_bucket_name, output_bucket):
-        for res in res_files:
-            dest_bucket = def_bucket_name + str(self.kbc_config_id)
-            if output_bucket:
-                suffix = '-' + output_bucket
-            else:
-                suffix = ''
-
-            # build manifest
-            self.configuration.write_table_manifest(
-                file_name=res['full_path'],
-                destination=dest_bucket + suffix + '.' + res['name'],
-                primary_key=res['pkey'],
-                incremental=True)
-
-    def process_results_sliced(self, res_files):
-        res_sliced_folders = {}
-        for file in res_files:
-            res_sliced_folders.update({file['name']: file['pkey']})
-
-        for folder in res_sliced_folders:
-            self.create_sliced_tables(folder, res_sliced_folders[folder], True)
-
-    def create_manifests(self, results: List[KBCResult], headless=False, incremental=True):
-        """
-        Write manifest files for the results produced by kbc.results.ResultWriter
-        :param results: List of result objects
-        :param headless: Flag whether results contain sliced headless tables and hence
-        the `.column` attribute should be
-        used in manifest file.
-        :param incremental:
-        :return:
-        """
-        for r in results:
-            if not headless:
-                self.configuration.write_table_manifest(r.full_path, r.table_def.destination,
-                                                        r.table_def.pk,
-                                                        None, incremental, r.table_def.metadata,
-                                                        r.table_def.column_metadata)
-            else:
-                self.configuration.write_table_manifest(r.full_path, r.table_def.destination,
-                                                        r.table_def.pk,
-                                                        r.table_def.columns, incremental,
-                                                        r.table_def.metadata,
-                                                        r.table_def.column_metadata)
-
-    # ==============================================================================
-    # == UTIL functions
-
-    def get_date_period_converted(self, period_from, period_to):
+    # UTIL functions
+    @staticmethod
+    def get_date_period_converted(period_from, period_to):
         """
         Returns given period parameters in datetime format, or next step in back-fill mode
         along with generated last state for next iteration.
@@ -445,7 +353,8 @@ class KBCEnvHandler:
 
         return start_date_form, end_date_form
 
-    def get_backfill_period(self, period_from, period_to, last_state):
+    @staticmethod
+    def get_backfill_period(period_from, period_to, last_state):
         """
         Get backfill period, either specified period in datetime type or period based on a previous run (last_state)
         Continues iterating date periods based on the initial period size defined by from and to parameters.
@@ -492,7 +401,8 @@ class KBCEnvHandler:
             end_date = dateparser.parse(period_to)
         return start_date, end_date
 
-    def get_past_date(self, str_days_ago: str, to_date: datetime = None,
+    @staticmethod
+    def get_past_date(str_days_ago: str, to_date: datetime = None,
                       tz: pytz.tzinfo.BaseTzInfo = pytz.utc) -> object:
         """
         Returns date in specified timezone relative to today.
@@ -511,12 +421,12 @@ class KBCEnvHandler:
         :return:
         """
         if to_date:
-            TODAY = to_date
+            today = to_date
         else:
-            TODAY = datetime.datetime.now(tz)
+            today = datetime.now(tz)
 
         try:
-            today_diff = (datetime.datetime.now(tz) - TODAY).days
+            today_diff = (datetime.now(tz) - today).days
             past_date = dateparser.parse(str_days_ago)
             past_date.replace(tzinfo=tz)
             date = past_date - relativedelta(days=today_diff)
@@ -544,7 +454,8 @@ class KBCEnvHandler:
         """
         return list(self._split_dates_to_chunks_gen(start_date, end_date, intv, strformat))
 
-    def _split_dates_to_chunks_gen(self, start_date, end_date, intv, strformat="%m%d%Y"):
+    @staticmethod
+    def _split_dates_to_chunks_gen(start_date, end_date, intv, strformat="%m%d%Y"):
         """
         Splits dates in given period into chunks of specified max size.
 
