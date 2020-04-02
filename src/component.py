@@ -980,12 +980,18 @@ class Component(KBCEnvHandler):
                     if entry['metadata'][0]['metadata'].get('selected'):
                         # Confirm corresponding table or folder exists
                         table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name + '.csv')
-                        if core.find_files(table_specific_sliced_path, '*.csv'):
-                            LOGGER.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
-                                entry_table_name, self.tables_out_path))
-                            self.create_manifests(entry, self.tables_out_path,
-                                                  columns=list(tables_and_columns.get(entry_table_name)),
-                                                  incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                        if os.path.isdir(table_specific_sliced_path):
+                            output_is_sliced = True
+                        else:
+                            output_is_sliced = False
+
+                        if output_is_sliced:
+                            if core.find_files(table_specific_sliced_path, '*.csv'):
+                                LOGGER.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
+                                    entry_table_name, self.tables_out_path))
+                                self.create_manifests(entry, self.tables_out_path,
+                                                      columns=list(tables_and_columns.get(entry_table_name)),
+                                                      incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
                         elif core.find_files(self.tables_out_path, '*.csv'):
                             LOGGER.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
                                 entry_table_name, self.tables_out_path))
