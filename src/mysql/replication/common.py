@@ -332,7 +332,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
         #     last_pk_fetched = {k: v for k, v in last_row_fetched
         #                        if k in key_properties}
 
-            # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
+        # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
 
     # TODO: Handle for key-based incremental here
     # elif replication_method == 'INCREMENTAL':
