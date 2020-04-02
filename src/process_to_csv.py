@@ -65,34 +65,35 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
             raise
         message_type = o['type']
         if message_type == 'RECORD':
-            if o['stream'] not in schemas:
-                raise Exception("A record for stream {}"
-                                "was encountered before a corresponding schema".format(o['stream']))
-
-            validators[o['stream']].validate(o['record'])
-
-            filename = o['stream'] + '.csv'
-            filename = os.path.expanduser(os.path.join(destination_path, filename))
-            file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
-
-            flattened_record = flatten(o['record'])
-            if o['stream'] not in headers and not file_is_empty:
-                with open(filename, 'r') as csv_file:
-                    reader = csv.reader(csv_file, delimiter=delimiter, quotechar=quotechar)
-                    first_line = next(reader)
-                    headers[o['stream']] = first_line if first_line else flattened_record.keys()
-            else:
-                headers[o['stream']] = flattened_record.keys()
-
-            with open(filename, 'a') as csv_file:
-                writer = csv.DictWriter(csv_file, headers[o['stream']], extrasaction='ignore', delimiter=delimiter,
-                                        quotechar=quotechar)
-                if file_is_empty:
-                    writer.writeheader()
-
-                writer.writerow(flattened_record)
-
-            state = None
+            LOGGER.info('Came across a RECORD message, here it is {}'.format(message))
+            # if o['stream'] not in schemas:
+            #     raise Exception("A record for stream {}"
+            #                     "was encountered before a corresponding schema".format(o['stream']))
+            #
+            # validators[o['stream']].validate(o['record'])
+            #
+            # filename = o['stream'] + '.csv'
+            # filename = os.path.expanduser(os.path.join(destination_path, filename))
+            # file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
+            #
+            # flattened_record = flatten(o['record'])
+            # if o['stream'] not in headers and not file_is_empty:
+            #     with open(filename, 'r') as csv_file:
+            #         reader = csv.reader(csv_file, delimiter=delimiter, quotechar=quotechar)
+            #         first_line = next(reader)
+            #         headers[o['stream']] = first_line if first_line else flattened_record.keys()
+            # else:
+            #     headers[o['stream']] = flattened_record.keys()
+            #
+            # with open(filename, 'a') as csv_file:
+            #     writer = csv.DictWriter(csv_file, headers[o['stream']], extrasaction='ignore', delimiter=delimiter,
+            #                             quotechar=quotechar)
+            #     if file_is_empty:
+            #         writer.writeheader()
+            #
+            #     writer.writerow(flattened_record)
+            #
+            # state = None
         elif message_type == 'STATE':
             # LOGGER.info('Setting state to {}'.format(o['value']))
             state = o['value']
@@ -263,13 +264,13 @@ def main():
                                       input_messages, destination_path)
 
     # Check if manifest file there without corresponding table... if so delete manifest file
-    output_file_names = [file for file in os.listdir(destination_path)]
-    for file in os.listdir(destination_path):
-        file_name, ext = os.path.splitext(file)
-        if ext == '.manifest':
-            if file_name not in output_file_names:
-                LOGGER.info('Missing {}, removing its manifest {}'.format(file_name, file))
-                os.remove(os.path.join(destination_path, file))
+    # output_file_names = [file for file in os.listdir(destination_path)]
+    # for file in os.listdir(destination_path):
+    #     file_name, ext = os.path.splitext(file)
+    #     if ext == '.manifest':
+    #         if file_name not in output_file_names:
+    #             LOGGER.info('Missing {}, removing its manifest {}'.format(file_name, file))
+    #             os.remove(os.path.join(destination_path, file))
 
     # Split large CSV files.
     for file in os.listdir(destination_path):
@@ -292,6 +293,7 @@ def main():
             # LOGGER.info('Prior destination of file is {}'.format(prior_table_destination))
             # LOGGER.info('Splitting file, table destination is: {}'.format(new_table_destination))
 
+            # Create slicing and remove prior table destinations if slicing
             if not os.path.exists(os.path.dirname(new_table_destination)):
                 os.makedirs(os.path.dirname(new_table_destination))
             with open(prior_table_destination, 'r') as output_data_file:
@@ -313,7 +315,7 @@ def main():
             with open(manifest_file, 'w') as manifest:
                 manifest.write(json.dumps(metadata))
             # else:
-            #     LOGGER.warning('Manifest file specified to write to did not exist when attempting columns write')
+            #         LOGGER.warning('Manifest file specified to write to did not exist when attempting columns write')
         else:
             LOGGER.info('File {} does not exceed max bytes size {}, keeping as is'.format(file_name,
                                                                                           MAX_CSV_FILE_SIZE_BYTES))

@@ -1,8 +1,11 @@
+
 import argparse
 import collections
 import datetime
+import fnmatch
 import functools
 import json
+import os
 import sys
 import time
 from warnings import warn
@@ -274,6 +277,12 @@ def handle_top_exception(logger):
                 raise
         return wrapped
     return decorator
+
+
+def find_files(base, pattern):
+    """Return list of files matching pattern in base folder."""
+    return [n for n in fnmatch.filter(os.listdir(base), pattern) if
+            os.path.isfile(os.path.join(base, n))]
 
 
 def should_sync_field(inclusion, selected, default=False):

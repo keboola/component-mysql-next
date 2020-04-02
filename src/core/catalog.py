@@ -24,15 +24,15 @@ def write_catalog(catalog):
 # pylint: disable=too-many-instance-attributes
 class CatalogEntry:
     """Table mapping catalog."""
-    def __init__(self, tap_stream_id=None, stream=None, primary_keys: list = None,
-                 key_properties=None, schema=None, replication_key=None,
-                 is_view=None, database=None, table=None, row_count=None,
-                 stream_alias=None, metadata=None, replication_method=None):
+    def __init__(self, tap_stream_id=None, stream=None, primary_keys: list = None, key_properties=None,
+                 schema=None, replication_key=None, is_view=None, database=None, table=None, row_count=None,
+                 stream_alias=None, metadata=None, replication_method=None, ordered_output_columns: list = None):
 
         self.tap_stream_id = tap_stream_id
         self.stream = stream
         self.key_properties = key_properties
         self.schema = schema
+        self.ordered_output_columns = ordered_output_columns
         self.replication_key = replication_key
         self.replication_method = replication_method
         self.is_view = is_view
@@ -84,6 +84,8 @@ class CatalogEntry:
             result['stream_alias'] = self.stream_alias
         if self.metadata is not None:
             result['metadata'] = self.metadata
+        if self.ordered_output_columns is not None:
+            result['schema_ordered_list'] = self.ordered_output_columns
         return result
 
 

@@ -222,7 +222,10 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
             select_sql = common.generate_select_sql(catalog_entry, columns)
 
             if perform_resumable_sync:
-                LOGGER.info("Full table sync is resumable based on primary key definition, replicating incrementally")
+                LOGGER.info("Full table sync is "
+                            ""
+                            ""
+                            "resumable based on primary key definition, replicating incrementally")
 
                 state = update_incremental_full_table_state(catalog_entry, state, cur)
                 pk_clause = generate_pk_clause(catalog_entry, state)
@@ -231,6 +234,53 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
             params = {}
 
             common.sync_query(cur, catalog_entry, state, select_sql, columns, stream_version, params)
+
+    # clear max pk value and last pk fetched upon successful sync
+    core.clear_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
+    core.clear_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
+
+    core.write_message(activate_version_message)
+
+
+def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version, tables_destination: str = None):
+    common.whitelist_bookmark_keys(generate_bookmark_keys(catalog_entry), catalog_entry.tap_stream_id, state)
+
+    bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
+    version_exists = True if 'version' in bookmark else False
+
+    initial_full_table_complete = core.get_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete')
+
+    state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
+
+    activate_version_message = core.ActivateVersionMessage(
+        stream=catalog_entry.stream,
+        version=stream_version
+    )
+
+    # For the initial replication, emit an ACTIVATE_VERSION message
+    # at the beginning so the records show up right away.
+    if not initial_full_table_complete and not (version_exists and state_version is None):
+        core.write_message(activate_version_message)
+
+    perform_resumable_sync = sync_is_resumable(mysql_conn, catalog_entry)
+
+    pk_clause = ""
+
+    with connect_with_backoff(mysql_conn) as open_conn:
+        with open_conn.cursor() as cur:
+            select_sql = common.generate_select_sql(catalog_entry, columns)
+
+            if perform_resumable_sync:
+                LOGGER.info("Full table sync is resumable based on primary key definition, replicating incrementally")
+
+                state = update_incremental_full_table_state(catalog_entry, state, cur)
+                pk_clause = generate_pk_clause(catalog_entry, state)
+
+            select_sql += pk_clause
+            params = {}
+
+            common.sync_query_bulk(open_conn, cur, catalog_entry, state, select_sql, columns, stream_version, params,
+                                   tables_destination)
 
     # clear max pk value and last pk fetched upon successful sync
     core.clear_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')

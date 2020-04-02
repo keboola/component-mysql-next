@@ -2,11 +2,14 @@
 Common patterns for data replication.
 """
 import copy
+import csv
 import datetime
 import logging
+import os
 import time
-import pytz
 
+import pandas as pd
+import pytz
 import pymysql
 
 try:
@@ -21,6 +24,7 @@ except ImportError:
     from src.core import utils
 
 LOGGER = logging.getLogger(__name__)
+CURRENT_PATH = os.path.dirname(__file__)
 
 # NB: Upgrading pymysql from 0.7.11 --> 0.9.3 had the undocumented change
 # to how `0000-00-00 00:00:00` date/time types are returned. In 0.7.11,
@@ -30,6 +34,7 @@ LOGGER = logging.getLogger(__name__)
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
+CSV_CHUNK_SIZE = 10 ** 5
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_kbc_synced_at'
 KBC_DELETED = '_kbc_deleted_at'
@@ -264,3 +269,80 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
 
     core.write_message(core.StateMessage(value=copy.deepcopy(state)))
     return rows_saved
+
+
+def _add_kbc_metadata_to_df(table_df: pd.DataFrame, catalog_entry):
+    """Add metadata for Keboola. Can presume not there since should only be called for full sync."""
+    kbc_metadata_cols = (KBC_SYNCED, KBC_DELETED)
+    kbc_metadata = (SYNC_STARTED_AT, None)
+
+    catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
+
+    for column, value in zip(kbc_metadata_cols, kbc_metadata):
+        table_df[column] = value
+
+
+def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, stream_version, params,
+                    tables_destination: str = None):
+    replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
+
+    query_string = cursor.mogrify(select_sql, params)
+    time_extracted = utils.now()
+
+    LOGGER.info('Running %s', query_string)
+    # Chunk Changes Here
+    current_chunk = 0
+    for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE):
+        current_chunk += 1
+        _add_kbc_metadata_to_df(chunk, catalog_entry)
+        if current_chunk == 1:
+            table_and_headers = {}
+            headers = list(chunk.columns.values)
+            table_and_headers[catalog_entry.table] = headers
+
+            # Write to CSV of specific structure: table, headers (no header is written to this CSV)
+            tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
+            with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
+                LOGGER.info('Attempting write/append of data to {}'.format(tables_headers_path + 'table_headers.csv'))
+                writer = csv.writer(headers_csv, delimiter='\t')
+                writer.writerow([catalog_entry.table, headers])
+
+        destination_output_path = os.path.join(tables_destination, catalog_entry.table, '')
+
+        if not os.path.exists(destination_output_path):
+            os.mkdir(destination_output_path)
+
+        csv_path = os.path.join(destination_output_path, catalog_entry.table + '-' + str(current_chunk) + '.csv')
+        chunk.to_csv(csv_path, index=False, mode='a', header=False)
+
+    # TODO: Determine if we need last PK fetched and these states, or if we can remove altogether
+    # md_map = metadata.to_map(catalog_entry.metadata)
+    # stream_metadata = md_map.get((), {})
+    # replication_method = stream_metadata.get('replication-method')
+
+    # if replication_method in {'FULL_TABLE', 'LOG_BASED'}:
+    #     key_properties = get_key_properties(catalog_entry)
+
+        # max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
+
+        # if max_pk_values:
+        #     # Get last row for max of PK fetched
+        #     last_file_df = pd.read_csv(os.path.join(tables_destination, catalog_entry.table, str(current_chunk)))
+        #     last_row_fetched = last_file_df.tail(1).values.to
+        #     last_pk_fetched = {k: v for k, v in last_row_fetched
+        #                        if k in key_properties}
+
+            # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
+
+    # TODO: Handle for key-based incremental here
+    # elif replication_method == 'INCREMENTAL':
+    #     if replication_key is not None:
+    #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key', replication_key)
+    #
+    #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key_value',
+    #                                     record_message.record[replication_key])
+
+    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+
+    # End Chunk Changes

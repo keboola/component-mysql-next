@@ -7,7 +7,8 @@ from .utils import (
     strftime,
     strptime,
     update_state,
-    should_sync_field
+    should_sync_field,
+    find_files
 )
 
 from .logger import (

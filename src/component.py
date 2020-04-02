@@ -12,6 +12,7 @@ TODO: Table Mappings - Handle prior user inputs
 TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
 """
+import ast
 import base64
 import binascii
 import copy
@@ -593,182 +594,6 @@ def write_schema_message(catalog_entry, bookmark_properties=[]):
     ))
 
 
-def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None):
-    LOGGER.info("Stream %s is using incremental replication", catalog_entry.stream)
-
-    md_map = metadata.to_map(catalog_entry.metadata)
-    replication_key = md_map.get((), {}).get('replication-key')
-
-    if not replication_key:
-        raise Exception("Cannot use INCREMENTAL replication for table ({}) without a replication key.".format(
-            catalog_entry.stream))
-
-    write_schema_message(catalog_entry=catalog_entry,
-                         bookmark_properties=[replication_key])
-
-    if optional_limit:
-        LOGGER.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
-                    int(optional_limit))
-        incremental.sync_table(mysql_conn, catalog_entry, state, columns, int(optional_limit))
-    else:
-        incremental.sync_table(mysql_conn, catalog_entry, state, columns)
-
-    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
-
-
-def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns):
-    binlog.verify_binlog_config(mysql_conn)
-
-    is_view = common.get_is_view(catalog_entry)
-    key_properties = common.get_key_properties(catalog_entry)
-
-    if is_view:
-        raise Exception("Unable to replicate stream({}) with binlog because it is a view.".format(catalog_entry.stream))
-
-    log_file = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_file')
-
-    log_pos = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_pos')
-
-    max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
-
-    last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
-
-    write_schema_message(catalog_entry)
-
-    stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
-
-    if log_file and log_pos and max_pk_values:
-        LOGGER.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
-        full_table.sync_table(mysql_conn, catalog_entry, state, columns, stream_version)
-
-    else:
-        LOGGER.info("Performing initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
-
-        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
-
-        current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
-        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
-
-        if full_table.sync_is_resumable(mysql_conn, catalog_entry):
-            # We must save log_file and log_pos across FULL_TABLE syncs when performing
-            # a resumable full table sync
-            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
-            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
-
-            full_table.sync_table(mysql_conn, catalog_entry, state, columns, stream_version)
-        else:
-            full_table.sync_table(mysql_conn, catalog_entry, state, columns, stream_version)
-            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
-            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
-
-
-def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns):
-    LOGGER.info("Stream %s is using full table replication", catalog_entry.stream)
-    key_properties = common.get_key_properties(catalog_entry)
-
-    write_schema_message(catalog_entry)
-
-    stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
-
-    full_table.sync_table(mysql_conn, catalog_entry, state, columns, stream_version)
-
-    # Prefer initial_full_table_complete going forward
-    core.clear_bookmark(state, catalog_entry.tap_stream_id, 'version')
-
-    state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete', True)
-
-    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
-
-
-def sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state):
-    for catalog_entry in non_binlog_catalog.streams:
-        columns = list(catalog_entry.schema.properties.keys())
-
-        if not columns:
-            LOGGER.warning('There are no columns selected for stream %s, skipping it.', catalog_entry.stream)
-            continue
-
-        state = core.set_currently_syncing(state, catalog_entry.tap_stream_id)
-
-        # Emit a state message to indicate that we've started this stream
-        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
-
-        md_map = metadata.to_map(catalog_entry.metadata)
-
-        replication_method = md_map.get((), {}).get('replication-method')
-
-        database_name = common.get_database_name(catalog_entry)
-
-        with metrics.job_timer('sync_table') as timer:
-            timer.tags['database'] = database_name
-            timer.tags['table'] = catalog_entry.table
-
-            log_engine(mysql_conn, catalog_entry)
-
-            if replication_method == 'INCREMENTAL':
-                optional_limit = config.get('incremental_limit')
-                do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit)
-            elif replication_method == 'LOG_BASED':
-                do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns)
-            elif replication_method == 'FULL_TABLE':
-                do_sync_full_table(mysql_conn, config, catalog_entry, state, columns)
-            else:
-                raise Exception("only INCREMENTAL, LOG_BASED, and FULL TABLE replication methods are supported")
-
-    state = core.set_currently_syncing(state, None)
-    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
-
-
-def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state):
-    if binlog_catalog.streams:
-        for stream in binlog_catalog.streams:
-            write_schema_message(stream)
-
-        with metrics.job_timer('sync_binlog') as timer:
-            binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state)
-
-
-def do_sync(mysql_conn, config, mysql_config, catalog, state):
-    non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
-    binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
-
-    sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state)
-    sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state)
-
-
-def log_server_params(mysql_conn):
-    with connect_with_backoff(mysql_conn) as open_conn:
-        try:
-            with open_conn.cursor() as cur:
-                cur.execute('''
-                SELECT VERSION() as version,
-                       @@session.wait_timeout as wait_timeout,
-                       @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
-                       @@session.max_allowed_packet as max_allowed_packet,
-                       @@session.interactive_timeout as interactive_timeout''')
-                row = cur.fetchone()
-                LOGGER.info('Server Parameters: ' +
-                            'version: %s, ' +
-                            'wait_timeout: %s, ' +
-                            'innodb_lock_wait_timeout: %s, ' +
-                            'max_allowed_packet: %s, ' +
-                            'interactive_timeout: %s',
-                            *row)
-            with open_conn.cursor() as cur:
-                cur.execute('''
-                show session status where Variable_name IN ('Ssl_version', 'Ssl_cipher')''')
-                rows = cur.fetchall()
-                mapped_row = dict(rows)
-                LOGGER.info('Server SSL Parameters (blank means SSL is not active): ' +
-                            '[ssl_version: %s], ' +
-                            '[ssl_cipher: %s]',
-                            mapped_row['Ssl_version'],
-                            mapped_row['Ssl_cipher'])
-
-        except pymysql.err.InternalError as e:
-            LOGGER.warning("Encountered error checking server params. Error: (%s) %s", *e.args)
-
-
 class Component(KBCEnvHandler):
     """Keboola extractor component."""
     def __init__(self, data_path: str = None):
@@ -807,6 +632,191 @@ class Component(KBCEnvHandler):
         if has_file_inputs:
             return file_input
 
+    # Sync Methods
+    @staticmethod
+    def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None):
+        LOGGER.info("Stream %s is using incremental replication", catalog_entry.stream)
+
+        md_map = metadata.to_map(catalog_entry.metadata)
+        replication_key = md_map.get((), {}).get('replication-key')
+
+        if not replication_key:
+            raise Exception("Cannot use INCREMENTAL replication for table ({}) without a replication key.".format(
+                catalog_entry.stream))
+
+        write_schema_message(catalog_entry=catalog_entry,
+                             bookmark_properties=[replication_key])
+
+        if optional_limit:
+            LOGGER.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
+                        int(optional_limit))
+            incremental.sync_table(mysql_conn, catalog_entry, state, columns, int(optional_limit))
+        else:
+            incremental.sync_table(mysql_conn, catalog_entry, state, columns)
+
+        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+
+    @staticmethod
+    def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None):
+        binlog.verify_binlog_config(mysql_conn)
+
+        is_view = common.get_is_view(catalog_entry)
+        key_properties = common.get_key_properties(catalog_entry)
+
+        if is_view:
+            raise Exception(
+                "Unable to replicate stream({}) with binlog because it is a view.".format(catalog_entry.stream))
+
+        log_file = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_file')
+
+        log_pos = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_pos')
+
+        max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
+
+        last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
+
+        write_schema_message(catalog_entry)
+
+        stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
+
+        if log_file and log_pos and max_pk_values:
+            LOGGER.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
+            full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                         tables_destination=tables_destination)
+
+        else:
+            LOGGER.info("Performing initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
+
+            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
+
+            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
+            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
+
+            if full_table.sync_is_resumable(mysql_conn, catalog_entry):
+                # We must save log_file and log_pos across FULL_TABLE syncs when performing
+                # a resumable full table sync
+                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
+                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
+
+                full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                             tables_destination=tables_destination)
+            else:
+                full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                             tables_destination=tables_destination)
+                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
+                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
+
+    def do_sync_full_table(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None):
+        LOGGER.info("Stream %s is using full table replication", catalog_entry.stream)
+        key_properties = common.get_key_properties(catalog_entry)
+
+        write_schema_message(catalog_entry)
+
+        stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
+
+        full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                     tables_destination=tables_destination)
+
+        # Prefer initial_full_table_complete going forward
+        core.clear_bookmark(state, catalog_entry.tap_stream_id, 'version')
+
+        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete', True)
+
+        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+
+    def sync_non_binlog_streams(self, mysql_conn, non_binlog_catalog, config, state, tables_destination: str = None):
+        if tables_destination is None:
+            LOGGER.info('No table destination specified, so will not work on new CSV write implementation')
+
+        for catalog_entry in non_binlog_catalog.streams:
+            columns = list(catalog_entry.schema.properties.keys())
+
+            if not columns:
+                LOGGER.warning('There are no columns selected for stream %s, skipping it.', catalog_entry.stream)
+                continue
+
+            state = core.set_currently_syncing(state, catalog_entry.tap_stream_id)
+
+            # Emit a state message to indicate that we've started this stream
+            core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+
+            md_map = metadata.to_map(catalog_entry.metadata)
+
+            replication_method = md_map.get((), {}).get('replication-method')
+
+            database_name = common.get_database_name(catalog_entry)
+
+            with metrics.job_timer('sync_table') as timer:
+                timer.tags['database'] = database_name
+                timer.tags['table'] = catalog_entry.table
+
+                log_engine(mysql_conn, catalog_entry)
+
+                if replication_method == 'INCREMENTAL':
+                    optional_limit = config.get('incremental_limit')
+                    self.do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit)
+                elif replication_method == 'LOG_BASED':
+                    self.do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns,
+                                                   tables_destination=tables_destination)
+                elif replication_method == 'FULL_TABLE':
+                    self.do_sync_full_table(mysql_conn, config, catalog_entry, state, columns)
+                else:
+                    raise Exception("only INCREMENTAL, LOG_BASED, and FULL TABLE replication methods are supported")
+
+        state = core.set_currently_syncing(state, None)
+        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+
+    @staticmethod
+    def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state):
+        if binlog_catalog.streams:
+            for stream in binlog_catalog.streams:
+                write_schema_message(stream)
+
+            with metrics.job_timer('sync_binlog') as timer:
+                binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state)
+
+    def do_sync(self, mysql_conn, config, mysql_config, catalog, state):
+        non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
+        binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
+
+        self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
+                                     tables_destination=self.tables_out_path)
+        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state)
+
+    @staticmethod
+    def log_server_params(mysql_conn):
+        with connect_with_backoff(mysql_conn) as open_conn:
+            try:
+                with open_conn.cursor() as cur:
+                    cur.execute('''
+                    SELECT VERSION() as version,
+                           @@session.wait_timeout as wait_timeout,
+                           @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
+                           @@session.max_allowed_packet as max_allowed_packet,
+                           @@session.interactive_timeout as interactive_timeout''')
+                    row = cur.fetchone()
+                    LOGGER.info('Server Parameters: ' +
+                                'version: %s, ' +
+                                'wait_timeout: %s, ' +
+                                'innodb_lock_wait_timeout: %s, ' +
+                                'max_allowed_packet: %s, ' +
+                                'interactive_timeout: %s',
+                                *row)
+                with open_conn.cursor() as cur:
+                    cur.execute('''
+                    show session status where Variable_name IN ('Ssl_version', 'Ssl_cipher')''')
+                    rows = cur.fetchall()
+                    mapped_row = dict(rows)
+                    LOGGER.info('Server SSL Parameters (blank means SSL is not active): ' +
+                                '[ssl_version: %s], ' +
+                                '[ssl_cipher: %s]',
+                                mapped_row['Ssl_version'],
+                                mapped_row['Ssl_cipher'])
+
+            except pymysql.err.InternalError as e:
+                LOGGER.warning("Encountered error checking server params. Error: (%s) %s", *e.args)
+    # End of sync methods
+
     def write_table_mappings_file(self, table_mapping: Catalog, file_name: str = 'table_mappings.json'):
         """Write table mappings to output file destination."""
         write_destination = os.path.join(self.files_out_path, file_name)
@@ -819,12 +829,12 @@ class Component(KBCEnvHandler):
         with open(output_file, 'w') as mapping_file:
             mapping_file.write(json.dumps(result))
 
-    def create_manifests(self, entry: dict, data_path: str, headless=False, incremental=True):
+    def create_manifests(self, entry: dict, data_path: str, columns: list = None, incremental: bool = True):
         """Write manifest files for the results produced by the results writer.
 
         :param entry: Dict entry from catalog
         :param data_path: Path to the result output files
-        :param headless: Flag whether results contain sliced headless tables and hence
+        :param columns: List of strings representing columns for the output table, necessary for sliced tables.
         the `.column` attribute should be
         used in manifest file.
         :param incremental:
@@ -835,22 +845,22 @@ class Component(KBCEnvHandler):
         result_full_path = os.path.join(data_path, table_name + '.csv')
 
         # for r in results:
-        if not headless:
-            self.write_table_manifest(result_full_path, '', primary_keys, None, incremental)
+        if not columns:
+            self.write_table_manifest(result_full_path, primary_key=primary_keys, incremental=incremental)
         else:
-            LOGGER.error('Headless not yet implemented')
-            exit(1)
-            # write_table_manifest(result_full_path, table_name, primary_keys, r.table_def.columns, incremental)
+            self.write_table_manifest(result_full_path, primary_key=primary_keys, columns=columns,
+                                      incremental=incremental)
 
     @staticmethod
-    def write_table_manifest(file_name, destination: str = '', primary_key=None, columns=None, incremental=None):
+    def write_table_manifest(file_name: str, destination: str = '', primary_key: list = None, columns: list = None,
+                             incremental: bool = None):
         """Write manifest for output table Manifest is used for the table to be stored in KBC Storage.
 
         Args:
             file_name: Local file name of the CSV with table data.
             destination: String name of the table in Storage.
             primary_key: List with names of columns used for primary key.
-            columns: List of columns for headless CSV files
+            columns: List of columns as strings that are written to table, necessary to specify for sliced tables.
             incremental: Set to true to enable incremental loading
         """
         manifest = {}
@@ -874,6 +884,8 @@ class Component(KBCEnvHandler):
 
         with open(file_name + '.manifest', 'w') as manifest_file:
             json.dump(manifest, manifest_file)
+
+    # TODO: Separate SSH tunnel and other connectivity properties into separate method
 
     def run(self):
         """Execute main component extraction process."""
@@ -952,14 +964,37 @@ class Component(KBCEnvHandler):
                     LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
 
                 catalog = Catalog.from_dict(table_mappings)
-                for entry in catalog.to_dict()['streams']:
-                    if entry['metadata'][0]['metadata'].get('selected'):
-                        LOGGER.info('Writing manifest for entry {} to path "{}"; incremental is {}'.format(
-                            entry.get('table_name'), self.tables_out_path, self.cfg_params[KEY_INCREMENTAL_SYNC]))
-                        self.create_manifests(entry, self.tables_out_path,
-                                              incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state)
 
-                do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state)
+                # Write manifest files
+                tables_and_columns = dict()
+                if os.path.exists(os.path.join(current_path, 'table_headers.csv')):
+                    with open(os.path.join(current_path, 'table_headers.csv')) as headers_file:
+                        tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
+                        for item, value in tables_and_columns.items():
+                            tables_and_columns[item] = [column.strip() for column in ast.literal_eval(value)]
+
+                for entry in catalog.to_dict()['streams']:
+                    entry_table_name = entry.get('table_name')
+
+                    if entry['metadata'][0]['metadata'].get('selected'):
+                        # Confirm corresponding table or folder exists
+                        table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name)
+                        if core.find_files(table_specific_sliced_path, '*.csv'):
+                            LOGGER.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
+                                entry_table_name, self.tables_out_path))
+                            self.create_manifests(entry, self.tables_out_path,
+                                                  columns=list(tables_and_columns.get(entry_table_name)),
+                                                  incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                        elif core.find_files(self.tables_out_path, '*.csv'):
+                            LOGGER.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
+                                entry_table_name, self.tables_out_path))
+                            self.create_manifests(entry, self.tables_out_path,
+                                                  incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                        else:
+                            LOGGER.info('No manifest file found for table marked as selected, so no data was synced '
+                                        'from the database. This may be expected behavior if the table is empty, '
+                                        'or if no new rows were added (if running incrementally')
             else:
                 LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
                              'specify a table mappings file manually or via the File Input Mappings configuration.')
