@@ -5,8 +5,9 @@ import copy
 import datetime
 import json
 import logging
-import pytz
+import uuid
 
+import pytz
 import pymysql.connections
 import pymysql.err
 
@@ -384,12 +385,13 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
     # LOGGER.info('Defining wrapper details: {}; {}; {}; {}'.format(connection_wrapper.host, connection_wrapper.user,
     #                                                           connection_wrapper.password,
     #                                                           connection_wrapper.bind_address))
-
+    slave_uuid = 'kbc-slave-{}-{}'.format(str(uuid.uuid4()), server_id)
+    LOGGER.info('Connecting with Stream Reader to Slave UUID {}'.format(slave_uuid))
     try:
         reader = BinLogStreamReader(
             connection_settings={},
             server_id=server_id,
-            slave_uuid='kbc-slave-{}'.format(server_id),
+            slave_uuid=slave_uuid,
             log_file=log_file,
             log_pos=log_pos,
             resume_stream=True,

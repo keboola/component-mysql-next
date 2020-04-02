@@ -644,8 +644,7 @@ class Component(KBCEnvHandler):
             raise Exception("Cannot use INCREMENTAL replication for table ({}) without a replication key.".format(
                 catalog_entry.stream))
 
-        write_schema_message(catalog_entry=catalog_entry,
-                             bookmark_properties=[replication_key])
+        write_schema_message(catalog_entry=catalog_entry, bookmark_properties=[replication_key])
 
         if optional_limit:
             LOGGER.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
@@ -890,8 +889,9 @@ class Component(KBCEnvHandler):
 
     def run(self):
         """Execute main component extraction process."""
-        file_input_path = self._check_file_inputs()
+        write_message_output = {}
         table_mappings = {}
+        file_input_path = self._check_file_inputs()
 
         # ssh_params = {
         #     "ssh_address_or_host": self.cfg_params[KEY_SSH_HOST],
