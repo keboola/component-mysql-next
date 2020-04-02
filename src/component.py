@@ -883,8 +883,8 @@ class Component(KBCEnvHandler):
             manifest['incremental'] = True
 
         with open(file_name + '.manifest', 'w') as manifest_file:
-            LOGGER.debug('Writing manifest {} with manifest details {}'.format(file_name + '.manifest', str(manifest)))
             json.dump(manifest, manifest_file)
+            LOGGER.info('Wrote manifest table {} with metadata {}'.format(file_name + '.manifest', str(manifest)))
 
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
 
