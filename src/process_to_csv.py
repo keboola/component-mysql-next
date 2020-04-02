@@ -108,101 +108,6 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
     return state, headers
 
 
-# def persist_messages_with_slicing(destination_path, messages, delimiter: str = ',', method: str = 'byte_size',
-#                                   quotechar: str = '"', row_count_check: int = 1000000, byte_size: int = 1000000):
-#     """Persist messages with algorithm to push to slices of output CSVs. Choose method 'row_count' or 'byte_size."""
-#     state = None
-#     schemas = {}
-#     key_properties = {}
-#     headers = {}
-#     validators = {}
-#     message_number = 0
-#     lag_table_file_num = 1
-#     table_file_num = 1
-#
-#     for message in messages:
-#         message_number += 1
-#         try:
-#             o = core.parse_message(message).asdict()
-#         except json.decoder.JSONDecodeError:
-#             LOGGER.error("Unable to parse:\n{}".format(message))
-#             raise
-#
-#         message_type = o['type']
-#         if message_type == 'RECORD':
-#             if o['stream'] not in schemas:
-#                 raise Exception("A record for stream {}"
-#                                 "was encountered before a corresponding schema".format(o['stream']))
-#
-#             validators[o['stream']].validate(o['record'])
-#
-#             filename = o['stream'] + '-' + str(lag_table_file_num) + '.csv'
-#             file_path = os.path.expanduser(os.path.join(destination_path, o['stream']))
-#             if not os.path.exists(file_path):
-#                 os.makedirs(file_path)
-#             full_path = os.path.join(file_path, filename)
-#
-#             file_is_empty = (not os.path.isfile(full_path)) or os.stat(full_path).st_size == 0
-#
-#             flattened_record = flatten(o['record'])
-#             LOGGER.info('Flattened record: {}'.format(flattened_record))
-#
-#             if (o['stream'] not in headers and not file_is_empty) or lag_table_file_num < table_file_num:
-#                 lag_table_file_num = table_file_num
-#                 with open(full_path, 'r') as csv_file:
-#                     reader = csv.reader(csv_file, delimiter=delimiter, quotechar=quotechar)
-#                     first_line = next(reader)
-#                     headers[o['stream']] = first_line if first_line else flattened_record.keys()
-#             else:
-#                 headers[o['stream']] = flattened_record.keys()
-#
-#             with open(full_path, 'a+') as csv_file:
-#                 writer = csv.DictWriter(csv_file, headers[o['stream']], extrasaction='ignore', delimiter=delimiter,
-#                                         quotechar=quotechar)
-#                 # if file_is_empty:
-#                 #     writer.writeheader()
-#
-#                 writer.writerow(flattened_record)
-#
-#             # Every million messages, see if we should split the file
-#             if method.lower() == 'row_count':
-#                 if message_number % size == 0:
-#                     LOGGER.info('Iterating table {} to number {}'.format(o['stream'], table_file_num + 1))
-#                     table_file_num += 1
-#             elif method.lower() == 'bytez_size':
-#                 if
-#             else:
-#                 LOGGER.error('Chosen method is not valid, must be either "row_count" or "byte_size"')
-#                 exit(1)
-#
-#             state = None
-#         elif message_type == 'STATE':
-#             LOGGER.info('Setting state to {}'.format(o['value']))
-#             state = o['value']
-#         elif message_type == 'SCHEMA':
-#             stream = o['stream']
-#             schemas[stream] = o['schema']
-#             validators[stream] = Draft4Validator(o['schema'])
-#             key_properties[stream] = o['key_properties']
-#         else:
-#             LOGGER.warning("Unknown message type {} in message {}"
-#                            .format(o['type'], o))
-#
-#     # Add Columns to Manifest files.
-#     for table, header in headers.items():
-#         table_slice_path = os.path.join(destination_path, table)
-#         if os.path.exists(table_slice_path):
-#             manifest_file = os.path.join(destination_path, table + '.csv.manifest')
-#             if os.path.exists(manifest_file):
-#                 with open(manifest_file) as manifest:
-#                     metadata = json.load(manifest)
-#                     metadata['columns'] = header
-#             else:
-#                 LOGGER.warning('Manifest file specified to write to did not exist when attempting columns write')
-#
-#     return state
-
-
 def split_csv(file_handler, delimiter: str = ',', row_limit: int = 10000, output_name_template: str = 'output_%s.csv',
               output_path: str = '.', keep_headers: bool = True) -> None:
     """Splits a CSV file into multiple pieces.
@@ -302,12 +207,8 @@ def main():
             os.remove(prior_table_destination)
 
             # Write columns to manifest file.
-            table_slice_path = os.path.join(destination_path, file)
-            # if os.path.exists(table_slice_path):
             manifest_file = os.path.expanduser(os.path.join(destination_path, file_name + '.csv.manifest'))
             LOGGER.info('Manifest file: {}'.format(manifest_file))
-            # if os.path.isfile(manifest_file):
-            #     LOGGER.info('Manifest file does exist')
 
             with open(manifest_file, 'r') as manifest:
                 metadata = json.load(manifest)
