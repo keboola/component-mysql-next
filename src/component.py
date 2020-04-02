@@ -965,6 +965,15 @@ class Component(KBCEnvHandler):
                 catalog = Catalog.from_dict(table_mappings)
                 self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state)
 
+                # QA: Walk through output destination pre-manifest
+                directories = []
+                files = []
+                for (_, dirs, file_names) in os.walk(self.tables_out_path):
+                    directories.extend(dirs)
+                    files.extend(file_names)
+                LOGGER.info('All pre-manifest directories sent to output: {}'.format(directories))
+                LOGGER.info('All pre-manifest files sent to output: {}'.format(files))
+
                 # Write manifest files
                 tables_and_columns = dict()
                 if os.path.exists(os.path.join(current_path, 'table_headers.csv')):
@@ -981,8 +990,12 @@ class Component(KBCEnvHandler):
                         # Confirm corresponding table or folder exists
                         table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name + '.csv')
                         if os.path.isdir(table_specific_sliced_path):
+                            LOGGER.info('Table {} at location {} is a directory'.format(entry_table_name,
+                                                                                        table_specific_sliced_path))
                             output_is_sliced = True
                         else:
+                            LOGGER.info('Table {} at location {} is a file'.format(entry_table_name,
+                                                                                   table_specific_sliced_path))
                             output_is_sliced = False
 
                         if output_is_sliced:
