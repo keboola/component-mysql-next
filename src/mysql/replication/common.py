@@ -34,7 +34,7 @@ CURRENT_PATH = os.path.dirname(__file__)
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
-CSV_CHUNK_SIZE = 10 ** 5
+CSV_CHUNK_SIZE = 250000
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_kbc_synced_at'
 KBC_DELETED = '_kbc_deleted_at'
@@ -295,6 +295,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE):
         current_chunk += 1
         _add_kbc_metadata_to_df(chunk, catalog_entry)
+
         if current_chunk == 1:
             table_and_headers = {}
             headers = list(chunk.columns.values)
@@ -315,6 +316,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
             os.mkdir(destination_output_path)
 
         csv_path = os.path.join(destination_output_path, catalog_entry.table + '-' + str(current_chunk) + '.csv')
+        LOGGER.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
         chunk.to_csv(csv_path, index=False, mode='a', header=False)
 
     # TODO: Determine if we need last PK fetched and these states, or if we can remove altogether
