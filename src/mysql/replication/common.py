@@ -309,7 +309,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
                     catalog_entry.table, headers
                 ))
 
-        destination_output_path = os.path.join(tables_destination, catalog_entry.table, '')
+        destination_output_path = os.path.join(tables_destination, catalog_entry.table + '.csv', '')
 
         if not os.path.exists(destination_output_path):
             os.mkdir(destination_output_path)

@@ -173,8 +173,7 @@ def main():
     for file in os.listdir(destination_path):
         file_name, ext = os.path.splitext(file)
         if ext == '.manifest':
-            table_name = file_name.split('.')[0]
-            if file_name not in output_object_names and table_name not in output_object_names:
+            if file_name not in output_object_names:
                 LOGGER.info('Missing {}, removing its manifest {}'.format(file_name, file))
                 os.remove(os.path.join(destination_path, file))
 
