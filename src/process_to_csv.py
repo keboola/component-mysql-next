@@ -177,49 +177,6 @@ def main():
                 LOGGER.info('Missing {}, removing its manifest {}'.format(file_name, file))
                 os.remove(os.path.join(destination_path, file))
 
-    # Split large CSV files.
-    for file in os.listdir(destination_path):
-        if os.path.splitext(file)[1] != '.csv':
-            continue
-
-        # LOGGER.info('File: {}; destination path: {}'.format(file, destination_path))
-
-        file_name_ext = os.path.basename(file)
-        file_name = os.path.splitext(file_name_ext)[0]
-        file_byte_size = os.stat(os.path.expanduser(os.path.join(destination_path, file))).st_size
-
-        # LOGGER.info('byte size: {}'.format(file_byte_size))
-        if file_byte_size > MAX_CSV_FILE_SIZE_BYTES:
-            LOGGER.info('File {} exceeds max bytes size {}, splitting CSV outputs'.format(file_name,
-                                                                                          MAX_CSV_FILE_SIZE_BYTES))
-            new_table_destination = os.path.expanduser(os.path.join(destination_path, file_name, file))
-            prior_table_destination = os.path.expanduser(os.path.join(destination_path, file))
-
-            # LOGGER.info('Prior destination of file is {}'.format(prior_table_destination))
-            # LOGGER.info('Splitting file, table destination is: {}'.format(new_table_destination))
-
-            # Create slicing and remove prior table destinations if slicing
-            if not os.path.exists(os.path.dirname(new_table_destination)):
-                os.makedirs(os.path.dirname(new_table_destination))
-            with open(prior_table_destination, 'r') as output_data_file:
-                split_csv(output_data_file, keep_headers=False, output_path=os.path.dirname(new_table_destination),
-                          output_name_template=file_name + '_%s.csv')
-            os.remove(prior_table_destination)
-
-            # Write columns to manifest file.
-            manifest_file = os.path.expanduser(os.path.join(destination_path, file_name + '.csv.manifest'))
-            LOGGER.info('Manifest file: {}'.format(manifest_file))
-
-            with open(manifest_file, 'r') as manifest:
-                metadata = json.load(manifest)
-                metadata['columns'] = list(headers[file_name])
-            with open(manifest_file, 'w') as manifest:
-                manifest.write(json.dumps(metadata))
-            # else:
-            #         LOGGER.warning('Manifest file specified to write to did not exist when attempting columns write')
-        else:
-            LOGGER.info('File {} does not exceed max bytes size {}, keeping as is'.format(file_name,
-                                                                                          MAX_CSV_FILE_SIZE_BYTES))
     # Write final state.
     state_output_full_path = os.path.join(config.get('output_state_path'), 'state.json')
     write_state(state, state_output_full_path)
