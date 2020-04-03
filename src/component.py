@@ -104,7 +104,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
 MANDATORY_IMAGE_PARS = ()
 # TODO: Add user value for KBC_SYNCED for UTC sync time.
 
-APP_VERSION = '0.2.6'
+APP_VERSION = '0.2.22'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 

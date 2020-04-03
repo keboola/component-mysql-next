@@ -10,7 +10,6 @@ import json
 import logging
 import sys
 import os
-# from datetime import datetime
 from jsonschema.validators import Draft4Validator
 
 try:
