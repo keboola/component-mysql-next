@@ -34,7 +34,7 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
-UPDATE_BOOKMARK_PERIOD = 1000
+UPDATE_BOOKMARK_PERIOD = 10000
 
 mysql_timestamp_types = {FIELD_TYPE.TIMESTAMP, FIELD_TYPE.TIMESTAMP2}
 
