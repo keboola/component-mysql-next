@@ -495,6 +495,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync):
     return result
 
 
+# TODO: Add check for change in schema for new column, if so full sync that table.
 def get_non_binlog_streams(mysql_conn, catalog, config, state):
     """Returns the Catalog of data we're going to sync for all SELECT-based
     streams (i.e. INCREMENTAL, FULL_TABLE, and LOG_BASED that require a historical
