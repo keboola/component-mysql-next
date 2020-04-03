@@ -1,6 +1,12 @@
+**0.2.25**
+
+- Stable full sync and log-based incremental sync, with performance improvements to come
+- Adds ability to manually specify state and outputs state as file mapping
+- Proper manifest table handling
+
 **0.2.14**
 
-- Stable full sync that runs in chunks, should be much quicker, beta version
+- Beta full sync that runs in chunks, should be much quicker, manifest file needs fixes
 - Log-based still handled at row level
 
 **0.1.1**
