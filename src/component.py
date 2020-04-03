@@ -27,7 +27,6 @@ import pymysqlreplication
 
 from collections import namedtuple
 from contextlib import nullcontext
-# from contextlib import nullcontext, redirect_stdout
 from io import StringIO
 from signal import signal, SIGPIPE, SIG_DFL
 from sshtunnel import SSHTunnelForwarder
@@ -84,6 +83,7 @@ KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
 KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
+KEY_STATE_JSON = 'base64StateJson'
 
 # Define optional parameters as constants for later use.
 KEY_SSH_HOST = 'sshHost'
@@ -950,7 +950,11 @@ class Component(KBCEnvHandler):
                 self.write_table_mappings_file(table_mapping)
             elif table_mappings:
                 # Run extractor data sync.
-                if self.cfg_params[KEY_INCREMENTAL_SYNC]:
+                manually_entered_b64_state = self.cfg_params.get(KEY_STATE_JSON)
+                if manually_entered_b64_state:
+                    LOGGER.info('Using manually input prior state to start incremental execution')
+                    prior_state = base64.b64decode(manually_entered_b64_state, validate=True).decode('utf-8')
+                elif self.cfg_params[KEY_INCREMENTAL_SYNC]:
                     prior_state = self.get_state_file() or {}
                 else:
                     prior_state = {}

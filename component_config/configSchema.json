@@ -8,7 +8,8 @@
     "username",
     "#password",
     "runIncrementalSync",
-    "sshTunnel"
+    "sshTunnel",
+    "base64StateJson"
   ],
   "properties": {
     "fetchObjectsOnly": {
@@ -106,6 +107,13 @@
       "default": "",
       "description": "Optional, allows for the manual upload of a base64-encoded JSON specification for the database, only use if not using File Input mapping.",
       "propertyOrder": 950
+    },
+    "base64StateJson": {
+      "type": "string",
+      "title": "Base64-Encoded Prior State JSON Specification",
+      "default": "",
+      "description": "Optional, do not use unless instructed - manually specify prior state JSON data one-time as base64-encoded string",
+      "propertyOrder": 970
     }
   }
 }
