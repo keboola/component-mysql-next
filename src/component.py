@@ -1003,9 +1003,7 @@ class Component(KBCEnvHandler):
         df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
         df.to_csv(csv_table_path)
 
-
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
-
     def run(self):
         """Execute main component extraction process."""
         write_message_output = {}
