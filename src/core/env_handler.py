@@ -276,7 +276,7 @@ class KBCEnvHandler:
                 return json.load(state_file)
         except (OSError, IOError):
             raise ValueError(
-                "State file state.json unable to read "
+                "Unable to read state file state.json"
             )
 
     def write_state_file(self, state_dict):

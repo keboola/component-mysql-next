@@ -78,6 +78,16 @@ from .env_handler import (
     KBCEnvHandler
 )
 
+from .datatypes import (
+    BASE_BOOLEAN,
+    BASE_DATE,
+    BASE_FLOAT,
+    BASE_INTEGER,
+    BASE_NUMERIC,
+    BASE_STRING,
+    BASE_TIMESTAMP
+)
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

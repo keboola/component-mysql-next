@@ -201,12 +201,33 @@ def parse_message(msg):
 
 
 def format_message(message):
-    return json.dumps(message.asdict(), use_decimal=True)
+    try:
+        return json.dumps(message.asdict(), use_decimal=True)
+    except AttributeError:  # Message may be already dict if converted to handle for non-JSON-serializable columns
+        return json.dumps(message, use_decimal=True)
 
 
 def write_message(message):
-    sys.stdout.write(format_message(message) + '\n')
-    sys.stdout.flush()
+    # logging.info("!!! Here is the message: {}".format(message))
+    try:
+        sys.stdout.write(format_message(message) + '\n')
+        sys.stdout.flush()
+    except TypeError:  # Handle for non-standard data types, particularly sets
+        new_message = message.asdict()
+        new_record_message = {}
+
+        record_message = new_message['record']
+        for column, value in record_message.items():
+            if isinstance(value, set):
+                new_record_message[column] = str(list(value))
+            else:
+                new_record_message[column] = value
+        new_message['record'] = new_record_message
+        # logging.info('Converted old record message {} to new record message {}'.format(
+        #     record_message, new_record_message))
+
+        sys.stdout.write(format_message(new_message) + '\n')
+        sys.stdout.flush()
 
 
 def write_record(stream_name, record, stream_alias=None, time_extracted=None):

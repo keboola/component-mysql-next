@@ -7,7 +7,14 @@ a set structure, see example below.
 Essentially at the table table and column level, add "replication-method" of: FULL_TABLE, INCREMENTAL, or ROW_BASED.
 If INCREMENTAL, you need to specify a "replication-key".
 
-# Secondary To-do items
+# Primary To-Do Items
+TODO: Removing events for same ID in same period needs to not happen for binlogs
+TODO: Support for set data type [DONE]
+TODO: Send metadata to Keboola for columns [DONE]
+TODO: Remove incremental true from metadata during full table sync [DONE].
+TODO: Switch to not shell script execution
+
+# Secondary To-do Items
 TODO: Table Mappings - Handle prior user inputs
 TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
@@ -37,6 +44,7 @@ from sshtunnel import SSHTunnelForwarder
 try:
     import core as core
     import core.metrics as metrics
+    import core.datatypes as datatypes
 
     from core import metadata
     from core.catalog import Catalog, CatalogEntry
@@ -53,6 +61,7 @@ try:
 except ImportError as e:
     import src.core as core
     import src.core.metrics as metrics
+    import src.core.datatypes as datatypes
 
     from src.core import metadata
     from src.core.catalog import Catalog, CatalogEntry
@@ -102,7 +111,6 @@ KEY_STDLOG = 'stdlogging'
 KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
 MANDATORY_IMAGE_PARS = ()
-# TODO: Add user value for KBC_SYNCED for UTC sync time.
 
 APP_VERSION = '0.2.25'
 
@@ -112,6 +120,7 @@ pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_da
 STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'varchar'}
 FLOAT_TYPES = {'double', 'float'}
 DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
+SET_TYPE = 'set'
 BYTES_FOR_INTEGER_TYPE = {
     'tinyint': 1,
     'smallint': 2,
@@ -217,6 +226,9 @@ def schema_for_column(c):
     elif data_type in DATETIME_TYPES:
         result.type = ['null', 'string']
         result.format = 'date-time'
+
+    elif data_type.startswith(SET_TYPE):
+        result.type = ['null', 'string']
 
     else:
         result = Schema(None, inclusion='unsupported', description='Unsupported column type {}'.format(column_type))
@@ -457,7 +469,7 @@ def binlog_stream_requires_historical(catalog_entry, state):
     return True
 
 
-def resolve_catalog(discovered_catalog, streams_to_sync):
+def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
     result = Catalog(streams=[])
 
     # Iterate over the streams in the input catalog and match each one up
@@ -507,7 +519,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
     freshly discovered Catalog to determine the resulting Catalog.
     The resulting Catalog will include the following any streams marked as
     "selected" that currently exist in the database. Columns marked as "selected"
-    and those labled "automatic" (e.g. primary keys and replication keys) will be
+    and those labeled "automatic" (e.g. primary keys and replication keys) will be
     included. Streams will be prioritized in the following order:
       1. currently_syncing if it is SELECT-based
       2. any streams that do not have state
@@ -522,8 +534,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
 
     for stream in selected_streams:
         stream_metadata = metadata.to_map(stream.metadata)
-        replication_method = stream_metadata.get((), {}).get('replication-method')
-
+        replication_method = stream_metadata.get((), {}).get('replication-method').upper()
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
 
         if not stream_state:
@@ -574,7 +585,7 @@ def get_binlog_streams(mysql_conn, catalog, config, state):
 
     for stream in selected_streams:
         stream_metadata = metadata.to_map(stream.metadata)
-        replication_method = stream_metadata.get((), {}).get('replication-method')
+        replication_method = stream_metadata.get((), {}).get('replication-method').upper()
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
         LOGGER.debug(stream_state)
 
@@ -685,7 +696,8 @@ class Component(KBCEnvHandler):
                                          tables_destination=tables_destination)
 
         else:
-            LOGGER.info("Performing initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
+            LOGGER.info("Performing initial full table sync for LOG_BASED table {}".format(
+                catalog_entry.tap_stream_id))
 
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
 
@@ -759,7 +771,8 @@ class Component(KBCEnvHandler):
                     self.do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns,
                                                    tables_destination=tables_destination)
                 elif replication_method == 'FULL_TABLE':
-                    self.do_sync_full_table(mysql_conn, config, catalog_entry, state, columns)
+                    self.do_sync_full_table(mysql_conn, config, catalog_entry, state, columns,
+                                            tables_destination=tables_destination)
                 else:
                     raise Exception("only INCREMENTAL, LOG_BASED, and FULL TABLE replication methods are supported")
 
@@ -777,7 +790,9 @@ class Component(KBCEnvHandler):
 
     def do_sync(self, mysql_conn, config, mysql_config, catalog, state):
         non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
+        LOGGER.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
         binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
+        LOGGER.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
 
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
                                      tables_destination=self.tables_out_path)
@@ -829,7 +844,87 @@ class Component(KBCEnvHandler):
         with open(output_file, 'w') as mapping_file:
             mapping_file.write(json.dumps(result))
 
-    def create_manifests(self, entry: dict, data_path: str, columns: list = None, incremental: bool = True):
+    def get_table_column_metadata(self, columns_metadata: dict):
+        """Return metadata for all columns for given table stream ID."""
+        table_columns_metadata = {}
+
+        # First, determine if column is selected. Selected if "selected" is true, or "selected-by-default" is true and
+        # "selected" is not specifically set to false
+        for column_metadata in columns_metadata:
+            column_detail = column_metadata['metadata']
+            is_selected_in_detail = True if 'selected' in column_detail else False
+            is_column_set_as_selected = column_detail.get('selected')
+            is_selected_by_default = column_detail.get('selected-by-default')
+            if is_column_set_as_selected or (is_selected_by_default and not is_selected_in_detail):
+                column_name = column_metadata['breadcrumb'][1]
+                data_type = column_detail.get('sql-datatype')
+
+                table_columns_metadata[column_name] = self.generate_column_metadata(data_type=data_type, nullable=True)
+
+        # Append KBC metadata column types, hard coded for now
+        table_columns_metadata[common.KBC_SYNCED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
+        table_columns_metadata[common.KBC_DELETED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
+
+        return table_columns_metadata
+
+    def generate_column_metadata(self, data_type: str = None, nullable: bool = None):
+        """Return metadata for given column"""
+        column_metadata = []
+        base_data_type = self._convert_mysql_data_types_to_kbc_types(data_type)
+
+        # Append metadata per input parameter, if present
+        if data_type:
+            type_metadata = {}
+            type_key, type_value = 'KBC.datatype.type', data_type
+            type_metadata['key'] = type_key
+            type_metadata['value'] = type_value
+            column_metadata.append(type_metadata)
+
+            base_type_metadata = {}
+            base_type_key, base_type_value = 'KBC.datatype.basetype', base_data_type
+            base_type_metadata['key'] = base_type_key
+            base_type_metadata['value'] = base_type_value
+            column_metadata.append(base_type_metadata)
+
+        if nullable:
+            nullable_metadata = {}
+            nullable_key, nullable_value = 'KBC.datatype.nullable', nullable
+            nullable_metadata['key'] = nullable_key
+            nullable_metadata['value'] = nullable_value
+            column_metadata.append(nullable_metadata)
+
+        return column_metadata
+
+    @staticmethod
+    def _convert_mysql_data_types_to_kbc_types(column_type: str) -> str:
+        """Convert given column data type from MySQL data type to Keboola base type."""
+        column_type = column_type.lower()
+        for db_data_type in datatypes.BASE_STRING:
+            if column_type.startswith(db_data_type):
+                return 'STRING'
+        for db_data_type in datatypes.BASE_INTEGER:
+            if column_type.startswith(db_data_type):
+                return 'INTEGER'
+        for db_data_type in datatypes.BASE_TIMESTAMP:
+            if column_type.startswith(db_data_type):
+                return 'TIMESTAMP'
+        for db_data_type in datatypes.BASE_FLOAT:
+            if column_type.startswith(db_data_type):
+                return 'FLOAT'
+        for db_data_type in datatypes.BASE_BOOLEAN:
+            if column_type.startswith(db_data_type):
+                return 'BOOLEAN'
+        for db_data_type in datatypes.BASE_DATE:
+            if column_type.startswith(db_data_type):
+                return 'DATE'
+        for db_data_type in datatypes.BASE_NUMERIC:
+            if column_type.startswith(db_data_type):
+                return 'NUMERIC'
+
+        LOGGER.warning('Processed data type {} does not match any KBC base types'.format(column_type))
+
+    def create_manifests(self, entry: dict, data_path: str, columns: list = None, column_metadata: dict = None,
+                         set_incremental: bool = True):
         """Write manifest files for the results produced by the results writer.
 
         :param entry: Dict entry from catalog
@@ -837,7 +932,8 @@ class Component(KBCEnvHandler):
         :param columns: List of strings representing columns for the output table, necessary for sliced tables.
         the `.column` attribute should be
         used in manifest file.
-        :param incremental:
+        :param column_metadata: Dict column metadata as keys and values.
+        :param set_incremental: Incremental choice true or false for whether to write incrementally to manifest file.
         :return:
         """
         primary_keys = entry.get('primary_keys')
@@ -846,14 +942,15 @@ class Component(KBCEnvHandler):
 
         # for r in results:
         if not columns:
-            self.write_table_manifest(result_full_path, primary_key=primary_keys, incremental=incremental)
+            self.write_table_manifest(result_full_path, primary_key=primary_keys, column_metadata=column_metadata,
+                                      is_incremental=set_incremental)
         else:
             self.write_table_manifest(result_full_path, primary_key=primary_keys, columns=columns,
-                                      incremental=incremental)
+                                      column_metadata=column_metadata, is_incremental=set_incremental)
 
     @staticmethod
     def write_table_manifest(file_name: str, destination: str = '', primary_key: list = None, columns: list = None,
-                             incremental: bool = None):
+                             column_metadata: dict = None, is_incremental: bool = None):
         """Write manifest for output table Manifest is used for the table to be stored in KBC Storage.
 
         Args:
@@ -861,7 +958,8 @@ class Component(KBCEnvHandler):
             destination: String name of the table in Storage.
             primary_key: List with names of columns used for primary key.
             columns: List of columns as strings that are written to table, necessary to specify for sliced tables.
-            incremental: Set to true to enable incremental loading
+            column_metadata: Metadata keys and values about columns in table
+            is_incremental: Set to true to enable incremental loading
         """
         manifest = {}
         if destination:
@@ -879,7 +977,12 @@ class Component(KBCEnvHandler):
                 manifest['columns'] = columns
             else:
                 raise TypeError("Columns must by a list")
-        if incremental:
+        if column_metadata:
+            if isinstance(column_metadata, dict):
+                manifest['column_metadata'] = column_metadata
+            else:
+                raise TypeError("Columns must by a list")
+        if is_incremental:
             manifest['incremental'] = True
 
         with open(file_name + '.manifest', 'w') as manifest_file:
@@ -953,7 +1056,7 @@ class Component(KBCEnvHandler):
                 # Run extractor data sync.
                 manually_entered_b64_state = self.cfg_params.get(KEY_STATE_JSON)
                 if manually_entered_b64_state:
-                    LOGGER.info('Using manually input prior state to start incremental execution')
+                    LOGGER.info('Manually input prior state parameter populated for incremental execution')
                     prior_state = base64.b64decode(manually_entered_b64_state, validate=True).decode('utf-8')
                 elif self.cfg_params[KEY_INCREMENTAL_SYNC]:
                     prior_state = self.get_state_file() or {}
@@ -976,8 +1079,8 @@ class Component(KBCEnvHandler):
                 for (_, dirs, file_names) in os.walk(self.tables_out_path):
                     directories.extend(dirs)
                     files.extend(file_names)
-                LOGGER.info('All pre-manifest directories sent to output: {}'.format(directories))
-                LOGGER.info('All pre-manifest files sent to output: {}'.format(files))
+                LOGGER.debug('All pre-manifest directories sent to output: {}'.format(directories))
+                LOGGER.debug('All pre-manifest files sent to output: {}'.format(files))
 
                 # Write manifest files
                 tables_and_columns = dict()
@@ -990,18 +1093,38 @@ class Component(KBCEnvHandler):
 
                 for entry in catalog.to_dict()['streams']:
                     entry_table_name = entry.get('table_name')
+                    table_metadata = entry['metadata'][0]['metadata']
+                    column_metadata = entry['metadata'][1:]
 
-                    if entry['metadata'][0]['metadata'].get('selected'):
+                    if table_metadata.get('selected'):
+                        table_replication_method = table_metadata.get('replication-method').upper()
+
                         # Confirm corresponding table or folder exists
                         table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name + '.csv')
                         if os.path.isdir(table_specific_sliced_path):
-                            LOGGER.info('Table {} at location {} is a directory'.format(entry_table_name,
-                                                                                        table_specific_sliced_path))
+                            LOGGER.debug('Table {} at location {} is a directory'.format(entry_table_name,
+                                                                                         table_specific_sliced_path))
                             output_is_sliced = True
-                        else:
-                            LOGGER.info('Table {} at location {} is a file'.format(entry_table_name,
-                                                                                   table_specific_sliced_path))
+                        elif os.path.isfile(table_specific_sliced_path):
+                            LOGGER.debug('Table {} at location {} is a file'.format(entry_table_name,
+                                                                                    table_specific_sliced_path))
                             output_is_sliced = False
+                        else:
+                            LOGGER.info('NO DATA found for table {} in either a file or sliced table directory, this '
+                                        'table is not being synced'.format(entry_table_name))
+
+                        # TODO: Consider other options for writing to storage based on user choices
+
+                        if table_replication_method == 'FULL_TABLE' or not self.cfg_params[KEY_INCREMENTAL_SYNC]:
+                            LOGGER.info('Manifest file will have incremental false for Full Table syncs')
+                            manifest_incremental = False
+                        else:
+                            LOGGER.info('Manifest file will have incremental true for for {} sync'.format(
+                                table_replication_method
+                            ))
+                            manifest_incremental = True
+
+                        table_column_metadata = self.get_table_column_metadata(column_metadata)
 
                         if output_is_sliced:
                             if core.find_files(table_specific_sliced_path, '*.csv'):
@@ -1009,16 +1132,17 @@ class Component(KBCEnvHandler):
                                     entry_table_name, self.tables_out_path))
                                 self.create_manifests(entry, self.tables_out_path,
                                                       columns=list(tables_and_columns.get(entry_table_name)),
-                                                      incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                                                      column_metadata=table_column_metadata,
+                                                      set_incremental=manifest_incremental)
                         elif core.find_files(self.tables_out_path, '*.csv'):
                             LOGGER.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
                                 entry_table_name, self.tables_out_path))
-                            self.create_manifests(entry, self.tables_out_path,
-                                                  incremental=self.cfg_params[KEY_INCREMENTAL_SYNC])
+                            self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
+                                                  set_incremental=manifest_incremental)
                         else:
                             LOGGER.info('No manifest file found for selected table {}, because no data was synced '
                                         'from the database for this table. This may be expected behavior if the table '
-                                        'is empty or if no new rows were added (if running incrementally'.format(
+                                        'is empty or if no new rows were added (if running incrementally)'.format(
                                             entry_table_name))
 
                 # QA: Walk through output destination

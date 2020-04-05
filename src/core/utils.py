@@ -21,50 +21,6 @@ DATETIME_FMT = "%04Y-%m-%dT%H:%M:%S.%fZ"
 DATETIME_FMT_SAFE = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
-class ListStream:
-    def __init__(self):
-        self.data = []
-        self.state = {}
-
-    @staticmethod
-    def flush():
-        pass
-
-    def write(self, s):
-        # Test: append JSON loaded instead of string
-        self.data.append(s)
-
-    def write_records_and_state(self, s):
-        """Write only record types."""
-        stdout_json = json.loads(s)
-        if stdout_json['type'] == 'RECORD':
-            self.data.append(stdout_json)
-        elif stdout_json['type'] == 'STATE':
-            self.set_state(stdout_json)
-
-    def set_state(self, state_json):
-        self.state = state_json
-
-    def get_state(self):
-        return self.state
-
-    def get_result(self):
-        return self.data
-
-    def __enter__(self):
-        sys.stdout = self
-        return self
-
-    def __exit__(self, ext_type, exc_value, traceback):
-        sys.stdout = sys.__stdout__
-
-    def __str__(self):
-        return self.data
-
-    def __repr__(self):
-        return self.data
-
-
 def now():
     return datetime.datetime.utcnow().replace(tzinfo=pytz.UTC)
 

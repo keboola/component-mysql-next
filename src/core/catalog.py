@@ -99,6 +99,8 @@ class Catalog:
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
+    def __len__(self):
+        return len(self.to_dict()['streams'])
 
     @classmethod
     def load(cls, filename):

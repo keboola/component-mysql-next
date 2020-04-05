@@ -301,6 +301,7 @@ def generate_streams_map(binlog_streams):
 
 
 def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
+    LOGGER.info('_run_binlog_sync supplied binlog_streams_map {}'.format(binlog_streams_map))
     time_extracted = utils.now()
 
     rows_saved = 0
@@ -308,12 +309,9 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
 
     current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn)
 
-    binlogs_processed = 0
     for binlog_event in reader:
-        binlogs_processed += 1
 
         if isinstance(binlog_event, RotateEvent):
-            # print('Rotation event...')
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
         else:
             tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
@@ -335,7 +333,6 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
                                                          rows_saved, time_extracted)
 
                 elif isinstance(binlog_event, UpdateRowsEvent):
-                    # LOGGER.info('Handling update row event')
                     rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted)
 
