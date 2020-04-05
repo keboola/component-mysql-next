@@ -301,7 +301,6 @@ def generate_streams_map(binlog_streams):
 
 
 def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
-    LOGGER.info('_run_binlog_sync supplied binlog_streams_map {}'.format(binlog_streams_map))
     time_extracted = utils.now()
 
     rows_saved = 0

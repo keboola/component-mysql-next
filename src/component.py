@@ -8,10 +8,10 @@ Essentially at the table table and column level, add "replication-method" of: FU
 If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-Do Items
-TODO: Removing events for same ID in same period needs to not happen for binlogs
+TODO: Removing events for same ID in same period needs to not happen for binlogs [DONE]
 TODO: Support for set data type [DONE]
 TODO: Send metadata to Keboola for columns [DONE]
-TODO: Remove incremental true from metadata during full table sync [DONE].
+TODO: Remove incremental true from metadata during full table sync [DONE]
 TODO: Switch to not shell script execution
 
 # Secondary To-do Items
@@ -27,6 +27,7 @@ import itertools
 import json
 import os
 
+import pandas as pd
 import paramiko
 import pendulum
 import pymysql
@@ -989,6 +990,20 @@ class Component(KBCEnvHandler):
             json.dump(manifest, manifest_file)
             LOGGER.info('Wrote manifest table {} with metadata {}'.format(file_name + '.manifest', str(manifest)))
 
+    @staticmethod
+    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list) -> None:
+        """For given result CSV file path, remove non-latest binlog event by primary key.
+
+        A primary key can only have a single Write Event and a max of one Delete Event. It can have infinite Update
+        Events. Each event returns the current state of the row, so we just want the latest row per extraction.
+        """
+        LOGGER.info('Keeping only latest per primary key from binary row event results for {} '
+                    'based on table primary keys: {}'.format(csv_table_path, primary_keys))
+        df = pd.read_csv(csv_table_path)
+        df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+        df.to_csv(csv_table_path)
+
+
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
 
     def run(self):
@@ -1097,6 +1112,9 @@ class Component(KBCEnvHandler):
                     column_metadata = entry['metadata'][1:]
 
                     if table_metadata.get('selected'):
+                        LOGGER.info(table_metadata)
+                        LOGGER.info('Got selected {} for entry {}'.format(table_metadata.get('selected'),
+                                                                          entry_table_name))
                         table_replication_method = table_metadata.get('replication-method').upper()
 
                         # Confirm corresponding table or folder exists
@@ -1119,13 +1137,15 @@ class Component(KBCEnvHandler):
                             LOGGER.info('Manifest file will have incremental false for Full Table syncs')
                             manifest_incremental = False
                         else:
-                            LOGGER.info('Manifest file will have incremental true for for {} sync'.format(
+                            LOGGER.info('Manifest file will have incremental True for {} sync'.format(
                                 table_replication_method
                             ))
                             manifest_incremental = True
 
                         table_column_metadata = self.get_table_column_metadata(column_metadata)
 
+                        LOGGER.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
+                                                                                 entry_table_name))
                         if output_is_sliced:
                             if core.find_files(table_specific_sliced_path, '*.csv'):
                                 LOGGER.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
@@ -1134,11 +1154,14 @@ class Component(KBCEnvHandler):
                                                       columns=list(tables_and_columns.get(entry_table_name)),
                                                       column_metadata=table_column_metadata,
                                                       set_incremental=manifest_incremental)
-                        elif core.find_files(self.tables_out_path, '*.csv'):
+                        elif os.path.isfile(table_specific_sliced_path):
                             LOGGER.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
                                 entry_table_name, self.tables_out_path))
                             self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
                                                   set_incremental=manifest_incremental)
+
+                            # For binlogs (only binlogs are written non-sliced) rewrite CSVs deduped to latest per PK
+                            self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'))
                         else:
                             LOGGER.info('No manifest file found for selected table {}, because no data was synced '
                                         'from the database for this table. This may be expected behavior if the table '

@@ -179,9 +179,11 @@ def main():
     # Write final state to both Keboola and file output mapping, for QA purposes.
     state_output_full_path = os.path.join(config.get('output_state_path'), 'state.json')
     state_file_output_path = os.path.join(config.get('output_state_path'), 'files', 'state.json')
+
     write_state(state, state_output_full_path)
     write_state(state, state_file_output_path)
     emit_state(state)
+
     LOGGER.info("Exiting normally")
 
 
