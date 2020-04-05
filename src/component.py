@@ -113,7 +113,7 @@ KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.2.25'
+APP_VERSION = '0.3.0'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 

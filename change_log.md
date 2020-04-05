@@ -1,3 +1,10 @@
+**0.3.0**
+
+- Grabs only latest binlog event per primary key in extraction since data is uploaded by PK
+- Supports sending column metadata to Keboola
+- Full table syncs are marked with incremental false
+- Added support for set MySQL data type
+
 **0.2.25**
 
 - Stable full sync and log-based incremental sync, with performance improvements to come
