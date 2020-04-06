@@ -71,7 +71,7 @@ def persist_messages(delimiter, quotechar, messages, destination_path):
 
             validators[o['stream']].validate(o['record'])
 
-            filename = o['stream'] + '.csv'
+            filename = o['stream'].upper() + '.csv'
             filename = os.path.expanduser(os.path.join(destination_path, filename))
             file_is_empty = (not os.path.isfile(filename)) or os.stat(filename).st_size == 0
 

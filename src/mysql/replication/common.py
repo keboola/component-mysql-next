@@ -310,12 +310,13 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
                     catalog_entry.table, headers
                 ))
 
-        destination_output_path = os.path.join(tables_destination, catalog_entry.table + '.csv', '')
+        destination_output_path = os.path.join(tables_destination, catalog_entry.table.upper() + '.csv', '')
 
         if not os.path.exists(destination_output_path):
             os.mkdir(destination_output_path)
 
-        csv_path = os.path.join(destination_output_path, catalog_entry.table + '-' + str(current_chunk) + '.csv')
+        csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
+                                str(current_chunk) + '.csv')
         LOGGER.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
         chunk.to_csv(csv_path, index=False, mode='a', header=False)
 

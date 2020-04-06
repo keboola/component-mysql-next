@@ -113,7 +113,7 @@ KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.3.1'
+APP_VERSION = '0.3.2'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -937,8 +937,11 @@ class Component(KBCEnvHandler):
         :param set_incremental: Incremental choice true or false for whether to write incrementally to manifest file.
         :return:
         """
-        primary_keys = entry.get('primary_keys')
-        table_name = entry.get('table_name')
+        if entry.get('primary_keys'):
+            primary_keys = [key.upper() for key in entry.get('primary_keys')]
+        else:
+            primary_keys = None
+        table_name = entry.get('table_name').upper()
         result_full_path = os.path.join(data_path, table_name + '.csv')
 
         # for r in results:
@@ -1111,9 +1114,6 @@ class Component(KBCEnvHandler):
                     column_metadata = entry['metadata'][1:]
 
                     if table_metadata.get('selected'):
-                        LOGGER.info(table_metadata)
-                        LOGGER.info('Got selected {} for entry {}'.format(table_metadata.get('selected'),
-                                                                          entry_table_name))
                         table_replication_method = table_metadata.get('replication-method').upper()
 
                         # Confirm corresponding table or folder exists
