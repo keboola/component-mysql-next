@@ -346,16 +346,16 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     # if replication_method in {'FULL_TABLE', 'LOG_BASED'}:
     #     key_properties = get_key_properties(catalog_entry)
 
-        # max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
+    # max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
 
-        # if max_pk_values:
-        #     # Get last row for max of PK fetched
-        #     last_file_df = pd.read_csv(os.path.join(tables_destination, catalog_entry.table, str(current_chunk)))
-        #     last_row_fetched = last_file_df.tail(1).values.to
-        #     last_pk_fetched = {k: v for k, v in last_row_fetched
-        #                        if k in key_properties}
+    # if max_pk_values:
+    #     # Get last row for max of PK fetched
+    #     last_file_df = pd.read_csv(os.path.join(tables_destination, catalog_entry.table, str(current_chunk)))
+    #     last_row_fetched = last_file_df.tail(1).values.to
+    #     last_pk_fetched = {k: v for k, v in last_row_fetched
+    #                        if k in key_properties}
 
-        # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
+    # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
 
     # TODO: Handle for key-based incremental here
     # elif replication_method == 'INCREMENTAL':
