@@ -887,6 +887,14 @@ class Component(KBCEnvHandler):
             base_type_metadata['value'] = base_type_value
             column_metadata.append(base_type_metadata)
 
+            # Add length data type if String, just using max for now
+            if base_data_type == 'STRING':
+                string_length_metadata = {}
+                length_type_key, length_type_value = 'KBC.datatype.length', 16777216
+                string_length_metadata['key'] = length_type_key
+                string_length_metadata['value'] = length_type_value
+                column_metadata.append(string_length_metadata)
+
         if nullable:
             nullable_metadata = {}
             nullable_key, nullable_value = 'KBC.datatype.nullable', nullable
@@ -1002,10 +1010,14 @@ class Component(KBCEnvHandler):
         """
         LOGGER.info('Keeping only latest per primary key from binary row event results for {} '
                     'based on table primary keys: {}'.format(csv_table_path, primary_keys))
-        df = pd.read_csv(csv_table_path)
-        df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
-        df.columns = map(str.upper, df.columns)
-        df.to_csv(csv_table_path, index=False)
+        with metrics.job_timer('latest_binlog_results') as timer:
+            timer.tags['csv_table'] = csv_table_path
+            timer.tags['primary_key'] = primary_keys
+
+            df = pd.read_csv(csv_table_path)
+            df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+            df.columns = map(str.upper, df.columns)
+            df.to_csv(csv_table_path, index=False)
 
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
     def run(self):
@@ -1129,11 +1141,14 @@ class Component(KBCEnvHandler):
                                                                                    table_specific_sliced_path))
                             output_is_sliced = False
                         else:
+                            output_is_sliced = False
                             LOGGER.info('NO DATA found for table {} in either a file or sliced table directory, this '
                                         'table is not being synced'.format(entry_table_name))
 
                         # TODO: Consider other options for writing to storage based on user choices
-
+                        LOGGER.info('Table has rep method {} and user incremental param is {}'.format(
+                            table_replication_method, self.cfg_params[KEY_INCREMENTAL_SYNC]
+                        ))
                         if table_replication_method == 'FULL_TABLE' or not self.cfg_params[KEY_INCREMENTAL_SYNC]:
                             LOGGER.info('Manifest file will have incremental false for Full Table syncs')
                             manifest_incremental = False
