@@ -1,9 +1,10 @@
-**0.3.0**
+**0.3.1**
 
 - Grabs only latest binlog event per primary key in extraction since data is uploaded by PK
 - Supports sending column metadata to Keboola
 - Full table syncs are marked with incremental false
 - Added support for set MySQL data type
+- Columns are capitalized for Snowflake transforms ease of use
 
 **0.2.25**
 
