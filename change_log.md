@@ -1,4 +1,4 @@
-**0.3.2**
+**0.3.4**
 
 - Grabs only latest binlog event per primary key in extraction since data is uploaded by PK
 - Supports sending column metadata to Keboola

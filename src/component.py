@@ -113,7 +113,7 @@ KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.3.2'
+APP_VERSION = '0.3.4'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1117,7 +1117,9 @@ class Component(KBCEnvHandler):
                         table_replication_method = table_metadata.get('replication-method').upper()
 
                         # Confirm corresponding table or folder exists
-                        table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name + '.csv')
+                        table_specific_sliced_path = os.path.join(self.tables_out_path,
+                                                                  entry_table_name.upper() + '.csv')
+                        LOGGER.info('Searching for output destination file/dir: {}'.format(table_specific_sliced_path))
                         if os.path.isdir(table_specific_sliced_path):
                             LOGGER.info('Table {} at location {} is a directory'.format(entry_table_name,
                                                                                         table_specific_sliced_path))
