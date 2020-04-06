@@ -857,7 +857,7 @@ class Component(KBCEnvHandler):
             is_column_set_as_selected = column_detail.get('selected')
             is_selected_by_default = column_detail.get('selected-by-default')
             if is_column_set_as_selected or (is_selected_by_default and not is_selected_in_detail):
-                column_name = column_metadata['breadcrumb'][1]
+                column_name = column_metadata['breadcrumb'][1].upper()
                 data_type = column_detail.get('sql-datatype')
 
                 table_columns_metadata[column_name] = self.generate_column_metadata(data_type=data_type, nullable=True)
@@ -1001,7 +1001,8 @@ class Component(KBCEnvHandler):
                     'based on table primary keys: {}'.format(csv_table_path, primary_keys))
         df = pd.read_csv(csv_table_path)
         df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
-        df.to_csv(csv_table_path)
+        df.columns = map(str.upper, df.columns)
+        df.to_csv(csv_table_path, index=False)
 
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
     def run(self):
@@ -1101,7 +1102,7 @@ class Component(KBCEnvHandler):
                     with open(os.path.join(current_path, 'table_headers.csv')) as headers_file:
                         tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
                         for item, value in tables_and_columns.items():
-                            tables_and_columns[item] = [column.strip() for column in ast.literal_eval(value)]
+                            tables_and_columns[item] = [column.strip().upper() for column in ast.literal_eval(value)]
                         LOGGER.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
 
                 for entry in catalog.to_dict()['streams']:
@@ -1158,7 +1159,7 @@ class Component(KBCEnvHandler):
                             self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
                                                   set_incremental=manifest_incremental)
 
-                            # For binlogs (only binlogs are written non-sliced) rewrite CSVs deduped to latest per PK
+                            # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
                             self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'))
                         else:
                             LOGGER.info('No manifest file found for selected table {}, because no data was synced '

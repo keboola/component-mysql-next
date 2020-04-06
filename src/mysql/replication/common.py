@@ -36,8 +36,8 @@ original_convert_date = pymysql.converters.convert_date
 
 CSV_CHUNK_SIZE = 250000
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
-KBC_SYNCED = '_kbc_synced_at'
-KBC_DELETED = '_kbc_deleted_at'
+KBC_SYNCED = '_KBC_SYNCED_AT'
+KBC_DELETED = '_KBC_DELETED_AT'
 
 
 def monkey_patch_datetime(datetime_str):
