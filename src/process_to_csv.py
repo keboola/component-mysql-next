@@ -7,7 +7,6 @@ import collections
 import csv
 import io
 import json
-import logging
 import sys
 import os
 from jsonschema.validators import Draft4Validator
@@ -17,7 +16,7 @@ try:
 except ImportError:
     import src.core as core
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = core.get_logger()
 MAX_CSV_FILE_SIZE_BYTES = 100000000
 
 

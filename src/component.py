@@ -1103,13 +1103,13 @@ class Component(KBCEnvHandler):
                 self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state)
 
                 # QA: Walk through output destination pre-manifest
-                directories = []
-                files = []
-                for (_, dirs, file_names) in os.walk(self.tables_out_path):
-                    directories.extend(dirs)
-                    files.extend(file_names)
-                LOGGER.info('All pre-manifest directories sent to output: {}'.format(directories))
-                LOGGER.info('All pre-manifest files sent to output: {}'.format(files))
+                # directories = []
+                # files = []
+                # for (_, dirs, file_names) in os.walk(self.tables_out_path):
+                #     directories.extend(dirs)
+                #     files.extend(file_names)
+                # LOGGER.debug('All pre-manifest directories sent to output: {}'.format(directories))
+                # LOGGER.debug('All pre-manifest files sent to output: {}'.format(files))
 
                 # Write manifest files
                 tables_and_columns = dict()
@@ -1185,17 +1185,17 @@ class Component(KBCEnvHandler):
                                             entry_table_name))
 
                 # QA: Walk through output destination
-                directories = []
-                files = []
-                for (_, dirs, file_names) in os.walk(self.tables_out_path):
-                    directories.extend(dirs)
-                    files.extend(file_names)
-                LOGGER.info('All directories sent to output: {}'.format(directories))
-                LOGGER.info('All files sent to output: {}'.format(files))
-            else:
-                LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
-                             'specify a table mappings file manually or via the File Input Mappings configuration.')
-                exit(1)
+            #     directories = []
+            #     files = []
+            #     for (_, dirs, file_names) in os.walk(self.tables_out_path):
+            #         directories.extend(dirs)
+            #         files.extend(file_names)
+            #     LOGGER.debug('All directories sent to output: {}'.format(directories))
+            #     LOGGER.debug('All files sent to output: {}'.format(files))
+            # else:
+            #     LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
+            #                  'specify a table mappings file manually or via the File Input Mappings configuration.')
+            #     exit(1)
 
 
 if __name__ == "__main__":

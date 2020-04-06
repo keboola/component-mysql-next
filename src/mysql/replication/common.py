@@ -292,8 +292,17 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     LOGGER.info('Running %s', query_string)
     # Chunk Changes Here
     current_chunk = 0
+
+    LOGGER.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
+    start_time = utils.now()
     for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE):
+        chunk_start_time = utils.now()
         current_chunk += 1
+        if current_chunk > 1:
+            LOGGER.info('Finished writing {} rows to CSV for batch {}, total ingested so far: {}'.format(
+                CSV_CHUNK_SIZE, current_chunk - 1, current_chunk * CSV_CHUNK_SIZE
+            ))
+
         _add_kbc_metadata_to_df(chunk, catalog_entry)
 
         if current_chunk == 1:
@@ -317,8 +326,17 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
 
         csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
                                 str(current_chunk) + '.csv')
-        LOGGER.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
+
         chunk.to_csv(csv_path, index=False, mode='a', header=False)
+        LOGGER.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
+        chunk_end_time = utils.now()
+        chunk_processing_duration = (chunk_end_time - chunk_start_time).total_seconds()
+        LOGGER.info('Chunk {} processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
+
+    end_time = utils.now()
+    LOGGER.info('Finished chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
+    full_chunking_processing_duration = (end_time - start_time).total_seconds()
+    LOGGER.info('Total processing time: {} seconds'.format(full_chunking_processing_duration))
 
     # TODO: Determine if we need last PK fetched and these states, or if we can remove altogether
     # md_map = metadata.to_map(catalog_entry.metadata)
