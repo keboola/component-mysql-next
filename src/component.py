@@ -1096,8 +1096,8 @@ class Component(KBCEnvHandler):
                 for (_, dirs, file_names) in os.walk(self.tables_out_path):
                     directories.extend(dirs)
                     files.extend(file_names)
-                LOGGER.debug('All pre-manifest directories sent to output: {}'.format(directories))
-                LOGGER.debug('All pre-manifest files sent to output: {}'.format(files))
+                LOGGER.info('All pre-manifest directories sent to output: {}'.format(directories))
+                LOGGER.info('All pre-manifest files sent to output: {}'.format(files))
 
                 # Write manifest files
                 tables_and_columns = dict()
@@ -1119,12 +1119,12 @@ class Component(KBCEnvHandler):
                         # Confirm corresponding table or folder exists
                         table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name + '.csv')
                         if os.path.isdir(table_specific_sliced_path):
-                            LOGGER.debug('Table {} at location {} is a directory'.format(entry_table_name,
-                                                                                         table_specific_sliced_path))
+                            LOGGER.info('Table {} at location {} is a directory'.format(entry_table_name,
+                                                                                        table_specific_sliced_path))
                             output_is_sliced = True
                         elif os.path.isfile(table_specific_sliced_path):
-                            LOGGER.debug('Table {} at location {} is a file'.format(entry_table_name,
-                                                                                    table_specific_sliced_path))
+                            LOGGER.info('Table {} at location {} is a file'.format(entry_table_name,
+                                                                                   table_specific_sliced_path))
                             output_is_sliced = False
                         else:
                             LOGGER.info('NO DATA found for table {} in either a file or sliced table directory, this '
