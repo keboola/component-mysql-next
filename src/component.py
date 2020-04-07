@@ -12,12 +12,14 @@ TODO: Removing events for same ID in same period needs to not happen for binlogs
 TODO: Support for set data type [DONE]
 TODO: Send metadata to Keboola for columns [DONE]
 TODO: Remove incremental true from metadata during full table sync [DONE]
-TODO: Switch to not shell script execution
+TODO: Switch to not shell script execution [DONE]
 
 # Secondary To-do Items
 TODO: Table Mappings - Handle prior user inputs
 TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
+TODO: Support Ticket for UI for this component (maybe they handle SSL?)
+TODO: More User Options
 """
 import ast
 import base64
@@ -25,7 +27,9 @@ import binascii
 import copy
 import itertools
 import json
+import logging
 import os
+import sys
 
 import pandas as pd
 import paramiko
@@ -39,8 +43,6 @@ from io import StringIO
 from signal import signal, SIGPIPE, SIG_DFL
 from sshtunnel import SSHTunnelForwarder
 
-# from kbc.env_handler import KBCEnvHandler
-# from kbc.result import KBCTableDef, ResultWriter
 
 try:
     import core as core
@@ -77,7 +79,6 @@ except ImportError as e:
 
     from src.mysql.client import connect_with_backoff, MySQLConnection
 
-LOGGER = core.get_logger()
 signal(SIGPIPE, SIG_DFL)
 
 current_path = os.path.dirname(__file__)
@@ -258,7 +259,7 @@ def create_column_metadata(cols):
 def discover_catalog(mysql_conn, config):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
-    LOGGER.debug('Filtering databases via config to: {}'.format(filter_dbs_config))
+    logging.debug('Filtering databases via config to: {}'.format(filter_dbs_config))
 
     if filter_dbs_config:
         filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config])
@@ -403,18 +404,18 @@ def desired_columns(selected, table_schema):
 
     selected_but_unsupported = selected.intersection(unsupported)
     if selected_but_unsupported:
-        LOGGER.warning('Columns %s were selected but are not supported. ping them: {}'.format(
+        logging.warning('Columns %s were selected but are not supported. ping them: {}'.format(
             selected_but_unsupported))
 
     selected_but_nonexistent = selected.difference(all_columns)
     if selected_but_nonexistent:
-        LOGGER.warning(
+        logging.warning(
             'Columns %s were selected but do not exist.',
             selected_but_nonexistent)
 
     not_selected_but_automatic = automatic.difference(selected)
     if not_selected_but_automatic:
-        LOGGER.warning(
+        logging.warning(
             'Columns %s are primary keys but were not selected. Adding them.',
             not_selected_but_automatic)
 
@@ -426,7 +427,7 @@ def log_engine(mysql_conn, catalog_entry):
     database_name = common.get_database_name(catalog_entry)
 
     if is_view:
-        LOGGER.info("Beginning sync for view %s.%s", database_name, catalog_entry.table)
+        logging.info("Beginning sync for view %s.%s", database_name, catalog_entry.table)
     else:
         with connect_with_backoff(mysql_conn) as open_conn:
             with open_conn.cursor() as cur:
@@ -440,10 +441,7 @@ def log_engine(mysql_conn, catalog_entry):
                 row = cur.fetchone()
 
                 if row:
-                    LOGGER.info("Beginning sync for %s table %s.%s",
-                                row[0],
-                                database_name,
-                                catalog_entry.table)
+                    logging.info("Beginning sync for %s table %s.%s", row[0], database_name, catalog_entry.table)
 
 
 def is_valid_currently_syncing_stream(selected_stream, state):
@@ -484,8 +482,8 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
         database_name = common.get_database_name(catalog_entry)
 
         if not discovered_table:
-            LOGGER.warning('Database %s table %s was selected but does not exist',
-                           database_name, catalog_entry.table)
+            logging.warning('Database %s table %s was selected but does not exist',
+                            database_name, catalog_entry.table)
             continue
 
         selected = {k for k, v in catalog_entry.schema.properties.items()
@@ -542,7 +540,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
 
         if not stream_state:
             if replication_method == 'LOG_BASED':
-                LOGGER.info("LOG_BASED stream %s requires full historical sync", stream.tap_stream_id)
+                logging.info("LOG_BASED stream %s requires full historical sync", stream.tap_stream_id)
 
             streams_without_state.append(stream)
         elif stream_state and replication_method == 'LOG_BASED' and binlog_stream_requires_historical(stream, state):
@@ -551,7 +549,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
             if is_view:
                 raise Exception("Unable to replicate stream({}) with binlog because it's a view.".format(stream.stream))
 
-            LOGGER.info("LOG_BASED stream %s will resume its historical sync", stream.tap_stream_id)
+            logging.info("LOG_BASED stream %s will resume its historical sync", stream.tap_stream_id)
 
             streams_with_state.append(stream)
         elif stream_state and replication_method != 'LOG_BASED':
@@ -590,7 +588,7 @@ def get_binlog_streams(mysql_conn, catalog, config, state):
         stream_metadata = metadata.to_map(stream.metadata)
         replication_method = stream_metadata.get((), {}).get('replication-method').upper()
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
-        LOGGER.debug(stream_state)
+        logging.debug(stream_state)
 
         if replication_method == 'LOG_BASED' and not binlog_stream_requires_historical(stream, state):
             binlog_streams.append(stream)
@@ -607,21 +605,32 @@ def write_schema_message(catalog_entry, message_store=None, bookmark_properties=
 
 class Component(KBCEnvHandler):
     """Keboola extractor component."""
-    def __init__(self, data_path: str = None):
-        KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path)
+    def __init__(self, debug: bool = False, data_path: str = None):
+        KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
+                               log_level=logging.DEBUG if debug else logging.INFO)
+
+        if self.cfg_params.get(KEY_DEBUG):
+            debug = True
+
+        log_level = logging.DEBUG if debug else logging.INFO
+        # setup GELF if available
+        if os.getenv('KBC_LOGGER_ADDR', None):
+            self.set_gelf_logger(log_level)
+        else:
+            self.set_default_logger(log_level)
 
         self.files_out_path = os.path.join(self.data_path, 'out', 'files')
         self.files_in_path = os.path.join(self.data_path, 'in', 'files')
         self.state_out_file_path = os.path.join(self.data_path, 'out', 'state.json')
         self.params = self.cfg_params
-        LOGGER.info('Running version %s', APP_VERSION)
-        LOGGER.info('Loading configuration...')
+        logging.info('Running version %s', APP_VERSION)
+        logging.info('Loading configuration...')
 
         try:
             self.validate_config()
             self.validate_image_parameters(MANDATORY_IMAGE_PARS)
         except ValueError as err:
-            LOGGER.exception(err)
+            logging.exception(err)
             exit(1)
 
         self.mysql_config_params = {
@@ -646,7 +655,7 @@ class Component(KBCEnvHandler):
     # Sync Methods
     @staticmethod
     def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None):
-        LOGGER.info("Stream %s is using incremental replication", catalog_entry.stream)
+        logging.info("Stream %s is using incremental replication", catalog_entry.stream)
 
         md_map = metadata.to_map(catalog_entry.metadata)
         replication_key = md_map.get((), {}).get('replication-key')
@@ -658,8 +667,8 @@ class Component(KBCEnvHandler):
         write_schema_message(catalog_entry=catalog_entry, bookmark_properties=[replication_key])
 
         if optional_limit:
-            LOGGER.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
-                        int(optional_limit))
+            logging.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
+                         int(optional_limit))
             incremental.sync_table(mysql_conn, catalog_entry, state, columns, int(optional_limit))
         else:
             incremental.sync_table(mysql_conn, catalog_entry, state, columns)
@@ -690,12 +699,12 @@ class Component(KBCEnvHandler):
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
         if log_file and log_pos and max_pk_values:
-            LOGGER.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
+            logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
             full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
                                          tables_destination=tables_destination)
 
         else:
-            LOGGER.info("Performing initial full table sync for LOG_BASED table {}".format(
+            logging.info("Performing initial full table sync for LOG_BASED table {}".format(
                 catalog_entry.tap_stream_id))
 
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
@@ -718,7 +727,7 @@ class Component(KBCEnvHandler):
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
     def do_sync_full_table(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None):
-        LOGGER.info("Stream %s is using full table replication", catalog_entry.stream)
+        logging.info("Stream %s is using full table replication", catalog_entry.stream)
         key_properties = common.get_key_properties(catalog_entry)
 
         write_schema_message(catalog_entry)
@@ -737,13 +746,13 @@ class Component(KBCEnvHandler):
 
     def sync_non_binlog_streams(self, mysql_conn, non_binlog_catalog, config, state, tables_destination: str = None):
         if tables_destination is None:
-            LOGGER.info('No table destination specified, so will not work on new CSV write implementation')
+            logging.info('No table destination specified, so will not work on new CSV write implementation')
 
         for catalog_entry in non_binlog_catalog.streams:
             columns = list(catalog_entry.schema.properties.keys())
 
             if not columns:
-                LOGGER.warning('There are no columns selected for stream %s, skipping it.', catalog_entry.stream)
+                logging.warning('There are no columns selected for stream %s, skipping it.', catalog_entry.stream)
                 continue
 
             state = core.set_currently_syncing(state, catalog_entry.tap_stream_id)
@@ -791,9 +800,9 @@ class Component(KBCEnvHandler):
 
     def do_sync(self, mysql_conn, config, mysql_config, catalog, state, message_store: core.MessageStore = None):
         non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
-        LOGGER.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
+        logging.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
         binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
-        LOGGER.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
+        logging.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
 
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
                                      tables_destination=self.tables_out_path)
@@ -811,26 +820,26 @@ class Component(KBCEnvHandler):
                            @@session.max_allowed_packet as max_allowed_packet,
                            @@session.interactive_timeout as interactive_timeout''')
                     row = cur.fetchone()
-                    LOGGER.info('Server Parameters: ' +
-                                'version: %s, ' +
-                                'wait_timeout: %s, ' +
-                                'innodb_lock_wait_timeout: %s, ' +
-                                'max_allowed_packet: %s, ' +
-                                'interactive_timeout: %s',
-                                *row)
+                    logging.info('Server Parameters: ' +
+                                 'version: %s, ' +
+                                 'wait_timeout: %s, ' +
+                                 'innodb_lock_wait_timeout: %s, ' +
+                                 'max_allowed_packet: %s, ' +
+                                 'interactive_timeout: %s',
+                                 *row)
                 with open_conn.cursor() as cur:
                     cur.execute('''
                     show session status where Variable_name IN ('Ssl_version', 'Ssl_cipher')''')
                     rows = cur.fetchall()
                     mapped_row = dict(rows)
-                    LOGGER.info('Server SSL Parameters (blank means SSL is not active): ' +
-                                '[ssl_version: %s], ' +
-                                '[ssl_cipher: %s]',
-                                mapped_row['Ssl_version'],
-                                mapped_row['Ssl_cipher'])
+                    logging.info('Server SSL Parameters (blank means SSL is not active): ' +
+                                 '[ssl_version: %s], ' +
+                                 '[ssl_cipher: %s]',
+                                 mapped_row['Ssl_version'],
+                                 mapped_row['Ssl_cipher'])
 
             except pymysql.err.InternalError as ie:
-                LOGGER.warning("Encountered error checking server params. Error: (%s) %s", *ie.args)
+                logging.warning("Encountered error checking server params. Error: (%s) %s", *ie.args)
     # End of sync methods
 
     def write_table_mappings_file(self, table_mapping: Catalog, file_name: str = 'table_mappings.json'):
@@ -930,7 +939,7 @@ class Component(KBCEnvHandler):
             if column_type.startswith(db_data_type):
                 return 'NUMERIC'
 
-        LOGGER.warning('Processed data type {} does not match any KBC base types'.format(column_type))
+        logging.warning('Processed data type {} does not match any KBC base types'.format(column_type))
 
     def create_manifests(self, entry: dict, data_path: str, columns: list = None, column_metadata: dict = None,
                          set_incremental: bool = True):
@@ -999,7 +1008,7 @@ class Component(KBCEnvHandler):
 
         with open(file_name + '.manifest', 'w') as manifest_file:
             json.dump(manifest, manifest_file)
-            LOGGER.info('Wrote manifest table {} with metadata {}'.format(file_name + '.manifest', str(manifest)))
+            logging.info('Wrote manifest table {}'.format(file_name + '.manifest'))
 
     @staticmethod
     def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list = None) -> None:
@@ -1009,11 +1018,11 @@ class Component(KBCEnvHandler):
         Events. Each event returns the current state of the row, so we just want the latest row per extraction.
         """
         if primary_keys:
-            LOGGER.info('Keeping only latest per primary key from binary row event results for {} '
-                        'based on table primary keys: {}'.format(csv_table_path, primary_keys))
+            logging.info('Keeping only latest per primary key from binary row event results for {} '
+                         'based on table primary keys: {}'.format(csv_table_path, primary_keys))
         else:
-            LOGGER.warning('Table at path {} does not have primary key, so no binlog de-duplication will occur, '
-                           'records must be processed downstream'.format(csv_table_path))
+            logging.warning('Table at path {} does not have primary key, so no binlog de-duplication will occur, '
+                            'records must be processed downstream'.format(csv_table_path))
             return
 
         with metrics.job_timer('latest_binlog_results') as timer:
@@ -1031,18 +1040,13 @@ class Component(KBCEnvHandler):
         table_mappings = {}
         file_input_path = self._check_file_inputs()
 
-        # ssh_params = {
-        #     "ssh_address_or_host": self.cfg_params[KEY_SSH_HOST],
-        #     "ssh_pkey": pkey
-        # }
-
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
             b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
             try:
                 input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
             except binascii.Error as bin_err:
-                LOGGER.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
-                             'key input variable. Detail: {}'.format(bin_err))
+                logging.error('Failed to base64-decode the private key, confirm you have base64-encoded your private '
+                              'key input variable. Detail: {}'.format(bin_err))
                 exit(1)
 
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
@@ -1052,7 +1056,6 @@ class Component(KBCEnvHandler):
                 ssh_pkey=pkey_from_input,
                 remote_bind_address=(self.cfg_params[KEY_MYSQL_HOST], self.cfg_params[KEY_MYSQL_PORT]),
                 local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
-                logger=LOGGER,
                 ssh_config_file=None,
                 allow_agent=False
             )
@@ -1061,9 +1064,9 @@ class Component(KBCEnvHandler):
 
         with context_manager as server:
             if server:  # True if set an SSH tunnel returns false if using the null context.
-                LOGGER.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
+                logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
             else:
-                LOGGER.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
+                logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
             mysql_client = MySQLConnection(self.mysql_config_params)
             # TODO: Consider logging server details here.
@@ -1073,14 +1076,14 @@ class Component(KBCEnvHandler):
                                                              validate=True).decode('utf-8'))
             elif file_input_path:
                 manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
-                LOGGER.info('Fetching table mappings from file input mapping configuration: {}.'.format(
+                logging.info('Fetching table mappings from file input mapping configuration: {}.'.format(
                     manual_table_mappings_file))
                 with open(manual_table_mappings_file, 'r') as mappings_file:
                     table_mappings = json.load(mappings_file)
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
-                LOGGER.info('Fetching only object and field names, not running full extraction.')
+                logging.info('Fetching only object and field names, not running full extraction.')
                 table_mapping = discover_catalog(mysql_client, self.params)
 
                 # TODO: Retain prior selected choices by user.
@@ -1090,7 +1093,7 @@ class Component(KBCEnvHandler):
                 # Run extractor data sync.
                 manually_entered_b64_state = self.cfg_params.get(KEY_STATE_JSON)
                 if manually_entered_b64_state:
-                    LOGGER.info('Manually input prior state parameter populated for incremental execution')
+                    logging.info('Manually input prior state parameter populated for incremental execution')
                     prior_state = base64.b64decode(manually_entered_b64_state, validate=True).decode('utf-8')
                 elif self.cfg_params[KEY_INCREMENTAL_SYNC]:
                     prior_state = self.get_state_file() or {}
@@ -1098,11 +1101,11 @@ class Component(KBCEnvHandler):
                     prior_state = {}
 
                 if prior_state:
-                    LOGGER.info('Using prior state file to execute sync')
+                    logging.info('Using prior state file to execute sync')
                 elif prior_state == {}:
-                    LOGGER.info('No prior state was found, will execute full data sync')
+                    logging.info('No prior state was found, will execute full data sync')
                 else:
-                    LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
+                    logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
 
                 message_store = core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
                                                   output_table_path=self.tables_out_path)
@@ -1124,8 +1127,8 @@ class Component(KBCEnvHandler):
                 # for (_, dirs, file_names) in os.walk(self.tables_out_path):
                 #     directories.extend(dirs)
                 #     files.extend(file_names)
-                # LOGGER.debug('All pre-manifest directories sent to output: {}'.format(directories))
-                # LOGGER.debug('All pre-manifest files sent to output: {}'.format(files))
+                # logging.debug('All pre-manifest directories sent to output: {}'.format(directories))
+                # logging.debug('All pre-manifest files sent to output: {}'.format(files))
 
                 # Write manifest files
                 tables_and_columns = dict()
@@ -1134,7 +1137,7 @@ class Component(KBCEnvHandler):
                         tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
                         for item, value in tables_and_columns.items():
                             tables_and_columns[item] = [column.strip().upper() for column in ast.literal_eval(value)]
-                        LOGGER.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
+                        logging.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
 
                 for entry in catalog.to_dict()['streams']:
                     entry_table_name = entry.get('table_name')
@@ -1147,47 +1150,47 @@ class Component(KBCEnvHandler):
                         # Confirm corresponding table or folder exists
                         table_specific_sliced_path = os.path.join(self.tables_out_path,
                                                                   entry_table_name.upper() + '.csv')
-                        LOGGER.info('Searching for output destination file/dir: {}'.format(table_specific_sliced_path))
+                        logging.info('Searching for output destination file/dir: {}'.format(table_specific_sliced_path))
                         if os.path.isdir(table_specific_sliced_path):
-                            LOGGER.info('Table {} at location {} is a directory'.format(entry_table_name,
+                            logging.info('Table {} at location {} is a directory'.format(entry_table_name,
                                                                                         table_specific_sliced_path))
                             output_is_sliced = True
                         elif os.path.isfile(table_specific_sliced_path):
-                            LOGGER.info('Table {} at location {} is a file'.format(entry_table_name,
+                            logging.info('Table {} at location {} is a file'.format(entry_table_name,
                                                                                    table_specific_sliced_path))
                             output_is_sliced = False
                         else:
                             output_is_sliced = False
-                            LOGGER.info('NO DATA found for table {} in either a file or sliced table directory, this '
+                            logging.info('NO DATA found for table {} in either a file or sliced table directory, this '
                                         'table is not being synced'.format(entry_table_name))
 
                         # TODO: Consider other options for writing to storage based on user choices
-                        LOGGER.info('Table has rep method {} and user incremental param is {}'.format(
+                        logging.info('Table has rep method {} and user incremental param is {}'.format(
                             table_replication_method, self.cfg_params[KEY_INCREMENTAL_SYNC]
                         ))
                         if table_replication_method == 'FULL_TABLE' or not self.cfg_params[KEY_INCREMENTAL_SYNC]:
-                            LOGGER.info('Manifest file will have incremental false for Full Table syncs')
+                            logging.info('Manifest file will have incremental false for Full Table syncs')
                             manifest_incremental = False
                         else:
-                            LOGGER.info('Manifest file will have incremental True for {} sync'.format(
+                            logging.info('Manifest file will have incremental True for {} sync'.format(
                                 table_replication_method
                             ))
                             manifest_incremental = True
 
                         table_column_metadata = self.get_table_column_metadata(column_metadata)
 
-                        LOGGER.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
+                        logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
                                                                                  entry_table_name))
                         if output_is_sliced:
                             if core.find_files(table_specific_sliced_path, '*.csv'):
-                                LOGGER.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
+                                logging.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
                                     entry_table_name, self.tables_out_path))
                                 self.create_manifests(entry, self.tables_out_path,
                                                       columns=list(tables_and_columns.get(entry_table_name)),
                                                       column_metadata=table_column_metadata,
                                                       set_incremental=manifest_incremental)
                         elif os.path.isfile(table_specific_sliced_path):
-                            LOGGER.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
+                            logging.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
                                 entry_table_name, self.tables_out_path))
                             self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
                                                   set_incremental=manifest_incremental)
@@ -1195,12 +1198,12 @@ class Component(KBCEnvHandler):
                             # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
                             self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'))
                         else:
-                            LOGGER.info('No manifest file found for selected table {}, because no data was synced '
-                                        'from the database for this table. This may be expected behavior if the table '
-                                        'is empty or if no new rows were added (if running incrementally)'.format(
+                            logging.info('No manifest file found for selected table {}, because no data was synced '
+                                         'from the database for this table. This may be expected behavior if the table '
+                                         'is empty or if no new rows were added (if running incrementally)'.format(
                                             entry_table_name))
 
-                        LOGGER.info('Got final state {}'.format(message_store.get_state()))
+                        logging.info('Got final state {}'.format(message_store.get_state()))
                         self.write_state_file(message_store.get_state())
                         file_state_destination = os.path.join(self.files_out_path, 'state.json')
                         self.write_state_file(message_store.get_state(), output_path=file_state_destination)
@@ -1211,26 +1214,31 @@ class Component(KBCEnvHandler):
                 for (_, dirs, file_names) in os.walk(self.tables_out_path):
                     directories.extend(dirs)
                     files.extend(file_names)
-                LOGGER.debug('All directories sent to output: {}'.format(directories))
-                LOGGER.debug('All files sent to output: {}'.format(files))
+                logging.debug('All directories sent to output: {}'.format(directories))
+                logging.debug('All files sent to output: {}'.format(files))
             else:
-                LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
-                             'specify a table mappings file manually or via the File Input Mappings configuration.')
+                logging.error('You have either specified incorrect input parameters, or have not chosen to either '
+                              'specify a table mappings file manually or via the File Input Mappings configuration.')
                 exit(1)
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        set_debug = sys.argv[1]
+    else:
+        set_debug = False
+
     try:
         if os.path.dirname(current_path) == '/code':
             # Running in docker, assumes volume ./code
-            comp = Component()
+            comp = Component(debug=set_debug)
             comp.run()
         else:
             # Running locally, not in Docker
             debug_data_path = os.path.join(module_path, 'data')
-            comp = Component(data_path=debug_data_path)
+            comp = Component(debug=set_debug, data_path=debug_data_path)
             comp.run()
 
     except Exception as generic_err:
-        LOGGER.exception(generic_err)
+        logging.exception(generic_err)
         exit(1)

@@ -5,6 +5,7 @@ import csv
 import json
 import logging
 import os
+import sys
 from _datetime import timedelta
 from collections import Counter
 
@@ -13,7 +14,9 @@ import math
 import pytz
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+
 from keboola import docker
+from pygelf import GelfUdpHandler, GelfTcpHandler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +29,10 @@ class KBCEnvHandler:
 
     It contains some useful methods helping with boilerplate tasks.
     """
-    def __init__(self, mandatory_params, data_path=None):
+    LOGGING_TYPE_STD = 'std'
+    LOGGING_TYPE_GELF = 'gelf'
+
+    def __init__(self, mandatory_params, data_path=None, log_level='INFO', logging_type=None):
         """
 
         Args:
@@ -37,6 +43,18 @@ class KBCEnvHandler:
                              from KBC_DATADIR if present, otherwise '/data' as default
             env variable by default.
         """
+        # setup GELF if available
+        # backward compatibility
+        logging_type_inf = KBCEnvHandler.LOGGING_TYPE_GELF if os.getenv('KBC_LOGGER_ADDR',
+                                                                        None) else KBCEnvHandler.LOGGING_TYPE_STD
+        if not logging_type:
+            logging_type = logging_type_inf
+
+        if logging_type == KBCEnvHandler.LOGGING_TYPE_STD:
+            self.set_default_logger(log_level)
+        elif logging_type == KBCEnvHandler.LOGGING_TYPE_GELF:
+            self.set_gelf_logger(log_level)
+
         if not data_path and os.environ.get('KBC_DATADIR'):
             data_path = os.environ.get('KBC_DATADIR')
         elif not data_path:
@@ -183,6 +201,72 @@ class KBCEnvHandler:
         if missing_fields:
             raise ValueError(
                 'Missing mandatory {} fields: [{}] '.format(_type, ', '.join(missing_fields)))
+
+    # ================================= Logging ==============================
+    def set_default_logger(self, log_level=logging.INFO):  # noqa: E301
+        """
+        Sets default console logger.
+
+        Args:
+            log_level: logging level, default: 'INFO'
+
+        Returns: logging object
+
+        """
+
+        class InfoFilter(logging.Filter):
+            def filter(self, rec):
+                return rec.levelno in (logging.DEBUG, logging.INFO)
+
+        hd1 = logging.StreamHandler(sys.stdout)
+        hd1.addFilter(InfoFilter())
+        hd2 = logging.StreamHandler(sys.stderr)
+        hd2.setLevel(logging.WARNING)
+
+        logging.getLogger().setLevel(log_level)
+        # remove default handler
+        for h in logging.getLogger().handlers:
+            logging.getLogger().removeHandler(h)
+        logging.getLogger().addHandler(hd1)
+        logging.getLogger().addHandler(hd2)
+
+        logger = logging.getLogger()
+        return logger
+
+    def set_gelf_logger(self, log_level=logging.INFO, transport_layer='TCP', stdout=False):  # noqa: E301
+        """
+        Sets gelf console logger. Handler for console output is not included by default,
+        for testing in non-gelf environments use stdout=True.
+
+        Args:
+            log_level: logging level, default: 'INFO'
+            transport_layer: 'TCP' or 'UDP', default:'UDP
+            stdout:
+
+        Returns: logging object
+
+        """
+        # remove existing handlers
+        for h in logging.getLogger().handlers:
+            logging.getLogger().removeHandler(h)
+        if stdout:
+            self.set_default_logger(log_level)
+
+        # gelf handler setup
+        host = os.getenv('KBC_LOGGER_ADDR', 'localhost')
+        port = os.getenv('KBC_LOGGER_PORT', 12201)
+        if transport_layer == 'TCP':
+            gelf = GelfTcpHandler(host=host, port=port)
+        elif transport_layer == 'UDP':
+            gelf = GelfUdpHandler(host=host, port=port)
+        else:
+            raise ValueError(F'Unsupported gelf transport layer: {transport_layer}. Choose TCP or UDP')
+
+        logging.getLogger().setLevel(log_level)
+        logging.getLogger().addHandler(gelf)
+
+        logger = logging.getLogger()
+        return logger
 
     def _validate_par_group(self, par_group, parameters):
         missing_fields = []
