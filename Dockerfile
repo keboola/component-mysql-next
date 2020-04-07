@@ -12,6 +12,4 @@ RUN pip install -r /code/requirements.txt
 
 WORKDIR /code/
 
-RUN chmod 777 /code/scripts/run_pipeline.sh
-
-CMD /code/scripts/run_pipeline.sh
+CMD ["python", "-u", "/code/src/component.py"]
