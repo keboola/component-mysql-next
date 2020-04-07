@@ -31,8 +31,6 @@ except ImportError:
     import src.mysql.replication.common as common
     from src.mysql.client import connect_with_backoff, make_connection_wrapper
 
-LOGGER = logging.getLogger(__name__)
-
 BOOKMARK_KEYS = {'log_file', 'log_pos', 'version'}
 UPDATE_BOOKMARK_PERIOD = 10000
 
@@ -322,12 +320,12 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
             desired_columns = streams_map_entry.get('desired_columns')
 
             if not catalog_entry:
-                LOGGER.debug('No catalog entry, skip events number: {}'.format(events_skipped))
+                logging.debug('No catalog entry, skip events number: {}'.format(events_skipped))
                 events_skipped = events_skipped + 1
 
                 if events_skipped % UPDATE_BOOKMARK_PERIOD == 0:
-                    LOGGER.info("Skipped %s events so far as they were not for selected tables; %s rows extracted",
-                                events_skipped, rows_saved)
+                    logging.info("Skipped %s events so far as they were not for selected tables; %s rows extracted",
+                                 events_skipped, rows_saved)
 
             elif catalog_entry:
                 if isinstance(binlog_event, WriteRowsEvent):
@@ -342,7 +340,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
                     rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                           rows_saved, time_extracted, message_store=message_store)
                 else:
-                    LOGGER.info("Skipping event for table %s.%s as it is not an INSERT, UPDATE, or DELETE",
+                    logging.info("Skipping event for table %s.%s as it is not an INSERT, UPDATE, or DELETE",
                                 binlog_event.schema,
                                 binlog_event.table)
 
@@ -373,15 +371,15 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
 
     if config.get('server_id'):
         server_id = int(config.get('server_id'))
-        LOGGER.info("Using provided server_id=%s", server_id)
+        logging.info("Using provided server_id=%s", server_id)
     else:
         server_id = fetch_server_id(mysql_conn)
-        LOGGER.info("No server_id provided, will use global server_id=%s", server_id)
+        logging.info("No server_id provided, will use global server_id=%s", server_id)
 
     connection_wrapper = make_connection_wrapper(config)
 
     slave_uuid = 'kbc-slave-{}-{}'.format(str(uuid.uuid4()), server_id)
-    LOGGER.info('Connecting with Stream Reader to Slave UUID {}'.format(slave_uuid))
+    logging.info('Connecting with Stream Reader to Slave UUID {}'.format(slave_uuid))
     try:
         reader = BinLogStreamReader(
             connection_settings={},
@@ -394,7 +392,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
             freeze_schema=True,
             pymysql_wrapper=connection_wrapper
         )
-        LOGGER.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
+        logging.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
         _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_store=message_store)
     finally:
         # BinLogStreamReader doesn't implement the `with` methods

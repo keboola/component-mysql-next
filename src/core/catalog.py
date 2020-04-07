@@ -8,15 +8,12 @@ import sys
 from . import metadata as metadata_module
 from .bookmarks import get_currently_syncing
 from .schema import Schema
-from .logger import get_logger
-
-LOGGER = logging.getLogger(__name__)
 
 
 def write_catalog(catalog):
     # If the catalog has no streams, log a warning
     if not catalog.streams:
-        LOGGER.warning("Catalog being written with no streams.")
+        logging.warning("Catalog being written with no streams.")
 
     json.dump(catalog.to_dict(), sys.stdout, indent=2)
 
@@ -165,7 +162,7 @@ class Catalog:
     def get_selected_streams(self, state):
         for stream in self._shuffle_streams(state):
             if not stream.is_selected():
-                LOGGER.info('Skipping stream: %s', stream.tap_stream_id)
+                logging.info('Skipping stream: %s', stream.tap_stream_id)
                 continue
 
             yield stream

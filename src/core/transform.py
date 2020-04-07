@@ -5,14 +5,10 @@ from jsonschema import RefResolver
 
 try:
     import core.metadata
-    from core.logger import get_logger
     from core.utils import (strftime, strptime_to_utc)
 except ImportError:
     import src.core.metadata
-    from src.core.logger import get_logger
     from src.core.utils import (strftime, strptime_to_utc)
-
-LOGGER = logging.getLogger(__name__)
 
 NO_INTEGER_DATETIME_PARSING = "no-integer-datetime-parsing"
 UNIX_SECONDS_INTEGER_DATETIME_PARSING = "unix-seconds-integer-datetime-parsing"
@@ -29,7 +25,7 @@ def string_to_datetime(value):
     try:
         return strftime(strptime_to_utc(value))
     except Exception as ex:
-        LOGGER.warning("%s, (%s)", ex, value)
+        logging.warning("%s, (%s)", ex, value)
         return None
 
 
@@ -96,20 +92,20 @@ class Transformer:
 
     def log_warning(self):
         if self.filtered:
-            LOGGER.debug("Filtered %s paths during transforms "
-                         "as they were unsupported or not selected:\n\t%s",
-                         len(self.filtered),
-                         "\n\t".join(sorted(self.filtered)))
+            logging.debug("Filtered %s paths during transforms "
+                          "as they were unsupported or not selected:\n\t%s",
+                          len(self.filtered),
+                          "\n\t".join(sorted(self.filtered)))
             # Output list format to parse for reporting
-            LOGGER.debug("Filtered paths list: %s",
-                         sorted(self.filtered))
+            logging.debug("Filtered paths list: %s",
+                          sorted(self.filtered))
 
         if self.removed:
-            LOGGER.debug("Removed %s paths during transforms:\n\t%s",
-                         len(self.removed),
-                         "\n\t".join(sorted(self.removed)))
+            logging.debug("Removed %s paths during transforms:\n\t%s",
+                          len(self.removed),
+                          "\n\t".join(sorted(self.removed)))
             # Output list format to parse for reporting
-            LOGGER.debug("Removed paths list: %s", sorted(self.removed))
+            logging.debug("Removed paths list: %s", sorted(self.removed))
 
     def __enter__(self):
         return self
@@ -170,7 +166,7 @@ class Transformer:
                 return success, transformed_data
         else:  # pylint: disable=useless-else-on-loop
             # exhausted all types and didn't return, so we failed
-            self.errors.append(Error(path, data, schema, logging_level=LOGGER.level))
+            self.errors.append(Error(path, data, schema, logging_level=logging.level))
             return False, None
 
     def _transform_anyof(self, data, schema, path):
@@ -181,7 +177,7 @@ class Transformer:
                 return success, transformed_data
         else:  # pylint: disable=useless-else-on-loop
             # exhaused all schemas and didn't return, so we failed :-(
-            self.errors.append(Error(path, data, schema, logging_level=LOGGER.level))
+            self.errors.append(Error(path, data, schema, logging_level=logging.level))
             return False, None
 
     def _transform_object(self, data, schema, path, pattern_properties):

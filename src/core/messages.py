@@ -9,12 +9,8 @@ import simplejson as json
 
 try:
     import core.utils as u
-    from core.logger import get_logger
 except ImportError:
     import src.core.utils as u
-    from src.core.logger import get_logger
-
-LOGGER = logging.getLogger(__name__)
 
 
 class MessageStore(dict):
@@ -319,7 +315,7 @@ def parse_message(msg):
             try:
                 time_extracted = ciso8601.parse_datetime(time_extracted)
             except:
-                LOGGER.warning("unable to parse time_extracted with ciso8601 library")
+                logging.warning("unable to parse time_extracted with ciso8601 library")
                 time_extracted = None
 
             # time_extracted = dateutil.parser.parse(time_extracted)
@@ -349,7 +345,7 @@ def format_message(message):
 
 def write_message(message, database_schema: str = None, message_store: MessageStore = None):
     if message_store is None:  # Specifically none, as default message store is empty dict
-        LOGGER.info('GOT TO OLD WRITE FOR MESSAGE: {}'.format(message))
+        logging.info('GOT TO OLD WRITE FOR MESSAGE: {}'.format(message))
         try:
             sys.stdout.write(format_message(message) + '\n')
             sys.stdout.flush()

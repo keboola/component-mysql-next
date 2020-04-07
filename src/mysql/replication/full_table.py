@@ -17,8 +17,6 @@ except ImportError:
     import src.mysql.replication.binlog as binlog
     import src.mysql.replication.common as common
 
-LOGGER = logging.getLogger(__name__)
-
 # Date-type fields included as may be potentially part of composite key.
 RESUMABLE_PK_TYPES = {'tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'char', 'varchar',
                       'datetime', 'timestamp', 'date', 'time'}
@@ -65,8 +63,8 @@ def sync_is_resumable(mysql_conn, catalog_entry):
                     raise Exception("Primary key column {} does not exist.".format(pk))
 
                 if result[0] not in RESUMABLE_PK_TYPES:
-                    LOGGER.warning("Found primary key column %s with type %s. Will not be able " +
-                                   "to resume interrupted FULL_TABLE sync using this key.", pk, result[0])
+                    logging.warning("Found primary key column %s with type %s. Will not be able " +
+                                    "to resume interrupted FULL_TABLE sync using this key.", pk, result[0])
                     return False
 
     return True
@@ -186,7 +184,7 @@ def update_incremental_full_table_state(catalog_entry, state, cursor):
                                       'max_pk_values') or get_max_pk_values(cursor, catalog_entry)
 
     if not max_pk_values:
-        LOGGER.info("No max value for PK found for table {}".format(catalog_entry.table))
+        logging.info("No max value for PK found for table {}".format(catalog_entry.table))
     else:
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values', max_pk_values)
 
@@ -222,10 +220,8 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
             select_sql = common.generate_select_sql(catalog_entry, columns)
 
             if perform_resumable_sync:
-                LOGGER.info("Full table sync is "
-                            ""
-                            ""
-                            "resumable based on primary key definition, replicating incrementally")
+                logging.info("Full table sync is "
+                             "resumable based on primary key definition, replicating incrementally")
 
                 state = update_incremental_full_table_state(catalog_entry, state, cur)
                 pk_clause = generate_pk_clause(catalog_entry, state)
@@ -271,7 +267,7 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
             select_sql = common.generate_select_sql(catalog_entry, columns)
 
             if perform_resumable_sync:
-                LOGGER.info("Full table sync is resumable based on primary key definition, replicating incrementally")
+                logging.info("Full table sync is resumable based on primary key definition, replicating incrementally")
 
                 state = update_incremental_full_table_state(catalog_entry, state, cur)
                 pk_clause = generate_pk_clause(catalog_entry, state)

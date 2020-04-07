@@ -18,8 +18,6 @@ from dateutil.relativedelta import relativedelta
 from keboola import docker
 from pygelf import GelfUdpHandler, GelfTcpHandler
 
-LOGGER = logging.getLogger(__name__)
-
 DEFAULT_DEL = ','
 DEFAULT_ENCLOSURE = '"'
 
@@ -300,7 +298,7 @@ class KBCEnvHandler:
         try:
             return os.environ["KBC_TOKEN"]
         except Exception:
-            LOGGER.error("Storage token is missing in KBC_TOKEN env variable.")
+            logging.error("Storage token is missing in KBC_TOKEN env variable.")
             exit(2)
 
     def get_authorization(self):
@@ -326,7 +324,7 @@ class KBCEnvHandler:
         try:
             return self.configuration.config_data["authorization"]["oauth_api"]["credentials"]
         except KeyError:
-            LOGGER.error("Authorization is missing in configuration file.")
+            logging.error("Authorization is missing in configuration file.")
             exit(2)
 
     def get_input_table_by_name(self, table_name):
@@ -349,10 +347,10 @@ class KBCEnvHandler:
             dict:
 
         """
-        LOGGER.info('Loading state file...')
+        logging.info('Loading state file...')
         state_file_path = os.path.join(self.data_path, 'in', 'state.json')
         if not os.path.isfile(state_file_path):
-            LOGGER.info('State file not found. First run?')
+            logging.info('State file not found. First run?')
             return
         try:
             with open(state_file_path, 'r') \

@@ -8,8 +8,6 @@ import logging
 import backoff
 import pymysql
 
-LOGGER = logging.getLogger(__name__)
-
 MAX_CONNECT_RETRIES = 5
 BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
@@ -60,9 +58,9 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         )
 
     if logged_warnings:
-        LOGGER.info('Setting session parameters failed for at least one process, which may impact execution speed.')
+        logging.info('Setting session parameters failed for at least one process, which may impact execution speed.')
         for warn_message in logged_warnings:
-            LOGGER.warning(warn_message)
+            logging.warning(warn_message)
 
 
 class MySQLConnection(pymysql.connections.Connection):
@@ -94,7 +92,6 @@ class MySQLConnection(pymysql.connections.Connection):
 def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
-            LOGGER.info
             config["cursorclass"] = kwargs.get('cursorclass')
             super().__init__(config)
 

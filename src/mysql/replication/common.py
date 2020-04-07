@@ -23,7 +23,6 @@ except ImportError:
     from src.core import metadata
     from src.core import utils
 
-LOGGER = logging.getLogger(__name__)
 CURRENT_PATH = os.path.dirname(__file__)
 
 # NB: Upgrading pymysql from 0.7.11 --> 0.9.3 had the undocumented change
@@ -218,7 +217,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
     query_string = cursor.mogrify(select_sql, params)
     time_extracted = utils.now()
 
-    LOGGER.info('Running %s', query_string)
+    logging.info('Running %s', query_string)
     cursor.execute(select_sql, params)
 
     row = cursor.fetchone()
@@ -262,8 +261,8 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
             if rows_saved % 1000 == 0:
                 core.write_message(core.StateMessage(value=copy.deepcopy(state)))
                 if rows_saved % 1000000 == 0:
-                    LOGGER.info('Ingested row count has hit {} for table {}'.format(rows_saved,
-                                                                                    catalog_entry.tap_stream_id))
+                    logging.info('Ingested row count has hit {} for table {}'.format(rows_saved,
+                                                                                     catalog_entry.tap_stream_id))
 
             row = cursor.fetchone()
 
@@ -289,17 +288,17 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
 
     query_string = cursor.mogrify(select_sql, params)
 
-    LOGGER.info('Running %s', query_string)
+    logging.info('Running %s', query_string)
     # Chunk Changes Here
     current_chunk = 0
 
-    LOGGER.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
+    logging.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
     start_time = utils.now()
     for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE):
         chunk_start_time = utils.now()
         current_chunk += 1
         if current_chunk > 1:
-            LOGGER.info('Finished writing {} rows to CSV for batch {}, total ingested so far: {}'.format(
+            logging.info('Finished writing {} rows to CSV for batch {}, total ingested so far: {}'.format(
                 CSV_CHUNK_SIZE, current_chunk - 1, current_chunk * CSV_CHUNK_SIZE
             ))
 
@@ -315,7 +314,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
             with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
                 writer = csv.writer(headers_csv, delimiter='\t')
                 writer.writerow([catalog_entry.table, headers])
-                LOGGER.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
+                logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
                     catalog_entry.table, headers
                 ))
 
@@ -328,15 +327,15 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
                                 str(current_chunk) + '.csv')
 
         chunk.to_csv(csv_path, index=False, mode='a', header=False)
-        LOGGER.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
+        logging.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
         chunk_end_time = utils.now()
         chunk_processing_duration = (chunk_end_time - chunk_start_time).total_seconds()
-        LOGGER.info('Chunk {} processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
+        logging.info('Chunk {} processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
 
     end_time = utils.now()
-    LOGGER.info('Finished chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
+    logging.info('Finished chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
     full_chunking_processing_duration = (end_time - start_time).total_seconds()
-    LOGGER.info('Total processing time: {} seconds'.format(full_chunking_processing_duration))
+    logging.info('Total processing time: {} seconds'.format(full_chunking_processing_duration))
 
     # TODO: Determine if we need last PK fetched and these states, or if we can remove altogether
     # md_map = metadata.to_map(catalog_entry.metadata)
