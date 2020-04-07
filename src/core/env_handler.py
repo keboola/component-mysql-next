@@ -279,16 +279,20 @@ class KBCEnvHandler:
                 "Unable to read state file state.json"
             )
 
-    def write_state_file(self, state_dict):
+    def write_state_file(self, state_dict: dict, output_path: str = None):
         """
         Stores state file.
         Args:
-            state_dict:
+            state_dict: State output
+            output_path: Full output path file including name, optional
         """
-        if not isinstance(state_dict, dict):
-            raise TypeError('Dictionary expected as a state file datatype!')
+        if output_path is None:
+            output_path = os.path.join(self.configuration.data_dir, 'out', 'state.json')
 
-        with open(os.path.join(self.configuration.data_dir, 'out', 'state.json'), 'w+') as state_file:
+        if not isinstance(state_dict, dict):
+            raise TypeError('Dictionary expected as the state file data type!')
+
+        with open(output_path, 'w+') as state_file:
             json.dump(state_dict, state_file)
 
     def get_and_remove_headers_in_all(self, files, delimiter, enclosure):

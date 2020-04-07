@@ -103,9 +103,10 @@ KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
-SSH_BIND_PORT = 3308
 LOCAL_ADDRESS = '127.0.0.1'
+SSH_BIND_PORT = 3308
 CONNECT_TIMEOUT = 30
+FLUSH_STORE_THRESHOLD = 5000
 
 # Keep for debugging
 KEY_STDLOG = 'stdlogging'
@@ -367,7 +368,7 @@ def discover_catalog(mysql_conn, config):
 
                 entry = CatalogEntry(table=table_name, stream=table_name, metadata=metadata.to_list(md_map),
                                      tap_stream_id=common.generate_tap_stream_id(table_schema, table_name),
-                                     schema=schema, primary_keys=primary_keys)
+                                     schema=schema, primary_keys=primary_keys, database=table_schema)
 
                 entries.append(entry)
 
@@ -495,6 +496,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
 
         result.streams.append(CatalogEntry(
             tap_stream_id=catalog_entry.tap_stream_id,
+            database=database_name,
             metadata=catalog_entry.metadata,
             stream=catalog_entry.stream,
             table=catalog_entry.table,
@@ -596,15 +598,11 @@ def get_binlog_streams(mysql_conn, catalog, config, state):
     return resolve_catalog(discovered, binlog_streams)
 
 
-def write_schema_message(catalog_entry, bookmark_properties=[]):
+def write_schema_message(catalog_entry, message_store=None, bookmark_properties=[]):
     key_properties = common.get_key_properties(catalog_entry)
-
-    core.write_message(core.SchemaMessage(
-        stream=catalog_entry.stream,
-        schema=catalog_entry.schema.to_dict(),
-        key_properties=key_properties,
-        bookmark_properties=bookmark_properties
-    ))
+    core.write_message(core.SchemaMessage(stream=catalog_entry.stream, schema=catalog_entry.schema.to_dict(),
+                                          key_properties=key_properties, bookmark_properties=bookmark_properties),
+                       message_store=message_store, database_schema=catalog_entry.database)
 
 
 class Component(KBCEnvHandler):
@@ -781,15 +779,17 @@ class Component(KBCEnvHandler):
         core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 
     @staticmethod
-    def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state):
+    def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
+                            message_store: core.MessageStore = None):
         if binlog_catalog.streams:
             for stream in binlog_catalog.streams:
-                write_schema_message(stream)
+                write_schema_message(stream, message_store=message_store)
 
             with metrics.job_timer('sync_binlog') as timer:
-                binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state)
+                binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state,
+                                          message_store=message_store)
 
-    def do_sync(self, mysql_conn, config, mysql_config, catalog, state):
+    def do_sync(self, mysql_conn, config, mysql_config, catalog, state, message_store: core.MessageStore = None):
         non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
         LOGGER.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
         binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
@@ -797,7 +797,7 @@ class Component(KBCEnvHandler):
 
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
                                      tables_destination=self.tables_out_path)
-        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state)
+        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state, message_store=message_store)
 
     @staticmethod
     def log_server_params(mysql_conn):
@@ -1002,14 +1002,20 @@ class Component(KBCEnvHandler):
             LOGGER.info('Wrote manifest table {} with metadata {}'.format(file_name + '.manifest', str(manifest)))
 
     @staticmethod
-    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list) -> None:
+    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list = None) -> None:
         """For given result CSV file path, remove non-latest binlog event by primary key.
 
         A primary key can only have a single Write Event and a max of one Delete Event. It can have infinite Update
         Events. Each event returns the current state of the row, so we just want the latest row per extraction.
         """
-        LOGGER.info('Keeping only latest per primary key from binary row event results for {} '
-                    'based on table primary keys: {}'.format(csv_table_path, primary_keys))
+        if primary_keys:
+            LOGGER.info('Keeping only latest per primary key from binary row event results for {} '
+                        'based on table primary keys: {}'.format(csv_table_path, primary_keys))
+        else:
+            LOGGER.warning('Table at path {} does not have primary key, so no binlog de-duplication will occur, '
+                           'records must be processed downstream'.format(csv_table_path))
+            return
+
         with metrics.job_timer('latest_binlog_results') as timer:
             timer.tags['csv_table'] = csv_table_path
             timer.tags['primary_key'] = primary_keys
@@ -1022,7 +1028,6 @@ class Component(KBCEnvHandler):
     # TODO: Separate SSH tunnel and other connectivity properties into separate method
     def run(self):
         """Execute main component extraction process."""
-        write_message_output = {}
         table_mappings = {}
         file_input_path = self._check_file_inputs()
 
@@ -1099,9 +1104,20 @@ class Component(KBCEnvHandler):
                 else:
                     LOGGER.info('Incremental sync set to false, ignoring prior state and running full data sync')
 
-                catalog = Catalog.from_dict(table_mappings)
-                self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state)
+                message_store = core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
+                                                  output_table_path=self.tables_out_path)
 
+                catalog = Catalog.from_dict(table_mappings)
+                self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
+                             message_store=message_store)
+
+                # After sync finishes, do final flush on MessageStore.
+                message_store.flush_records()
+
+                print('Details on the message store:')
+                print(message_store.state)
+                print(message_store.total_records_flushed)
+                print(message_store.found_tables)
                 # QA: Walk through output destination pre-manifest
                 # directories = []
                 # files = []
@@ -1184,18 +1200,23 @@ class Component(KBCEnvHandler):
                                         'is empty or if no new rows were added (if running incrementally)'.format(
                                             entry_table_name))
 
+                        LOGGER.info('Got final state {}'.format(message_store.get_state()))
+                        self.write_state_file(message_store.get_state())
+                        file_state_destination = os.path.join(self.files_out_path, 'state.json')
+                        self.write_state_file(message_store.get_state(), output_path=file_state_destination)
+
                 # QA: Walk through output destination
-            #     directories = []
-            #     files = []
-            #     for (_, dirs, file_names) in os.walk(self.tables_out_path):
-            #         directories.extend(dirs)
-            #         files.extend(file_names)
-            #     LOGGER.debug('All directories sent to output: {}'.format(directories))
-            #     LOGGER.debug('All files sent to output: {}'.format(files))
-            # else:
-            #     LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
-            #                  'specify a table mappings file manually or via the File Input Mappings configuration.')
-            #     exit(1)
+                directories = []
+                files = []
+                for (_, dirs, file_names) in os.walk(self.tables_out_path):
+                    directories.extend(dirs)
+                    files.extend(file_names)
+                LOGGER.debug('All directories sent to output: {}'.format(directories))
+                LOGGER.debug('All files sent to output: {}'.format(files))
+            else:
+                LOGGER.error('You have either specified incorrect input parameters, or have not chosen to either '
+                             'specify a table mappings file manually or via the File Input Mappings configuration.')
+                exit(1)
 
 
 if __name__ == "__main__":
