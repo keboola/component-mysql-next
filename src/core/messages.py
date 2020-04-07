@@ -1,4 +1,6 @@
+import csv
 import logging
+import os
 import sys
 
 import pytz
@@ -13,6 +15,141 @@ except ImportError:
     from src.core.logger import get_logger
 
 LOGGER = logging.getLogger(__name__)
+
+
+class MessageStore(dict):
+    """Storage for log-based messages"""
+    def __init__(self, state: dict = None, flush_row_threshold: int = 5000,
+                 output_table_path: str = '/data/out/tables'):
+        super().__init__()
+        self.state = state
+        self.flush_row_threshold = flush_row_threshold
+        self.output_table_path = output_table_path
+
+        self._data_store = {}
+        self._found_schemas = []
+        self._found_tables = []
+        self._found_headers = {}
+        self._processed_records = 0
+        self._flush_count = 0
+
+    def __str__(self):
+        return json.dumps(self._data_store)
+
+    @property
+    def found_schemas(self):
+        return self._found_schemas
+
+    @property
+    def found_tables(self):
+        return self._found_tables
+
+    @property
+    def found_headers(self):
+        return self._found_headers
+
+    @property
+    def flush_count(self):
+        return self._flush_count
+
+    @property
+    def total_records_flushed(self):
+        return self._flush_count * self.flush_row_threshold
+
+    def get_state(self):
+        return self.state
+
+    def add_schema(self, schema: str):
+        self._data_store[schema] = {}
+
+    def add_table(self, schema: str, table_name: str):
+        store_schema = self._data_store.get(schema)
+        if not store_schema:
+            self.add_schema(schema)
+
+        self._data_store[schema][table_name] = {'records': [], 'schemas': []}
+
+    def flush_records(self):
+        logging.debug('flushing records for each of found tables: {}'.format(self._found_tables))
+        for schema in self._found_schemas:
+            for table in self.found_tables:
+                if self._data_store[schema][table].get('records'):
+                    logging.debug('got records for {} {}'.format(schema, table))
+                    file_output = table.upper() + '.csv'
+
+                    self.write_to_csv(self._data_store[schema][table].get('records'), file_output)
+                    self._clear_records(schema, table)
+
+        self._processed_records = 0
+        self._flush_count += 1
+
+    def write_to_csv(self, data_records: dict, file_name: str):
+        full_path = os.path.expanduser(os.path.join(self.output_table_path, file_name))
+        logging.info('Opening full path {} to write CSV {}'.format(self.output_table_path, file_name))
+        file_is_empty = (not os.path.isfile(full_path))
+
+        if file_is_empty:
+            with open(full_path, 'w') as csv_file:
+                first_record = True
+                for record in data_records:
+                    writer = csv.DictWriter(csv_file, fieldnames=record.keys())
+                    if first_record:
+                        writer.writeheader()
+
+                    writer.writerow(record)
+                    first_record = False
+        else:
+            with open(full_path, 'a') as csv_file:
+                for record in data_records:
+                    writer = csv.DictWriter(csv_file, fieldnames=record.keys())
+                    writer.writerow(record)
+
+    def add_message(self, schema: str, input_message: dict):
+        msg_type = get_message_type(input_message)
+
+        if schema and schema not in self._found_schemas:
+            self.add_schema(schema)
+            self._found_schemas.append(schema)
+
+        if msg_type == 'RECORD':
+            table_name = get_stream_name(input_message)
+            if table_name not in self._found_tables:
+                self.add_table(schema, table_name)
+                self._found_tables.append(table_name)
+            self._add_record_message(schema, table_name, _required_key(input_message, 'record'))
+
+        elif msg_type == 'SCHEMA':
+            table_name = get_stream_name(input_message)
+            if table_name not in self._found_tables:
+                self.add_table(schema, table_name)
+                self._found_tables.append(table_name)
+
+            self._add_schema_message(schema, table_name, _required_key(input_message, 'schema'))
+
+        elif msg_type == 'STATE':
+            self._set_state(_required_key(input_message, 'value'))
+
+        else:
+            logging.info('Message type not found: {}'.format(msg_type))
+
+    def _clear_records(self, schema: str, table: str):
+        self._data_store[schema][table]['records'] = []
+
+    def _add_record_message(self, schema: str, table: str, record_message: dict):
+        if self._processed_records > self.flush_row_threshold:
+            self.flush_records()
+
+        self._data_store[schema][table]['records'].append(record_message)
+        self._processed_records += 1
+
+    def _add_schema_message(self, schema: str, table: str, schema_message: dict):
+        self._data_store[schema][table]['schemas'].append(schema_message)
+        if not self.found_headers.get(schema):
+            self._found_headers[schema] = []
+        self._found_headers[schema].append({table: list(schema_message.get('properties').keys())})
+
+    def _set_state(self, state_message):
+        self.state = state_message
 
 
 class Message:
@@ -162,14 +299,17 @@ def _required_key(msg, k):
     return msg[k]
 
 
+def get_message_type(input_message: dict):
+    return _required_key(input_message, 'type')
+
+
+def get_stream_name(input_message: dict):
+    return _required_key(input_message, 'stream')
+
+
 def parse_message(msg):
     """Parse a message string into a Message object."""
-
-    # We are not using Decimals for parsing here.
-    # We recognize that exposes data to potentially
-    # lossy conversions.  However, this will affect
-    # very few data points and we have chosen to
-    # leave conversion as is for now.
+    # TODO: May use Decimal for parsing data here for perfect precision
     obj = json.loads(msg, use_decimal=True)
     msg_type = _required_key(obj, 'type')
 
@@ -207,27 +347,29 @@ def format_message(message):
         return json.dumps(message, use_decimal=True)
 
 
-def write_message(message):
-    # logging.info("!!! Here is the message: {}".format(message))
-    try:
-        sys.stdout.write(format_message(message) + '\n')
-        sys.stdout.flush()
-    except TypeError:  # Handle for non-standard data types, particularly sets
-        new_message = message.asdict()
-        new_record_message = {}
+def write_message(message, database_schema: str = None, message_store: MessageStore = None):
+    if message_store is None:  # Specifically none, as default message store is empty dict
+        LOGGER.info('GOT TO OLD WRITE FOR MESSAGE: {}'.format(message))
+        try:
+            sys.stdout.write(format_message(message) + '\n')
+            sys.stdout.flush()
+        except TypeError:  # Handle for non-standard data types, particularly sets
+            new_message = message.asdict()
+            new_record_message = {}
 
-        record_message = new_message['record']
-        for column, value in record_message.items():
-            if isinstance(value, set):
-                new_record_message[column] = str(list(value))
-            else:
-                new_record_message[column] = value
-        new_message['record'] = new_record_message
-        # logging.info('Converted old record message {} to new record message {}'.format(
-        #     record_message, new_record_message))
+            record_message = new_message['record']
+            for column, value in record_message.items():
+                if isinstance(value, set):
+                    new_record_message[column] = str(list(value))
+                else:
+                    new_record_message[column] = value
+            new_message['record'] = new_record_message
 
-        sys.stdout.write(format_message(new_message) + '\n')
-        sys.stdout.flush()
+            sys.stdout.write(format_message(new_message) + '\n')
+            sys.stdout.flush()
+
+    else:
+        message_store.add_message(database_schema, message.asdict())
 
 
 def write_record(stream_name, record, stream_alias=None, time_extracted=None):

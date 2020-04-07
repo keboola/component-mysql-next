@@ -222,7 +222,8 @@ def get_db_column_types(event):
     return {c.name: c.type for c in event.columns}
 
 
-def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted):
+def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
+                            message_store: core.MessageStore = None):
     stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
     db_column_types = get_db_column_types(event)
 
@@ -235,13 +236,14 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
 
-        core.write_message(record_message)
+        core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
         rows_saved = rows_saved + 1
 
     return rows_saved
 
 
-def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted):
+def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
+                             message_store: core.MessageStore = None):
     stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
     db_column_types = get_db_column_types(event)
 
@@ -255,14 +257,15 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
 
-        core.write_message(record_message)
+        core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
 
         rows_saved += 1
 
     return rows_saved
 
 
-def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted):
+def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
+                             message_store: core.MessageStore = None):
     stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
     db_column_types = get_db_column_types(event)
 
@@ -278,7 +281,7 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
 
-        core.write_message(record_message)
+        core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
 
         rows_saved = rows_saved + 1
 
@@ -300,7 +303,7 @@ def generate_streams_map(binlog_streams):
     return stream_map
 
 
-def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
+def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_store: core.MessageStore = None):
     time_extracted = utils.now()
 
     rows_saved = 0
@@ -329,15 +332,15 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
             elif catalog_entry:
                 if isinstance(binlog_event, WriteRowsEvent):
                     rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                         rows_saved, time_extracted)
+                                                         rows_saved, time_extracted, message_store=message_store)
 
                 elif isinstance(binlog_event, UpdateRowsEvent):
                     rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                          rows_saved, time_extracted)
+                                                          rows_saved, time_extracted, message_store=message_store)
 
                 elif isinstance(binlog_event, DeleteRowsEvent):
                     rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                          rows_saved, time_extracted)
+                                                          rows_saved, time_extracted, message_store=message_store)
                 else:
                     LOGGER.info("Skipping event for table %s.%s as it is not an INSERT, UPDATE, or DELETE",
                                 binlog_event.schema,
@@ -358,7 +361,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state):
             core.write_message(core.StateMessage(value=copy.deepcopy(state)))
 
 
-def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
+def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None):
     binlog_streams_map = generate_streams_map(binlog_streams)
 
     for tap_stream_id in binlog_streams_map.keys():
@@ -376,9 +379,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
         LOGGER.info("No server_id provided, will use global server_id=%s", server_id)
 
     connection_wrapper = make_connection_wrapper(config)
-    # LOGGER.info('Defining wrapper details: {}; {}; {}; {}'.format(connection_wrapper.host, connection_wrapper.user,
-    #                                                           connection_wrapper.password,
-    #                                                           connection_wrapper.bind_address))
+
     slave_uuid = 'kbc-slave-{}-{}'.format(str(uuid.uuid4()), server_id)
     LOGGER.info('Connecting with Stream Reader to Slave UUID {}'.format(slave_uuid))
     try:
@@ -394,10 +395,10 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state):
             pymysql_wrapper=connection_wrapper
         )
         LOGGER.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
-        _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state)
+        _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_store=message_store)
     finally:
         # BinLogStreamReader doesn't implement the `with` methods
         # So, try/finally will close the chain from the top
         reader.close()
 
-    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+    core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)

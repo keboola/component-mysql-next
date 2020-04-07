@@ -34,7 +34,7 @@ CURRENT_PATH = os.path.dirname(__file__)
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
-CSV_CHUNK_SIZE = 250000
+CSV_CHUNK_SIZE = 100000
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_KBC_SYNCED_AT'
 KBC_DELETED = '_KBC_DELETED_AT'

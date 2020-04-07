@@ -33,6 +33,7 @@ from .metrics import (
 from .messages import (
     ActivateVersionMessage,
     Message,
+    MessageStore,
     RecordMessage,
     SchemaMessage,
     StateMessage,
