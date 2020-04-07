@@ -1153,16 +1153,16 @@ class Component(KBCEnvHandler):
                         logging.info('Searching for output destination file/dir: {}'.format(table_specific_sliced_path))
                         if os.path.isdir(table_specific_sliced_path):
                             logging.info('Table {} at location {} is a directory'.format(entry_table_name,
-                                                                                        table_specific_sliced_path))
+                                                                                         table_specific_sliced_path))
                             output_is_sliced = True
                         elif os.path.isfile(table_specific_sliced_path):
                             logging.info('Table {} at location {} is a file'.format(entry_table_name,
-                                                                                   table_specific_sliced_path))
+                                                                                    table_specific_sliced_path))
                             output_is_sliced = False
                         else:
                             output_is_sliced = False
                             logging.info('NO DATA found for table {} in either a file or sliced table directory, this '
-                                        'table is not being synced'.format(entry_table_name))
+                                         'table is not being synced'.format(entry_table_name))
 
                         # TODO: Consider other options for writing to storage based on user choices
                         logging.info('Table has rep method {} and user incremental param is {}'.format(
@@ -1180,10 +1180,10 @@ class Component(KBCEnvHandler):
                         table_column_metadata = self.get_table_column_metadata(column_metadata)
 
                         logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
-                                                                                 entry_table_name))
+                                                                                  entry_table_name))
                         if output_is_sliced:
                             if core.find_files(table_specific_sliced_path, '*.csv'):
-                                logging.info('Writing manifest for {} to path "{}" with columns for sliced table'.format(
+                                logging.info('Writing manifest for {} to "{}" with columns for sliced table'.format(
                                     entry_table_name, self.tables_out_path))
                                 self.create_manifests(entry, self.tables_out_path,
                                                       columns=list(tables_and_columns.get(entry_table_name)),
@@ -1200,8 +1200,7 @@ class Component(KBCEnvHandler):
                         else:
                             logging.info('No manifest file found for selected table {}, because no data was synced '
                                          'from the database for this table. This may be expected behavior if the table '
-                                         'is empty or if no new rows were added (if running incrementally)'.format(
-                                            entry_table_name))
+                                         'is empty or no new rows were added (if incremental)'.format(entry_table_name))
 
                         logging.info('Got final state {}'.format(message_store.get_state()))
                         self.write_state_file(message_store.get_state())

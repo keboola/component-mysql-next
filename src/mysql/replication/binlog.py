@@ -341,8 +341,8 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
                                                           rows_saved, time_extracted, message_store=message_store)
                 else:
                     logging.info("Skipping event for table %s.%s as it is not an INSERT, UPDATE, or DELETE",
-                                binlog_event.schema,
-                                binlog_event.table)
+                                 binlog_event.schema,
+                                 binlog_event.table)
 
         state = update_bookmarks(state, binlog_streams_map, reader.log_file, reader.log_pos)
 
