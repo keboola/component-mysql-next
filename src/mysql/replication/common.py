@@ -211,7 +211,8 @@ def whitelist_bookmark_keys(bookmark_key_set, tap_stream_id, state):
         core.clear_bookmark(state, tap_stream_id, bk)
 
 
-def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version, params):
+def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version, params,
+               message_store: core.MessageStore = None):
     replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
 
     query_string = cursor.mogrify(select_sql, params)
@@ -259,14 +260,14 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
                                                 record_message.record[replication_key])
 
             if rows_saved % 1000 == 0:
-                core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+                core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
                 if rows_saved % 1000000 == 0:
                     logging.info('Ingested row count has hit {} for table {}'.format(rows_saved,
                                                                                      catalog_entry.tap_stream_id))
 
             row = cursor.fetchone()
 
-    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+    core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
     return rows_saved
 
 
@@ -283,7 +284,7 @@ def _add_kbc_metadata_to_df(table_df: pd.DataFrame, catalog_entry):
 
 
 def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, stream_version, params,
-                    tables_destination: str = None):
+                    tables_destination: str = None, message_store: core.MessageStore = None):
     replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
 
     query_string = cursor.mogrify(select_sql, params)
@@ -364,6 +365,6 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key_value',
     #                                     record_message.record[replication_key])
 
-    core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+    core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
     # End Chunk Changes

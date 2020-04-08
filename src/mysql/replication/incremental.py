@@ -19,7 +19,7 @@ BOOKMARK_KEYS = {'replication_key', 'replication_key_value', 'version'}
 # TODO: Test incremental to determine if needs KBC metadata additions
 
 
-def sync_table(mysql_conn, catalog_entry, state, columns, limit=None):
+def sync_table(mysql_conn, catalog_entry, state, columns, limit=None, message_store: core.MessageStore = None):
     logging.warning('Note: Syncing incrementally with key is not yet fully supported, results may be incomplete')
     common.whitelist_bookmark_keys(BOOKMARK_KEYS, catalog_entry.tap_stream_id, state)
 
@@ -42,12 +42,12 @@ def sync_table(mysql_conn, catalog_entry, state, columns, limit=None):
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
-        activate_version_message = core.ActivateVersionMessage(
-            stream=catalog_entry.stream,
-            version=stream_version
-        )
-
-        core.write_message(activate_version_message)
+        # activate_version_message = core.ActivateVersionMessage(
+        #     stream=catalog_entry.stream,
+        #     version=stream_version
+        # )
+        #
+        # core.write_message(activate_version_message)
 
         with connect_with_backoff(mysql_conn) as open_conn:
             with open_conn.cursor() as cursor:
@@ -69,6 +69,7 @@ def sync_table(mysql_conn, catalog_entry, state, columns, limit=None):
                 if limit:
                     select_sql += ' LIMIT {}'.format(limit)
 
-                num_rows = common.sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version, params)
+                num_rows = common.sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version, params,
+                                             message_store=message_store)
                 if limit is None or num_rows < limit:
                     iterate_limit = False

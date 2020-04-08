@@ -40,7 +40,6 @@ import pymysqlreplication
 from collections import namedtuple
 from contextlib import nullcontext
 from io import StringIO
-from signal import signal, SIGPIPE, SIG_DFL
 from sshtunnel import SSHTunnelForwarder
 
 
@@ -79,8 +78,6 @@ except ImportError as e:
 
     from src.mysql.client import connect_with_backoff, MySQLConnection
 
-signal(SIGPIPE, SIG_DFL)
-
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
 
@@ -105,7 +102,7 @@ KEY_SSH_USERNAME = 'sshUser'
 
 MAPPINGS_FILE = 'table_mappings.json'
 LOCAL_ADDRESS = '127.0.0.1'
-SSH_BIND_PORT = 3308
+SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 5000
 
@@ -654,7 +651,8 @@ class Component(KBCEnvHandler):
 
     # Sync Methods
     @staticmethod
-    def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None):
+    def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None,
+                            message_store: core.MessageStore = None):
         logging.info("Stream %s is using incremental replication", catalog_entry.stream)
 
         md_map = metadata.to_map(catalog_entry.metadata)
@@ -664,19 +662,22 @@ class Component(KBCEnvHandler):
             raise Exception("Cannot use INCREMENTAL replication for table ({}) without a replication key.".format(
                 catalog_entry.stream))
 
-        write_schema_message(catalog_entry=catalog_entry, bookmark_properties=[replication_key])
+        write_schema_message(catalog_entry=catalog_entry, bookmark_properties=[replication_key],
+                             message_store=message_store)
 
         if optional_limit:
             logging.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
                          int(optional_limit))
-            incremental.sync_table(mysql_conn, catalog_entry, state, columns, int(optional_limit))
+            incremental.sync_table(mysql_conn, catalog_entry, state, columns, int(optional_limit),
+                                   message_store=message_store)
         else:
-            incremental.sync_table(mysql_conn, catalog_entry, state, columns)
+            incremental.sync_table(mysql_conn, catalog_entry, state, columns, message_store=message_store)
 
-        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+        core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
     @staticmethod
-    def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None):
+    def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
+                                  message_store: core.MessageStore = None):
         binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)
@@ -694,14 +695,14 @@ class Component(KBCEnvHandler):
 
         last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
 
-        write_schema_message(catalog_entry)
+        write_schema_message(catalog_entry, message_store=message_store)
 
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
         if log_file and log_pos and max_pk_values:
             logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
             full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                         tables_destination=tables_destination)
+                                         tables_destination=tables_destination, message_store=message_store)
 
         else:
             logging.info("Performing initial full table sync for LOG_BASED table {}".format(
@@ -719,32 +720,35 @@ class Component(KBCEnvHandler):
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
                 full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                             tables_destination=tables_destination)
+                                             tables_destination=tables_destination, message_store=message_store)
             else:
                 full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                             tables_destination=tables_destination)
+                                             tables_destination=tables_destination, message_store=message_store)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
-    def do_sync_full_table(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None):
+    @staticmethod
+    def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
+                           message_store: core.MessageStore = None):
         logging.info("Stream %s is using full table replication", catalog_entry.stream)
         key_properties = common.get_key_properties(catalog_entry)
 
-        write_schema_message(catalog_entry)
+        write_schema_message(catalog_entry, message_store=message_store)
 
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
         full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                     tables_destination=tables_destination)
+                                     tables_destination=tables_destination, message_store=message_store)
 
         # Prefer initial_full_table_complete going forward
         core.clear_bookmark(state, catalog_entry.tap_stream_id, 'version')
 
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete', True)
 
-        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+        core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
-    def sync_non_binlog_streams(self, mysql_conn, non_binlog_catalog, config, state, tables_destination: str = None):
+    def sync_non_binlog_streams(self, mysql_conn, non_binlog_catalog, config, state, tables_destination: str = None,
+                                message_store: core.MessageStore = None):
         if tables_destination is None:
             logging.info('No table destination specified, so will not work on new CSV write implementation')
 
@@ -758,7 +762,7 @@ class Component(KBCEnvHandler):
             state = core.set_currently_syncing(state, catalog_entry.tap_stream_id)
 
             # Emit a state message to indicate that we've started this stream
-            core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+            core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
             md_map = metadata.to_map(catalog_entry.metadata)
 
@@ -774,18 +778,19 @@ class Component(KBCEnvHandler):
 
                 if replication_method == 'INCREMENTAL':
                     optional_limit = config.get('incremental_limit')
-                    self.do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit)
+                    self.do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit,
+                                             message_store=message_store)
                 elif replication_method == 'LOG_BASED':
                     self.do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns,
-                                                   tables_destination=tables_destination)
+                                                   tables_destination=tables_destination, message_store=message_store)
                 elif replication_method == 'FULL_TABLE':
                     self.do_sync_full_table(mysql_conn, config, catalog_entry, state, columns,
-                                            tables_destination=tables_destination)
+                                            tables_destination=tables_destination, message_store=message_store)
                 else:
                     raise Exception("only INCREMENTAL, LOG_BASED, and FULL TABLE replication methods are supported")
 
         state = core.set_currently_syncing(state, None)
-        core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+        core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
     @staticmethod
     def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
@@ -794,7 +799,7 @@ class Component(KBCEnvHandler):
             for stream in binlog_catalog.streams:
                 write_schema_message(stream, message_store=message_store)
 
-            with metrics.job_timer('sync_binlog') as timer:
+            with metrics.job_timer('sync_binlog'):
                 binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state,
                                           message_store=message_store)
 
@@ -805,7 +810,7 @@ class Component(KBCEnvHandler):
         logging.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
 
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
-                                     tables_destination=self.tables_out_path)
+                                     tables_destination=self.tables_out_path, message_store=message_store)
         self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state, message_store=message_store)
 
     @staticmethod
@@ -1107,20 +1112,23 @@ class Component(KBCEnvHandler):
                 else:
                     logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
 
-                message_store = core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
-                                                  output_table_path=self.tables_out_path)
+                with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
+                                       output_table_path=self.tables_out_path) as message_store:
+                    catalog = Catalog.from_dict(table_mappings)
+                    self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
+                                 message_store=message_store)
 
-                catalog = Catalog.from_dict(table_mappings)
-                self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
-                             message_store=message_store)
+                    print('Details on the message store:')
+                    print(message_store.state)
+                    print(message_store.total_records_flushed)
+                    print(message_store.found_tables)
+                    print(message_store.found_headers)
+                    print(message_store.found_schemas)
+                    # print(message_store)
 
-                # After sync finishes, do final flush on MessageStore.
-                message_store.flush_records()
+                    # After sync finishes, do final flush on MessageStore. (ADDED TO CONTEXT MANAGER)
+                    # message_store.flush_records()
 
-                print('Details on the message store:')
-                print(message_store.state)
-                print(message_store.total_records_flushed)
-                print(message_store.found_tables)
                 # QA: Walk through output destination pre-manifest
                 # directories = []
                 # files = []
@@ -1150,7 +1158,6 @@ class Component(KBCEnvHandler):
                         # Confirm corresponding table or folder exists
                         table_specific_sliced_path = os.path.join(self.tables_out_path,
                                                                   entry_table_name.upper() + '.csv')
-                        logging.info('Searching for output destination file/dir: {}'.format(table_specific_sliced_path))
                         if os.path.isdir(table_specific_sliced_path):
                             logging.info('Table {} at location {} is a directory'.format(entry_table_name,
                                                                                          table_specific_sliced_path))

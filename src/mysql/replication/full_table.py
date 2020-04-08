@@ -201,15 +201,15 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
 
     state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
 
-    activate_version_message = core.ActivateVersionMessage(
-        stream=catalog_entry.stream,
-        version=stream_version
-    )
-
-    # For the initial replication, emit an ACTIVATE_VERSION message
-    # at the beginning so the records show up right away.
-    if not initial_full_table_complete and not (version_exists and state_version is None):
-        core.write_message(activate_version_message)
+    # activate_version_message = core.ActivateVersionMessage(
+    #     stream=catalog_entry.stream,
+    #     version=stream_version
+    # )
+    #
+    # # For the initial replication, emit an ACTIVATE_VERSION message
+    # # at the beginning so the records show up right away.
+    # if not initial_full_table_complete and not (version_exists and state_version is None):
+    #     core.write_message(activate_version_message)
 
     perform_resumable_sync = sync_is_resumable(mysql_conn, catalog_entry)
 
@@ -235,10 +235,11 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
     core.clear_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
     core.clear_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
 
-    core.write_message(activate_version_message)
+    # core.write_message(activate_version_message)
 
 
-def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version, tables_destination: str = None):
+def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version, tables_destination: str = None,
+                      message_store: core.MessageStore = None):
     common.whitelist_bookmark_keys(generate_bookmark_keys(catalog_entry), catalog_entry.tap_stream_id, state)
 
     bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
@@ -248,15 +249,15 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
 
     state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
 
-    activate_version_message = core.ActivateVersionMessage(
-        stream=catalog_entry.stream,
-        version=stream_version
-    )
-
-    # For the initial replication, emit an ACTIVATE_VERSION message
-    # at the beginning so the records show up right away.
-    if not initial_full_table_complete and not (version_exists and state_version is None):
-        core.write_message(activate_version_message)
+    # activate_version_message = core.ActivateVersionMessage(
+    #     stream=catalog_entry.stream,
+    #     version=stream_version
+    # )
+    #
+    # # For the initial replication, emit an ACTIVATE_VERSION message
+    # # at the beginning so the records show up right away.
+    # if not initial_full_table_complete and not (version_exists and state_version is None):
+    #     core.write_message(activate_version_message)
 
     perform_resumable_sync = sync_is_resumable(mysql_conn, catalog_entry)
 
@@ -276,10 +277,10 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
             params = {}
 
             common.sync_query_bulk(open_conn, cur, catalog_entry, state, select_sql, columns, stream_version, params,
-                                   tables_destination)
+                                   tables_destination, message_store=message_store)
 
     # clear max pk value and last pk fetched upon successful sync
     core.clear_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
     core.clear_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
 
-    core.write_message(activate_version_message)
+    # core.write_message(activate_version_message)

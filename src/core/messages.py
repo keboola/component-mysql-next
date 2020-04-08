@@ -1,7 +1,6 @@
 import csv
 import logging
 import os
-import sys
 
 import pytz
 import ciso8601
@@ -30,7 +29,14 @@ class MessageStore(dict):
         self._flush_count = 0
 
     def __str__(self):
-        return json.dumps(self._data_store)
+        return str(self._data_store)
+        # return json.dumps(self._data_store)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.flush_records()
 
     @property
     def found_schemas(self):
@@ -56,17 +62,19 @@ class MessageStore(dict):
         return self.state
 
     def add_schema(self, schema: str):
+        logging.debug('Adding schema {} to message store'.format(schema))
         self._data_store[schema] = {}
 
-    def add_table(self, schema: str, table_name: str):
+    def add_table(self, schema: str, table: str):
+        logging.debug('Adding table {} to message store in schema {}'.format(table, schema))
         store_schema = self._data_store.get(schema)
         if not store_schema:
             self.add_schema(schema)
 
-        self._data_store[schema][table_name] = {'records': [], 'schemas': []}
+        self._data_store[schema][table] = {'records': [], 'schemas': []}
 
     def flush_records(self):
-        logging.debug('flushing records for each of found tables: {}'.format(self._found_tables))
+        logging.debug('Flushing records for each of found tables: {}'.format(self._found_tables))
         for schema in self._found_schemas:
             for table in self.found_tables:
                 if self._data_store[schema][table].get('records'):
@@ -81,7 +89,7 @@ class MessageStore(dict):
 
     def write_to_csv(self, data_records: dict, file_name: str):
         full_path = os.path.expanduser(os.path.join(self.output_table_path, file_name))
-        logging.info('Opening full path {} to write CSV {}'.format(self.output_table_path, file_name))
+        logging.debug('Opening full path {} to write CSV {}'.format(self.output_table_path, file_name))
         file_is_empty = (not os.path.isfile(full_path))
 
         if file_is_empty:
@@ -345,25 +353,25 @@ def format_message(message):
 
 def write_message(message, database_schema: str = None, message_store: MessageStore = None):
     if message_store is None:  # Specifically none, as default message store is empty dict
-        logging.info('GOT TO OLD WRITE FOR MESSAGE: {}'.format(message))
-        try:
-            sys.stdout.write(format_message(message) + '\n')
-            sys.stdout.flush()
-        except TypeError:  # Handle for non-standard data types, particularly sets
-            new_message = message.asdict()
-            new_record_message = {}
-
-            record_message = new_message['record']
-            for column, value in record_message.items():
-                if isinstance(value, set):
-                    new_record_message[column] = str(list(value))
-                else:
-                    new_record_message[column] = value
-            new_message['record'] = new_record_message
-
-            sys.stdout.write(format_message(new_message) + '\n')
-            sys.stdout.flush()
-
+        logging.info('GOT TO OLD WRITE FOR MESSAGE: {}'.format(message.asdict()))
+    #     try:
+    #         sys.stdout.write(format_message(message) + '\n')
+    #         sys.stdout.flush()
+    #     except TypeError:  # Handle for non-standard data types, particularly sets
+    #         new_message = message.asdict()
+    #         new_record_message = {}
+    #
+    #         record_message = new_message['record']
+    #         for column, value in record_message.items():
+    #             if isinstance(value, set):
+    #                 new_record_message[column] = str(list(value))
+    #             else:
+    #                 new_record_message[column] = value
+    #         new_message['record'] = new_record_message
+    #
+    #         sys.stdout.write(format_message(new_message) + '\n')
+    #         sys.stdout.flush()
+    #
     else:
         message_store.add_message(database_schema, message.asdict())
 

@@ -356,7 +356,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
 
         if ((rows_saved and rows_saved % UPDATE_BOOKMARK_PERIOD == 0) or
                 (events_skipped and events_skipped % UPDATE_BOOKMARK_PERIOD == 0)):
-            core.write_message(core.StateMessage(value=copy.deepcopy(state)))
+            core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
 
 def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None):
