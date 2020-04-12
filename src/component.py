@@ -13,6 +13,7 @@ TODO: Support for set data type [DONE]
 TODO: Send metadata to Keboola for columns [DONE]
 TODO: Remove incremental true from metadata during full table sync [DONE]
 TODO: Switch to not shell script execution [DONE]
+TODO: Fix boolean type output diff between log-based and full sync [DONE]
 
 # Secondary To-do Items
 TODO: Table Mappings - Handle prior user inputs
@@ -1126,17 +1127,14 @@ class Component(KBCEnvHandler):
                     print(message_store.found_schemas)
                     # print(message_store)
 
-                    # After sync finishes, do final flush on MessageStore. (ADDED TO CONTEXT MANAGER)
-                    # message_store.flush_records()
-
                 # QA: Walk through output destination pre-manifest
-                # directories = []
-                # files = []
-                # for (_, dirs, file_names) in os.walk(self.tables_out_path):
-                #     directories.extend(dirs)
-                #     files.extend(file_names)
-                # logging.debug('All pre-manifest directories sent to output: {}'.format(directories))
-                # logging.debug('All pre-manifest files sent to output: {}'.format(files))
+                directories = []
+                files = []
+                for (_, dirs, file_names) in os.walk(self.tables_out_path):
+                    directories.extend(dirs)
+                    files.extend(file_names)
+                logging.debug('All pre-manifest directories sent to output: {}'.format(directories))
+                logging.debug('All pre-manifest files sent to output: {}'.format(files))
 
                 # Write manifest files
                 tables_and_columns = dict()

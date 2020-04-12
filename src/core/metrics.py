@@ -193,17 +193,6 @@ def record_counter(endpoint=None, log_interval=DEFAULT_LOG_INTERVAL):
     return Counter(Metric.record_count, tags, log_interval=log_interval)
 
 
-def http_request_timer(endpoint):
-    """Use for timing HTTP requests to an endpoint
-    with core.metrics.http_request_timer("users") as timer:
-        # Make a request
-    """
-    tags = {}
-    if endpoint:
-        tags[Tag.endpoint] = endpoint
-    return Timer(Metric.http_request_duration, tags)
-
-
 def job_timer(job_type=None):
     """Use for timing asynchronous jobs
     with core.metrics.job_timer(job_type="users") as timer:

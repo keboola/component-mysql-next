@@ -201,7 +201,8 @@ class KBCEnvHandler:
                 'Missing mandatory {} fields: [{}] '.format(_type, ', '.join(missing_fields)))
 
     # ================================= Logging ==============================
-    def set_default_logger(self, log_level=logging.INFO):  # noqa: E301
+    @staticmethod
+    def set_default_logger(log_level=logging.INFO):  # noqa: E301
         """
         Sets default console logger.
 

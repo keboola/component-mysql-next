@@ -303,6 +303,16 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
                 CSV_CHUNK_SIZE, current_chunk - 1, current_chunk * CSV_CHUNK_SIZE
             ))
 
+        # Convert tinyint values to boolean
+        for column, schema_metadata in catalog_entry.schema.properties.items():
+            output_type = schema_metadata.type[1]
+            if output_type == 'boolean':
+                logging.info('Replacing tinyint values with True/False for output table {}, column {}'.format(
+                    catalog_entry.table, column))
+
+                chunk[column] = chunk[column].replace({1: True, 0: False})
+
+        # Add Keboola metadata columns (timestamps only, so this step happens after the boolean conversion)
         _add_kbc_metadata_to_df(chunk, catalog_entry)
 
         if current_chunk == 1:
