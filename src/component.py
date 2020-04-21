@@ -14,9 +14,11 @@ TODO: Send metadata to Keboola for columns [DONE]
 TODO: Remove incremental true from metadata during full table sync [DONE]
 TODO: Switch to not shell script execution [DONE]
 TODO: Fix boolean type output diff between log-based and full sync [DONE]
+TODO: Update Config documentation on how to fill out table mappings
 
 # Secondary To-do Items
 TODO: Table Mappings - Handle prior user inputs
+TODO: Option to do "one-time" table resync, where just one table resyncs once
 TODO: Add testing framework
 TODO: Integrate SSL, if all else works and there is a need
 TODO: Support Ticket for UI for this component (maybe they handle SSL?)

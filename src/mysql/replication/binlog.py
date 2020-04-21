@@ -229,6 +229,7 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         vals = row['values']
         vals[common.KBC_DELETED] = None
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
+
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
