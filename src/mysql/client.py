@@ -1,12 +1,14 @@
 """
 Define MySQL connection, session parameters and backoff configuration.
 
-TODO: Integrate SSL here, if SSL is needed.
+TODO: Confirm correct behavior and security of SSL setup.
 """
 import logging
+import ssl
 
 import backoff
 import pymysql
+from pymysql.constants import CLIENT
 
 MAX_CONNECT_RETRIES = 5
 BACKOFF_FACTOR = 2
@@ -79,7 +81,28 @@ class MySQLConnection(pymysql.connections.Connection):
         if config.get("database"):
             args["database"] = config["database"]
 
-        super().__init__(defer_connect=True, **args)
+        ssl_arg = None
+        use_ssl = config.get('ssl') == 'true'
+
+        # Attempt self-signed SSL, if config vars are present
+        use_self_signed_ssl = config.get("ssl_ca")
+
+        super().__init__(defer_connect=True, ssl=ssl_arg, **args)
+
+        # Configure SSL w/o custom CA -- Manually create context, override default behavior of CERT_NONE w/o CA supplied
+        if use_ssl and not use_self_signed_ssl:
+            logging.info("Attempting SSL connection")
+            # For compatibility with previous version, verify mode is off by default
+            verify_mode = config.get("verify_mode", "false") == 'true'
+            if not verify_mode:
+                logging.warning('Not verifying server certificate. The connection is encrypted, but the server '
+                                'hasn''t been verified. Please provide a root CA certificate to enable verification.')
+            self.ssl = True
+            self.ctx = ssl.create_default_context()
+            check_hostname = config.get("check_hostname", "false") == 'true'
+            self.ctx.check_hostname = check_hostname
+            self.ctx.verify_mode = ssl.CERT_REQUIRED if verify_mode else ssl.CERT_NONE
+            self.client_flag |= CLIENT.SSL
 
     def __enter__(self):
         return self

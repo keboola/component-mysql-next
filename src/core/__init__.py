@@ -5,7 +5,7 @@ from .utils import (
     parse_args,
     ratelimit,
     strftime,
-    strptime,
+    strptime_to_utc,
     update_state,
     should_sync_field,
     find_files

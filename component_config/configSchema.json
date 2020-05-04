@@ -8,6 +8,9 @@
     "username",
     "#password",
     "runIncrementalSync",
+    "ssl",
+    "sslCa",
+    "verifyCert",
     "sshTunnel",
     "base64StateJson"
   ],
@@ -60,6 +63,27 @@
       "title": "Run Incremental Sync?",
       "default": true,
       "description": "Keep true to run incremental sync based on prior state (for all tables in your mappings specification where you have chosen incremental or log_based. If false, prior state is ignored and full database sync is run",
+      "propertyOrder": 550
+    },
+    "ssl": {
+      "type": "boolean",
+      "title": "Use SSL?",
+      "default": true,
+      "description": "Keep true to run incremental sync with SSL, uses self-signed certificate unless SSL Certificate Authority parameter is specified",
+      "propertyOrder": 550
+    },
+    "sslCa": {
+      "type": "string",
+      "title": "SSL Certificate Authority (CA)",
+      "default": "",
+      "description": "Name of certificate authority implemented, if any (i.e. IdenTrust). If not specified, self-signed certificate is used",
+      "propertyOrder": 550
+    },
+    "verifyCert": {
+      "type": "boolean",
+      "title": "Verify Server SSL Certificate?",
+      "default": true,
+      "description": "Keep true to connect to MySQL with verify mode set to true, which verifies the server and certificate",
       "propertyOrder": 550
     },
     "sshTunnel": {

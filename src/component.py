@@ -20,7 +20,7 @@ TODO: Update Config documentation on how to fill out table mappings
 TODO: Table Mappings - Handle prior user inputs
 TODO: Option to do "one-time" table resync, where just one table resyncs once
 TODO: Add testing framework
-TODO: Integrate SSL, if all else works and there is a need
+TODO: Confirm SSL works as expected
 TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 TODO: More User Options
 """
@@ -94,6 +94,7 @@ KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
 KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
+KEY_USE_SSL = 'ssl'
 KEY_STATE_JSON = 'base64StateJson'
 
 # Define optional parameters as constants for later use.
@@ -102,6 +103,8 @@ KEY_SSH_PORT = 'sshPort'
 KEY_SSH_PUBLIC_KEY = 'sshPublicKey'
 KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
+KEY_SSL_CA = 'sslCa'
+KEY_VERIFY_CERT = 'verifyCert'
 
 MAPPINGS_FILE = 'table_mappings.json'
 LOCAL_ADDRESS = '127.0.0.1'
@@ -110,9 +113,9 @@ CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 5000
 
 # Keep for debugging
-KEY_STDLOG = 'stdlogging'
 KEY_DEBUG = 'debug'
-MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL)
+MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD,
+                  KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
 APP_VERSION = '0.3.4'
@@ -638,6 +641,9 @@ class Component(KBCEnvHandler):
             "port": SSH_BIND_PORT,
             "user": self.params[KEY_MYSQL_USER],
             "password": self.params[KEY_MYSQL_PWD],
+            "ssl": self.params.get(KEY_USE_SSL),
+            "ssl_ca": self.params.get(KEY_SSL_CA),
+            "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT
         }
 
@@ -1077,7 +1083,7 @@ class Component(KBCEnvHandler):
                 logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
             mysql_client = MySQLConnection(self.mysql_config_params)
-            # TODO: Consider logging server details here.
+            self.log_server_params(mysql_client)
 
             if self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
                 table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
@@ -1121,13 +1127,7 @@ class Component(KBCEnvHandler):
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
                                  message_store=message_store)
 
-                    print('Details on the message store:')
-                    print(message_store.state)
-                    print(message_store.total_records_flushed)
-                    print(message_store.found_tables)
-                    print(message_store.found_headers)
-                    print(message_store.found_schemas)
-                    # print(message_store)
+                    logging.info('Data extraction completed')
 
                 # QA: Walk through output destination pre-manifest
                 directories = []
@@ -1226,6 +1226,8 @@ class Component(KBCEnvHandler):
                 logging.error('You have either specified incorrect input parameters, or have not chosen to either '
                               'specify a table mappings file manually or via the File Input Mappings configuration.')
                 exit(1)
+
+        logging.info('Process execution completed')
 
 
 if __name__ == "__main__":
