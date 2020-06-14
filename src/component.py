@@ -8,9 +8,9 @@ Essentially at the table table and column level, add "replication-method" of: FU
 If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-Do Items
-TODO: Update Config documentation on how to fill out table mappings
+TODO: Update Config documentation on how to fill out table mappings [Done]
 TODO: Schema changes handling
-TODO: Numeric vs. Int Issue
+TODO: Numeric vs. Int Issue [Done]
 TODO: True/False vs. 1/0 Consistency [Done]
 
 # Secondary To-do Items
@@ -115,7 +115,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.3.4'
+APP_VERSION = '0.3.5'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1232,6 +1232,7 @@ class Component(KBCEnvHandler):
 
 
 if __name__ == "__main__":
+    component_start = core.utils.now()
     if len(sys.argv) > 1:
         set_debug = sys.argv[1]
     else:
@@ -1247,6 +1248,10 @@ if __name__ == "__main__":
             debug_data_path = os.path.join(module_path, 'data')
             comp = Component(debug=set_debug, data_path=debug_data_path)
             comp.run()
+
+        component_end = core.utils.now()
+        component_duration = (component_end - component_start).total_seconds()
+        logging.info('Extraction completed successfully in {} seconds'.format(component_duration))
 
     except Exception as generic_err:
         logging.exception(generic_err)

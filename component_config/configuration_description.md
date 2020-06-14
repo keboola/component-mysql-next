@@ -50,7 +50,22 @@ The above only needs to be set up during initial setup for replication. You can 
 `call mysql.rds_show_configuration;` to see your existing binlog retention hours value, if any.
 
 #### Setting Up the Configuration File
-[TODO]
+Setup is relatively straightforward! For each table or view that you would like to replicate, you just need to add two
+options to the "metadata" section of that table or view. First, specify `"selected": true`. Next, choose the replication 
+method by setting `"replication-method": "INCREMENTAL"`. Allowed values are `FULL_TABLE`, `INCREMENTAL` and `LOG_BASED`.
+
+If you choose `INCREMENTAL`, you also must specify a replication key, the field that will be used to determine if a 
+given row in that table has changed. You specify this with an additional parameter, such as 
+`"replication-key": "updated_at"`. `LOG_BASED` is only allowed if the server is set up to support it, and the database 
+object is a table, not a view.
+
+For any replication method, once you have chosen "selected" to True at the table level for each table/view you want to 
+include, set `"selected": false` for any column(s) that you want to exclude from the replication (i.e. sensitive info),
+by default all columns are included for selected tables.
+
+By default all tables and views are excluded to protect potentially sensitive data.
+However, if you choose to include a table, all columns are included by default (for ease of adding new tables); any
+columns you would like to exclude must be explicitly set as such by including `selected: false` on that column.
 
 #### Pulling Existing Schema Definitions
 The extractor has the ability to pull existing schema definitions. If you set the parameter discover_schema to True, the

@@ -37,6 +37,8 @@ CSV_CHUNK_SIZE = 100000
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_KBC_SYNCED_AT'
 KBC_DELETED = '_KBC_DELETED_AT'
+KBC_METADATA_COLS = (KBC_SYNCED, KBC_DELETED)
+KBC_METADATA = (SYNC_STARTED_AT, None)
 
 
 def monkey_patch_datetime(datetime_str):
@@ -271,6 +273,15 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
     return rows_saved
 
 
+def _add_kbc_metadata_to_rows(rows, catalog_entry):
+    """Add metadata for Keboola. Can presume not there since should only be called for full sync."""
+    # Add headers to schema definition (data is added in write step)
+    catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
+
+    return rows
+
+
 def _add_kbc_metadata_to_df(table_df: pd.DataFrame, catalog_entry):
     """Add metadata for Keboola. Can presume not there since should only be called for full sync."""
     kbc_metadata_cols = (KBC_SYNCED, KBC_DELETED)
@@ -283,100 +294,168 @@ def _add_kbc_metadata_to_df(table_df: pd.DataFrame, catalog_entry):
         table_df[column] = value
 
 
-def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, stream_version, params,
-                    tables_destination: str = None, message_store: core.MessageStore = None):
+def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql, columns, stream_version,
+                    params, tables_destination: str = None, message_store: core.MessageStore = None):
     replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
 
     query_string = cursor.mogrify(select_sql, params)
-    logging.info('Running query {}', query_string)
+    logging.info('Running query {}'.format(query_string))
 
     # Chunk Changes Here
+    has_more_data = True
     current_chunk = 0
 
     logging.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
     start_time = utils.now()
-    for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE, coerce_float=False):
-        chunk_start_time = utils.now()
-        current_chunk += 1
-        if current_chunk > 1:
-            logging.info('Finished writing {} rows to CSV for batch {}, total ingested so far: {}'.format(
-                CSV_CHUNK_SIZE, current_chunk - 1, current_chunk * CSV_CHUNK_SIZE
-            ))
 
-        # Convert tinyint values to boolean
-        for column, schema_metadata in catalog_entry.schema.properties.items():
-            output_type = schema_metadata.type[1]
-            if output_type == 'boolean':
-                logging.info('Replacing tinyint values with True/False for output table {}, column {}'.format(
-                    catalog_entry.table, column))
+    try:
+        cursor.execute(select_sql)
+        while has_more_data:
+            chunk_start = utils.now()
+            current_chunk += 1
 
-                chunk[column] = chunk[column].replace({1: True, 0: False})
+            query_output_rows = cursor.fetchmany(CSV_CHUNK_SIZE)
 
-        # Add Keboola metadata columns (timestamps only, so this step happens after the boolean conversion)
-        _add_kbc_metadata_to_df(chunk, catalog_entry)
+            if query_output_rows:
+                number_of_rows = len(query_output_rows)
 
-        if current_chunk == 1:
-            table_and_headers = {}
-            headers = list(chunk.columns.values)
-            table_and_headers[catalog_entry.table] = headers
+                # Add Keboola metadata columns
+                rows = _add_kbc_metadata_to_rows(query_output_rows, catalog_entry)
+                logging.debug('Fetched {} rows from query result'.format(number_of_rows))
 
-            # Write to CSV of specific structure: table, headers (no header is written to this CSV)
-            tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
-            with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
-                writer = csv.writer(headers_csv, delimiter='\t')
-                writer.writerow([catalog_entry.table, headers])
-                logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
-                    catalog_entry.table, headers
-                ))
+                if current_chunk == 1:
+                    table_and_headers = {}
 
-        destination_output_path = os.path.join(tables_destination, catalog_entry.table.upper() + '.csv', '')
+                    # Fetch column names from first item in cursor description tuple
+                    headers = list()
+                    for i in cursor.description:
+                        headers.append(i[0])
+                    for column in KBC_METADATA_COLS:
+                        headers.append(column)
 
-        if not os.path.exists(destination_output_path):
-            os.mkdir(destination_output_path)
+                    table_and_headers[catalog_entry.table] = headers
 
-        csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
-                                str(current_chunk) + '.csv')
-        pd.set_option('display.max_columns', None)
-        print(chunk.head(10))
-        print(chunk.dtypes)
-        chunk.to_csv(csv_path, index=False, mode='a', header=False)
-        logging.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
-        chunk_end_time = utils.now()
-        chunk_processing_duration = (chunk_end_time - chunk_start_time).total_seconds()
-        logging.info('Chunk {} processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
+                    # Write to CSV of specific structure: table, headers (no header is written to this CSV)
+                    tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
+                    with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
+                        writer = csv.writer(headers_csv, delimiter='\t')
+                        writer.writerow([catalog_entry.table, headers])
+                        logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
+                            catalog_entry.table, headers
+                        ))
+
+                destination_output_path = os.path.join(tables_destination, catalog_entry.table.upper() + '.csv', '')
+
+                if not os.path.exists(destination_output_path):
+                    os.mkdir(destination_output_path)
+
+                csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
+                                        str(current_chunk) + '.csv')
+
+                with open(csv_path, 'w', encoding='utf-8') as output_data_file:
+                    writer = csv.writer(output_data_file, quoting=csv.QUOTE_MINIMAL)
+                    for row in rows:
+                        rows_with_metadata = row + KBC_METADATA
+                        writer.writerow(rows_with_metadata)
+
+            else:
+                has_more_data = False
+
+            chunk_end = utils.now()
+            chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
+            logging.info('Chunk {} had processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
+
+    except Exception as e:
+        logging.error('Failed to execute query {}'.format(query_string))
+        raise
 
     end_time = utils.now()
+    full_chunk_processing_duration = (end_time - start_time).total_seconds()
     logging.info('Finished chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
-    full_chunking_processing_duration = (end_time - start_time).total_seconds()
-    logging.info('Total processing time: {} seconds'.format(full_chunking_processing_duration))
-
-    # TODO: Determine if we need last PK fetched and these states, or if we can remove altogether
-    # md_map = metadata.to_map(catalog_entry.metadata)
-    # stream_metadata = md_map.get((), {})
-    # replication_method = stream_metadata.get('replication-method')
-
-    # if replication_method.upper() in {'FULL_TABLE', 'LOG_BASED'}:
-    #     key_properties = get_key_properties(catalog_entry)
-
-    # max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
-
-    # if max_pk_values:
-    #     # Get last row for max of PK fetched
-    #     last_file_df = pd.read_csv(os.path.join(tables_destination, catalog_entry.table, str(current_chunk)))
-    #     last_row_fetched = last_file_df.tail(1).values.to
-    #     last_pk_fetched = {k: v for k, v in last_row_fetched
-    #                        if k in key_properties}
-
-    # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
-
-    # TODO: Handle for key-based incremental here
-    # elif replication_method.upper() == 'INCREMENTAL':
-    #     if replication_key is not None:
-    #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key', replication_key)
-    #
-    #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key_value',
-    #                                     record_message.record[replication_key])
+    logging.info('Total processing time: {} seconds'.format(full_chunk_processing_duration))
 
     core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
+
+    # for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE, coerce_float=False):
+    #     chunk_start_time = utils.now()
+    #     current_chunk += 1
+    #     if current_chunk > 1:
+    #         logging.info('Finished writing {} rows to CSV for batch {}, total ingested so far: {}'.format(
+    #             CSV_CHUNK_SIZE, current_chunk - 1, current_chunk * CSV_CHUNK_SIZE
+    #         ))
+    #
+    #     # Convert tinyint values to boolean
+    #     for column, schema_metadata in catalog_entry.schema.properties.items():
+    #         output_type = schema_metadata.type[1]
+    #         if output_type == 'boolean':
+    #             logging.info('Replacing tinyint values with True/False for output table {}, column {}'.format(
+    #                 catalog_entry.table, column))
+    #
+    #             chunk[column] = chunk[column].replace({1: True, 0: False})
+    #
+    #     # Add Keboola metadata columns (timestamps only, so this step happens after the boolean conversion)
+    #     _add_kbc_metadata_to_df(chunk, catalog_entry)
+    #
+    #     if current_chunk == 1:
+    #         table_and_headers = {}
+    #         headers = list(chunk.columns.values)
+    #         table_and_headers[catalog_entry.table] = headers
+    #
+    #         # Write to CSV of specific structure: table, headers (no header is written to this CSV)
+    #         tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
+    #         with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
+    #             writer = csv.writer(headers_csv, delimiter='\t')
+    #             writer.writerow([catalog_entry.table, headers])
+    #             logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
+    #                 catalog_entry.table, headers
+    #             ))
+    #
+    #     destination_output_path = os.path.join(tables_destination, catalog_entry.table.upper() + '.csv', '')
+    #
+    #     if not os.path.exists(destination_output_path):
+    #         os.mkdir(destination_output_path)
+    #
+    #     csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
+    #                             str(current_chunk) + '.csv')
+    #     pd.set_option('display.max_columns', None)
+    #     chunk.to_csv(csv_path, index=False, mode='a', header=False)
+    #     logging.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
+    #     chunk_end_time = utils.now()
+    #     chunk_processing_duration = (chunk_end_time - chunk_start_time).total_seconds()
+    #     logging.info('Chunk {} processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
+    #
+    # end_time = utils.now()
+    # logging.info('Finished chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
+    # full_chunking_processing_duration = (end_time - start_time).total_seconds()
+    # logging.info('Total processing time: {} seconds'.format(full_chunking_processing_duration))
+    #
+    # # TODO: Determine if we need last PK fetched and these states, or if we can remove altogether
+    # # md_map = metadata.to_map(catalog_entry.metadata)
+    # # stream_metadata = md_map.get((), {})
+    # # replication_method = stream_metadata.get('replication-method')
+    #
+    # # if replication_method.upper() in {'FULL_TABLE', 'LOG_BASED'}:
+    # #     key_properties = get_key_properties(catalog_entry)
+    #
+    # # max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
+    #
+    # # if max_pk_values:
+    # #     # Get last row for max of PK fetched
+    # #     last_file_df = pd.read_csv(os.path.join(tables_destination, catalog_entry.table, str(current_chunk)))
+    # #     last_row_fetched = last_file_df.tail(1).values.to
+    # #     last_pk_fetched = {k: v for k, v in last_row_fetched
+    # #                        if k in key_properties}
+    #
+    # # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
+    #
+    # # TODO: Handle for key-based incremental here
+    # # elif replication_method.upper() == 'INCREMENTAL':
+    # #     if replication_key is not None:
+    # #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key', replication_key)
+    # #
+    # #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key_value',
+    # #                                     record_message.record[replication_key])
+    #
+    # core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
     # End Chunk Changes

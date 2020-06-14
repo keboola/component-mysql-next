@@ -1,3 +1,10 @@
+**0.3.5**
+
+- Allows replication-method to be specified in any case (not just all caps)
+- Removed pandas for full table downloads for performance improvement
+- Fixed output of ints and floats issue with pandas full sync
+- Added docs on filling out mappings file
+
 **0.3.4**
 
 - Grabs only latest binlog event per primary key in extraction since data is uploaded by PK

@@ -141,11 +141,14 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
             if val is None:
                 boolean_representation = None
             elif val == 0:
-                boolean_representation = False
+                # boolean_representation = False
+                boolean_representation = 0
             elif db_column_type == FIELD_TYPE.BIT:
-                boolean_representation = int(val) != 0
+                boolean_representation = 1 if int(val) != 0 else 0
+                # boolean_representation = int(val) != 0
             else:
-                boolean_representation = True
+                boolean_representation = 1
+                # boolean_representation = True
             row_to_persist[column_name] = boolean_representation
 
         else:
