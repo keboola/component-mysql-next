@@ -1,4 +1,4 @@
-**0.3.5**
+**0.3.8**
 
 - Allows replication-method to be specified in any case (not just all caps)
 - Removed pandas for full table downloads for performance improvement
