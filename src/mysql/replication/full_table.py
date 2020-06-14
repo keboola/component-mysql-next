@@ -29,7 +29,7 @@ def generate_bookmark_keys(catalog_entry):
 
     base_bookmark_keys = {'last_pk_fetched', 'max_pk_values', 'version', 'initial_full_table_complete'}
 
-    if replication_method == 'FULL_TABLE':
+    if replication_method.upper() == 'FULL_TABLE':
         bookmark_keys = base_bookmark_keys
     else:
         bookmark_keys = base_bookmark_keys.union(binlog.BOOKMARK_KEYS)

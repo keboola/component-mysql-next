@@ -241,7 +241,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
             stream_metadata = md_map.get((), {})
             replication_method = stream_metadata.get('replication-method')
 
-            if replication_method in {'FULL_TABLE', 'LOG_BASED'}:
+            if replication_method.upper() in {'FULL_TABLE', 'LOG_BASED'}:
                 key_properties = get_key_properties(catalog_entry)
 
                 max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
@@ -252,7 +252,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
 
                     state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
 
-            elif replication_method == 'INCREMENTAL':
+            elif replication_method.upper() == 'INCREMENTAL':
                 if replication_key is not None:
                     state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key', replication_key)
 
@@ -288,14 +288,14 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
 
     query_string = cursor.mogrify(select_sql, params)
+    logging.info('Running query {}', query_string)
 
-    logging.info('Running %s', query_string)
     # Chunk Changes Here
     current_chunk = 0
 
     logging.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
     start_time = utils.now()
-    for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE):
+    for chunk in pd.read_sql(select_sql, con=conn, chunksize=CSV_CHUNK_SIZE, coerce_float=False):
         chunk_start_time = utils.now()
         current_chunk += 1
         if current_chunk > 1:
@@ -336,7 +336,9 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
 
         csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
                                 str(current_chunk) + '.csv')
-
+        pd.set_option('display.max_columns', None)
+        print(chunk.head(10))
+        print(chunk.dtypes)
         chunk.to_csv(csv_path, index=False, mode='a', header=False)
         logging.info('Ingested {} rows to path {}'.format(chunk.shape[0], os.path.basename(csv_path)))
         chunk_end_time = utils.now()
@@ -353,7 +355,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     # stream_metadata = md_map.get((), {})
     # replication_method = stream_metadata.get('replication-method')
 
-    # if replication_method in {'FULL_TABLE', 'LOG_BASED'}:
+    # if replication_method.upper() in {'FULL_TABLE', 'LOG_BASED'}:
     #     key_properties = get_key_properties(catalog_entry)
 
     # max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
@@ -368,7 +370,7 @@ def sync_query_bulk(conn, cursor, catalog_entry, state, select_sql, columns, str
     # state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched', last_pk_fetched)
 
     # TODO: Handle for key-based incremental here
-    # elif replication_method == 'INCREMENTAL':
+    # elif replication_method.upper() == 'INCREMENTAL':
     #     if replication_key is not None:
     #         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'replication_key', replication_key)
     #

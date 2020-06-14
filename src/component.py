@@ -4,23 +4,20 @@
 Executes component endpoint executions based on dependent api_mappings.json file in same path. This file should have
 a set structure, see example below.
 
-Essentially at the table table and column level, add "replication-method" of: FULL_TABLE, INCREMENTAL, or ROW_BASED.
+Essentially at the table table and column level, add "replication-method" of: FULL_TABLE, INCREMENTAL, or LOG_BASED.
 If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-Do Items
-TODO: Removing events for same ID in same period needs to not happen for binlogs [DONE]
-TODO: Support for set data type [DONE]
-TODO: Send metadata to Keboola for columns [DONE]
-TODO: Remove incremental true from metadata during full table sync [DONE]
-TODO: Switch to not shell script execution [DONE]
-TODO: Fix boolean type output diff between log-based and full sync [DONE]
 TODO: Update Config documentation on how to fill out table mappings
+TODO: Schema changes handling
+TODO: Numeric vs. Int Issue
+TODO: True/False vs. 1/0 Consistency [Done]
 
 # Secondary To-do Items
 TODO: Table Mappings - Handle prior user inputs
 TODO: Option to do "one-time" table resync, where just one table resyncs once
 TODO: Add testing framework
-TODO: Confirm SSL works as expected
+TODO: Confirm SSL works as expected [DONE]
 TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 TODO: More User Options
 """
@@ -451,10 +448,10 @@ def is_valid_currently_syncing_stream(selected_stream, state):
     stream_metadata = metadata.to_map(selected_stream.metadata)
     replication_method = stream_metadata.get((), {}).get('replication-method')
 
-    if replication_method != 'LOG_BASED':
+    if replication_method.upper() != 'LOG_BASED':
         return True
 
-    if replication_method == 'LOG_BASED' and binlog_stream_requires_historical(selected_stream, state):
+    if replication_method.upper() == 'LOG_BASED' and binlog_stream_requires_historical(selected_stream, state):
         return True
 
     return False
@@ -542,11 +539,12 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
 
         if not stream_state:
-            if replication_method == 'LOG_BASED':
+            if replication_method.upper() == 'LOG_BASED':
                 logging.info("LOG_BASED stream %s requires full historical sync", stream.tap_stream_id)
 
             streams_without_state.append(stream)
-        elif stream_state and replication_method == 'LOG_BASED' and binlog_stream_requires_historical(stream, state):
+        elif stream_state and replication_method.upper() == 'LOG_BASED' \
+                and binlog_stream_requires_historical(stream, state):
             is_view = common.get_is_view(stream)
 
             if is_view:
@@ -555,7 +553,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
             logging.info("LOG_BASED stream %s will resume its historical sync", stream.tap_stream_id)
 
             streams_with_state.append(stream)
-        elif stream_state and replication_method != 'LOG_BASED':
+        elif stream_state and replication_method.upper() != 'LOG_BASED':
             streams_with_state.append(stream)
 
     # If the state says we were in the middle of processing a stream, skip
@@ -593,7 +591,7 @@ def get_binlog_streams(mysql_conn, catalog, config, state):
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
         logging.debug(stream_state)
 
-        if replication_method == 'LOG_BASED' and not binlog_stream_requires_historical(stream, state):
+        if replication_method.upper() == 'LOG_BASED' and not binlog_stream_requires_historical(stream, state):
             binlog_streams.append(stream)
 
     return resolve_catalog(discovered, binlog_streams)
@@ -785,14 +783,14 @@ class Component(KBCEnvHandler):
 
                 log_engine(mysql_conn, catalog_entry)
 
-                if replication_method == 'INCREMENTAL':
+                if replication_method.upper() == 'INCREMENTAL':
                     optional_limit = config.get('incremental_limit')
                     self.do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit,
                                              message_store=message_store)
-                elif replication_method == 'LOG_BASED':
+                elif replication_method.upper() == 'LOG_BASED':
                     self.do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns,
                                                    tables_destination=tables_destination, message_store=message_store)
-                elif replication_method == 'FULL_TABLE':
+                elif replication_method.upper() == 'FULL_TABLE':
                     self.do_sync_full_table(mysql_conn, config, catalog_entry, state, columns,
                                             tables_destination=tables_destination, message_store=message_store)
                 else:
@@ -1056,6 +1054,8 @@ class Component(KBCEnvHandler):
 
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
             b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
+            print('b64 input key:')
+            print(b64_input_key)
             try:
                 input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
             except binascii.Error as bin_err:
@@ -1175,7 +1175,8 @@ class Component(KBCEnvHandler):
                         logging.info('Table has rep method {} and user incremental param is {}'.format(
                             table_replication_method, self.cfg_params[KEY_INCREMENTAL_SYNC]
                         ))
-                        if table_replication_method == 'FULL_TABLE' or not self.cfg_params[KEY_INCREMENTAL_SYNC]:
+                        if table_replication_method.upper() == 'FULL_TABLE' or \
+                                not self.cfg_params[KEY_INCREMENTAL_SYNC]:
                             logging.info('Manifest file will have incremental false for Full Table syncs')
                             manifest_incremental = False
                         else:
