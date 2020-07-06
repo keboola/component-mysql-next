@@ -52,6 +52,7 @@ try:
     from core.catalog import Catalog, CatalogEntry
     from core.env_handler import KBCEnvHandler
     from core.schema import Schema
+    from core.yaml_mappings import make_yaml_mapping_file
 
     # import mysql.result as result_writer
     import mysql.replication.binlog as binlog
@@ -69,6 +70,7 @@ except ImportError as e:
     from src.core.catalog import Catalog, CatalogEntry
     from src.core.env_handler import KBCEnvHandler
     from src.core.schema import Schema
+    from src.core.yaml_mappings import make_yaml_mapping_file
 
     # import src.mysql.result as result_writer
     import src.mysql.replication.binlog as binlog
@@ -115,7 +117,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.3'
+APP_VERSION = '0.4.4'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1083,13 +1085,12 @@ class Component(KBCEnvHandler):
             directories.extend(dirs)
             files.extend(file_names)
         if is_pre_manifest:
-            logging.info('All pre-manifest directories sent to output: {}'.format(directories))
-            logging.info('All pre-manifest files sent to output: {}'.format(files))
+            logging.info('All pre-manifest directories at walked path: {}'.format(directories))
+            logging.info('All pre-manifest files at walked path: {}'.format(files))
         else:
-            logging.info('All directories sent to output: {}'.format(directories))
-            logging.info('All files sent to output: {}'.format(files))
+            logging.info('All directories at walked path: {}'.format(directories))
+            logging.info('All files sent at walked path: {}'.format(files))
 
-    # TODO: Separate SSH tunnel and other connectivity properties into separate method
     def run(self):
         """Execute main component extraction process."""
         table_mappings = {}
@@ -1121,16 +1122,17 @@ class Component(KBCEnvHandler):
                     table_mappings = json.load(mappings_file)
 
             # # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
-            # current_table_mapping = discover_catalog(mysql_client, self.params)
+            table_mapping = discover_catalog(mysql_client, self.params)
+            make_yaml_mapping_file(table_mapping.to_dict(), os.path.join(self.files_out_path, 'mappings.yaml'))
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
                 logging.info('Fetching only object and field names, not running full extraction.')
-                table_mapping = discover_catalog(mysql_client, self.params)
 
                 # TODO: Retain prior selected choices by user.
 
                 self.write_table_mappings_file(table_mapping)
+
             elif table_mappings:
                 # Run extractor data sync.
                 manually_entered_b64_state = self.cfg_params.get(KEY_STATE_JSON)
