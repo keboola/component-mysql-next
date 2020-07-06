@@ -1,3 +1,4 @@
+PyYAML
 https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/get/0.2.9.zip#egg=kbc
 backoff==1.10.0
 ciso8601==2.1.3

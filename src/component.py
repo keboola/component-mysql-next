@@ -1046,16 +1046,10 @@ class Component(KBCEnvHandler):
             df.columns = map(str.upper, df.columns)
             df.to_csv(csv_table_path, index=False)
 
-    # TODO: Separate SSH tunnel and other connectivity properties into separate method
-    def run(self):
-        """Execute main component extraction process."""
-        table_mappings = {}
-        file_input_path = self._check_file_inputs()
-
+    def get_conn_context_manager(self):
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:
             b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
-            print('b64 input key:')
-            print(b64_input_key)
+            input_key = None
             try:
                 input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
             except binascii.Error as bin_err:
@@ -1076,7 +1070,38 @@ class Component(KBCEnvHandler):
         else:
             context_manager = nullcontext(None)
 
-        with context_manager as server:
+        return context_manager
+
+    def walk_path(self, path: str = None, is_pre_manifest: bool = False):
+        """Walk through specified path to QA files/directories/tables (an manifests, if generated)."""
+        logging.info('Walking path {} to QA directories and files'.format(path))
+        if not path:
+            path = self.tables_out_path
+        directories = []
+        files = []
+        for (_, dirs, file_names) in os.walk(path):
+            directories.extend(dirs)
+            files.extend(file_names)
+        if is_pre_manifest:
+            logging.info('All pre-manifest directories sent to output: {}'.format(directories))
+            logging.info('All pre-manifest files sent to output: {}'.format(files))
+        else:
+            logging.info('All directories sent to output: {}'.format(directories))
+            logging.info('All files sent to output: {}'.format(files))
+
+    # TODO: Separate SSH tunnel and other connectivity properties into separate method
+    def run(self):
+        """Execute main component extraction process."""
+        table_mappings = {}
+        file_input_path = self._check_file_inputs()
+
+        # QA Input data
+        self.walk_path(self.files_in_path)
+        self.walk_path(self.tables_out_path)
+
+        connection_context = self.get_conn_context_manager()
+
+        with connection_context as server:
             if server:  # True if set an SSH tunnel returns false if using the null context.
                 logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
             else:
@@ -1094,6 +1119,9 @@ class Component(KBCEnvHandler):
                     manual_table_mappings_file))
                 with open(manual_table_mappings_file, 'r') as mappings_file:
                     table_mappings = json.load(mappings_file)
+
+            # # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
+            # current_table_mapping = discover_catalog(mysql_client, self.params)
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
@@ -1130,15 +1158,9 @@ class Component(KBCEnvHandler):
                     logging.info('Data extraction completed')
 
                 # QA: Walk through output destination pre-manifest
-                directories = []
-                files = []
-                for (_, dirs, file_names) in os.walk(self.tables_out_path):
-                    directories.extend(dirs)
-                    files.extend(file_names)
-                logging.debug('All pre-manifest directories sent to output: {}'.format(directories))
-                logging.debug('All pre-manifest files sent to output: {}'.format(files))
+                self.walk_path(path=self.tables_out_path, is_pre_manifest=True)
 
-                # Write manifest files
+                # Determine Manifest file outputs
                 tables_and_columns = dict()
                 if os.path.exists(os.path.join(current_path, 'table_headers.csv')):
                     with open(os.path.join(current_path, 'table_headers.csv')) as headers_file:
@@ -1189,6 +1211,8 @@ class Component(KBCEnvHandler):
 
                         logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
                                                                                   entry_table_name))
+
+                        # Write manifest files
                         if output_is_sliced:
                             if core.find_files(table_specific_sliced_path, '*.csv'):
                                 logging.info('Writing manifest for {} to "{}" with columns for sliced table'.format(
@@ -1210,19 +1234,15 @@ class Component(KBCEnvHandler):
                                          'from the database for this table. This may be expected behavior if the table '
                                          'is empty or no new rows were added (if incremental)'.format(entry_table_name))
 
+                        # Write output state file
                         logging.info('Got final state {}'.format(message_store.get_state()))
                         self.write_state_file(message_store.get_state())
                         file_state_destination = os.path.join(self.files_out_path, 'state.json')
                         self.write_state_file(message_store.get_state(), output_path=file_state_destination)
 
                 # QA: Walk through output destination
-                directories = []
-                files = []
-                for (_, dirs, file_names) in os.walk(self.tables_out_path):
-                    directories.extend(dirs)
-                    files.extend(file_names)
-                logging.debug('All directories sent to output: {}'.format(directories))
-                logging.debug('All files sent to output: {}'.format(files))
+                self.walk_path(path=self.tables_out_path, is_pre_manifest=False)
+
             else:
                 logging.error('You have either specified incorrect input parameters, or have not chosen to either '
                               'specify a table mappings file manually or via the File Input Mappings configuration.')
