@@ -36,6 +36,7 @@ import paramiko
 import pendulum
 import pymysql
 import pymysqlreplication
+import yaml
 
 from collections import namedtuple
 from contextlib import nullcontext
@@ -52,7 +53,7 @@ try:
     from core.catalog import Catalog, CatalogEntry
     from core.env_handler import KBCEnvHandler
     from core.schema import Schema
-    from core.yaml_mappings import make_yaml_mapping_file
+    from core.yaml_mappings import convert_yaml_to_json_mapping, make_yaml_mapping_file
 
     # import mysql.result as result_writer
     import mysql.replication.binlog as binlog
@@ -70,7 +71,7 @@ except ImportError as e:
     from src.core.catalog import Catalog, CatalogEntry
     from src.core.env_handler import KBCEnvHandler
     from src.core.schema import Schema
-    from src.core.yaml_mappings import make_yaml_mapping_file
+    from src.core.yaml_mappings import convert_yaml_to_json_mapping, make_yaml_mapping_file
 
     # import src.mysql.result as result_writer
     import src.mysql.replication.binlog as binlog
@@ -92,8 +93,10 @@ KEY_MYSQL_PORT = 'port'
 KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
 KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
+KEY_OUTPUT_BUCKET = 'outputBucket'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
 KEY_USE_SSL = 'ssl'
+KEY_MAPPINGS_INPUT_FILE = 'mappingsInputFile'
 KEY_STATE_JSON = 'base64StateJson'
 
 # Define optional parameters as constants for later use.
@@ -117,7 +120,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.4'
+APP_VERSION = '0.4.5'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -956,7 +959,7 @@ class Component(KBCEnvHandler):
         logging.warning('Processed data type {} does not match any KBC base types'.format(column_type))
 
     def create_manifests(self, entry: dict, data_path: str, columns: list = None, column_metadata: dict = None,
-                         set_incremental: bool = True):
+                         set_incremental: bool = True, output_bucket: str = None):
         """Write manifest files for the results produced by the results writer.
 
         :param entry: Dict entry from catalog
@@ -966,6 +969,7 @@ class Component(KBCEnvHandler):
         used in manifest file.
         :param column_metadata: Dict column metadata as keys and values.
         :param set_incremental: Incremental choice true or false for whether to write incrementally to manifest file.
+        :param output_bucket: The name of the output bucket to be written to Storage
         :return:
         """
         if entry.get('primary_keys'):
@@ -978,14 +982,15 @@ class Component(KBCEnvHandler):
         # for r in results:
         if not columns:
             self.write_table_manifest(result_full_path, primary_key=primary_keys, column_metadata=column_metadata,
-                                      is_incremental=set_incremental)
+                                      is_incremental=set_incremental, output_bucket=output_bucket)
         else:
             self.write_table_manifest(result_full_path, primary_key=primary_keys, columns=columns,
-                                      column_metadata=column_metadata, is_incremental=set_incremental)
+                                      column_metadata=column_metadata, is_incremental=set_incremental,
+                                      output_bucket=output_bucket)
 
     @staticmethod
     def write_table_manifest(file_name: str, destination: str = '', primary_key: list = None, columns: list = None,
-                             column_metadata: dict = None, is_incremental: bool = None):
+                             column_metadata: dict = None, is_incremental: bool = None, output_bucket: str = None):
         """Write manifest for output table Manifest is used for the table to be stored in KBC Storage.
 
         Args:
@@ -995,13 +1000,14 @@ class Component(KBCEnvHandler):
             columns: List of columns as strings that are written to table, necessary to specify for sliced tables.
             column_metadata: Metadata keys and values about columns in table
             is_incremental: Set to true to enable incremental loading
+            output_bucket: The output bucket in storage
         """
         manifest = {}
         if destination:
-            if isinstance(destination, str):
-                manifest['destination'] = destination
+            if output_bucket:
+                manifest['destination'] = 'in.c-' + output_bucket + '.' + destination
             else:
-                raise TypeError("Destination must be a string")
+                manifest['destination'] = destination
         if primary_key:
             if isinstance(primary_key, list):
                 manifest['primary_key'] = primary_key
@@ -1098,7 +1104,7 @@ class Component(KBCEnvHandler):
 
         # QA Input data
         self.walk_path(self.files_in_path)
-        self.walk_path(self.tables_out_path)
+        self.walk_path(self.tables_in_path)
 
         connection_context = self.get_conn_context_manager()
 
@@ -1111,26 +1117,41 @@ class Component(KBCEnvHandler):
             mysql_client = MySQLConnection(self.mysql_config_params)
             self.log_server_params(mysql_client)
 
-            if self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
+            # elif file_input_path:
+            #     manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
+            #     logging.info('Fetching table mappings from file input mapping configuration: {}.'.format(
+            #         manual_table_mappings_file))
+            #     with open(manual_table_mappings_file, 'r') as mappings_file:
+            #         table_mappings = json.load(mappings_file)
+
+            # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
+            table_mapping = discover_catalog(mysql_client, self.params)
+
+            # Make Raw Mapping file to allow edits
+            raw_yaml_mapping = make_yaml_mapping_file(table_mapping.to_dict())
+
+            if self.params.get(KEY_MAPPINGS_INPUT_FILE):
+                logging.info('Using table mappings based on input YAML file')
+                with open(os.path.join(self.files_in_path, 'mappings.yaml')) as yaml_mapping:
+                    yaml_mappings = yaml.load(yaml_mapping)
+                    table_mappings = convert_yaml_to_json_mapping(yaml_mappings, table_mapping.to_dict())
+            elif self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
+                logging.info('Using table mappings based on Base64-encoded table mapppings JSON input parameter')
                 table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
                                                              validate=True).decode('utf-8'))
-            elif file_input_path:
-                manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
-                logging.info('Fetching table mappings from file input mapping configuration: {}.'.format(
-                    manual_table_mappings_file))
-                with open(manual_table_mappings_file, 'r') as mappings_file:
-                    table_mappings = json.load(mappings_file)
-
-            # # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
-            table_mapping = discover_catalog(mysql_client, self.params)
-            make_yaml_mapping_file(table_mapping.to_dict(), os.path.join(self.files_out_path, 'mappings.yaml'))
+            else:
+                raise AttributeError('You are either missing')
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
                 logging.info('Fetching only object and field names, not running full extraction.')
 
                 # TODO: Retain prior selected choices by user.
-
+                if self.params.get(KEY_MAPPINGS_INPUT_FILE):
+                    input_file_name, _ = os.path.splitext(self.params[KEY_MAPPINGS_INPUT_FILE])
+                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
+                    with open(out_path, 'w') as yaml_out:
+                        yaml_out.write(yaml.dump(raw_yaml_mapping))
                 self.write_table_mappings_file(table_mapping)
 
             elif table_mappings:
@@ -1175,6 +1196,11 @@ class Component(KBCEnvHandler):
                     entry_table_name = entry.get('table_name')
                     table_metadata = entry['metadata'][0]['metadata']
                     column_metadata = entry['metadata'][1:]
+
+                    if self.params.get(KEY_OUTPUT_BUCKET):
+                        output_bucket = self.params[KEY_OUTPUT_BUCKET]
+                    else:
+                        output_bucket = None
 
                     if table_metadata.get('selected'):
                         table_replication_method = table_metadata.get('replication-method').upper()
@@ -1222,12 +1248,12 @@ class Component(KBCEnvHandler):
                                 self.create_manifests(entry, self.tables_out_path,
                                                       columns=list(tables_and_columns.get(entry_table_name)),
                                                       column_metadata=table_column_metadata,
-                                                      set_incremental=manifest_incremental)
+                                                      set_incremental=manifest_incremental, output_bucket=output_bucket)
                         elif os.path.isfile(table_specific_sliced_path):
                             logging.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
                                 entry_table_name, self.tables_out_path))
                             self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
-                                                  set_incremental=manifest_incremental)
+                                                  set_incremental=manifest_incremental, output_bucket=output_bucket)
 
                             # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
                             self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'))

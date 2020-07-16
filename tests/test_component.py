@@ -1,14 +1,17 @@
-'''
+"""
 Created on 12. 11. 2018
 
 @author: esner
-'''
+"""
 import unittest
 import mock
 import os
 from freezegun import freeze_time
 
-from component import Component
+try:
+    from component import Component
+except ImportError:
+    from src.component import Component
 
 
 class TestComponent(unittest.TestCase):

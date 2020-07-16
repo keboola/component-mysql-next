@@ -8,10 +8,12 @@
     "username",
     "#password",
     "runIncrementalSync",
+    "outputBucket",
     "ssl",
     "sslCa",
     "verifyCert",
     "sshTunnel",
+    "mappingsInputFile",
     "base64StateJson"
   ],
   "properties": {
@@ -63,7 +65,14 @@
       "title": "Run Incremental Sync?",
       "default": true,
       "description": "Keep true to run incremental sync based on prior state (for all tables in your mappings specification where you have chosen incremental or log_based. If false, prior state is ignored and full database sync is run",
-      "propertyOrder": 550
+      "propertyOrder": 520
+    },
+    "outputBucket": {
+      "type": "string",
+      "title": "Output Bucket Destination",
+      "default": "",
+      "description": "(Optional) The name of bucket in Keboola storage where the data. Keboola will create a bucket for you if not specified",
+      "propertyOrder": 530
     },
     "ssl": {
       "type": "boolean",
@@ -124,6 +133,13 @@
       "description": "The base64-encoded private key for the key pair associated with your SSH server (encrypted and secured)",
       "format": "password",
       "propertyOrder": 920
+    },
+    "mappingsInputFile": {
+      "type": "string",
+      "title": "Keboola Storage Input Mappings File",
+      "default": "",
+      "description": "Optional, the name (WITHOUT extension of the YAML file which specifies the tables and columns to be ingested. If not specified, must specify the Base 64 Table mappings JSON. Extractor will create suffixed versions for input, output and raw versions of the YAML",
+      "propertyOrder": 940
     },
     "base64TableMappingsJson": {
       "type": "string",

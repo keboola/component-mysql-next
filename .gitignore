@@ -4,6 +4,7 @@ __pycache__/
 .idea
 .project
 .pydevproject
+.pytest_cache/
 
 # Distribution / packaging
 .Python
