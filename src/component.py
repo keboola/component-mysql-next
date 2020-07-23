@@ -1134,20 +1134,14 @@ class Component(KBCEnvHandler):
             if self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
                 input_method = 'yaml'
                 logging.info('Using table mappings based on input YAML mappings')
-                yaml_mappings = yaml.load(self.params[KEY_INPUT_MAPPINGS_YAML])
-                print('yaml mappings loaded:')
-                print(yaml_mappings)
+                yaml_mappings = yaml.safe_load(self.params[KEY_INPUT_MAPPINGS_YAML])
                 table_mappings = json.loads(convert_yaml_to_json_mapping(yaml_mappings, table_mapping.to_dict()))
-                print('converted to table mappings:')
-                print(table_mappings)
             elif self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
                 input_method = 'json'
                 logging.warning('Using table mappings based on Base64-encoded table mappings JSON input parameter. '
                                 'Note: this option will be deprecated with version 0.5.0 of the extractor')
                 table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
                                                              validate=True).decode('utf-8'))
-                print('legacy table mappings:')
-                print(table_mappings)
             else:
                 raise AttributeError('You are missing either a YAML input mapping, or the legacy Base-64 encoded table '
                                      'mappings JSON. Please specify either to appropriately execute the extractor')
