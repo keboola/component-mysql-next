@@ -96,7 +96,8 @@ KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_OUTPUT_BUCKET = 'outputBucket'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
 KEY_USE_SSL = 'ssl'
-KEY_MAPPINGS_INPUT_FILE = 'mappingsInputFile'
+KEY_MAPPINGS_FILE = 'storageMappingsFile'
+KEY_INPUT_MAPPINGS_YAML = 'inputMappingsYaml'
 KEY_STATE_JSON = 'base64StateJson'
 
 # Define optional parameters as constants for later use.
@@ -1130,29 +1131,43 @@ class Component(KBCEnvHandler):
             # Make Raw Mapping file to allow edits
             raw_yaml_mapping = make_yaml_mapping_file(table_mapping.to_dict())
 
-            if self.params.get(KEY_MAPPINGS_INPUT_FILE):
-                logging.info('Using table mappings based on input YAML file')
-                with open(os.path.join(self.files_in_path, 'mappings.yaml')) as yaml_mapping:
-                    yaml_mappings = yaml.load(yaml_mapping)
-                    table_mappings = convert_yaml_to_json_mapping(yaml_mappings, table_mapping.to_dict())
+            if self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
+                input_method = 'yaml'
+                logging.info('Using table mappings based on input YAML mappings')
+                yaml_mappings = yaml.load(self.params[KEY_INPUT_MAPPINGS_YAML])
+                print('yaml mappings loaded:')
+                print(yaml_mappings)
+                table_mappings = json.loads(convert_yaml_to_json_mapping(yaml_mappings, table_mapping.to_dict()))
+                print('converted to table mappings:')
+                print(table_mappings)
             elif self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
-                logging.info('Using table mappings based on Base64-encoded table mapppings JSON input parameter')
+                input_method = 'json'
+                logging.warning('Using table mappings based on Base64-encoded table mappings JSON input parameter. '
+                                'Note: this option will be deprecated with version 0.5.0 of the extractor')
                 table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
                                                              validate=True).decode('utf-8'))
+                print('legacy table mappings:')
+                print(table_mappings)
             else:
-                raise AttributeError('You are either missing')
+                raise AttributeError('You are missing either a YAML input mapping, or the legacy Base-64 encoded table '
+                                     'mappings JSON. Please specify either to appropriately execute the extractor')
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
                 logging.info('Fetching only object and field names, not running full extraction.')
 
-                # TODO: Retain prior selected choices by user.
-                if self.params.get(KEY_MAPPINGS_INPUT_FILE):
-                    input_file_name, _ = os.path.splitext(self.params[KEY_MAPPINGS_INPUT_FILE])
+                # TODO: Retain prior selected choices by user despite refresh.
+                input_file_name = self.params.get(KEY_MAPPINGS_FILE) or 'mappings'
+                if input_method == 'yaml':
+                    logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))
                     out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
                     with open(out_path, 'w') as yaml_out:
                         yaml_out.write(yaml.dump(raw_yaml_mapping))
-                self.write_table_mappings_file(table_mapping)
+                else:
+                    logging.info('Outputting JSON to file {}.json in KBC storage'.format(input_file_name))
+                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.json')
+                    with open(out_path, 'w') as json_out:
+                        json_out.write(table_mapping.dumps())
 
             elif table_mappings:
                 # Run extractor data sync.

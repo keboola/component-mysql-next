@@ -13,7 +13,8 @@
     "sslCa",
     "verifyCert",
     "sshTunnel",
-    "mappingsInputFile",
+    "storageMappingsFile",
+    "inputMappingsYaml",
     "base64StateJson"
   ],
   "properties": {
@@ -134,12 +135,21 @@
       "format": "password",
       "propertyOrder": 920
     },
-    "mappingsInputFile": {
+    "storageMappingsFile": {
       "type": "string",
-      "title": "Keboola Storage Input Mappings File",
+      "title": "Output Storage Mappings File Name",
       "default": "",
-      "description": "Optional, the name (WITHOUT extension of the YAML file which specifies the tables and columns to be ingested. If not specified, must specify the Base 64 Table mappings JSON. Extractor will create suffixed versions for input, output and raw versions of the YAML",
+      "description": "The name of the output file (no extension necessary) for the YAML mappings in Keboola Storage",
+      "format": "json",
       "propertyOrder": 940
+    },
+    "inputMappingsYaml": {
+      "type": "string",
+      "title": "Table Mappings YAML Specification",
+      "default": "",
+      "description": "The YAML config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
+      "format": "json",
+      "propertyOrder": 945
     },
     "base64TableMappingsJson": {
       "type": "string",

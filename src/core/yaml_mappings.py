@@ -70,8 +70,6 @@ def convert_yaml_to_json_mapping(yaml_mappings, raw_json_mapping):
 
     json_data = dict()
     for schema_sets in yaml_mappings:
-        print('schema set type:')
-        print(type(schema_sets))
         print('schema sets:')
         print(schema_sets)
         for schema_name, table_mappings in schema_sets.items():
