@@ -68,12 +68,20 @@
       "description": "Keep true to run incremental sync based on prior state (for all tables in your mappings specification where you have chosen incremental or log_based. If false, prior state is ignored and full database sync is run",
       "propertyOrder": 520
     },
-    "outputBucket": {
+    "storageMappingsFile": {
       "type": "string",
-      "title": "Output Bucket Destination",
+      "title": "Output Storage Mappings File Name",
       "default": "",
-      "description": "(Optional) The name of bucket in Keboola storage where the data. Keboola will create a bucket for you if not specified",
+      "description": "The name of the output file (no extension necessary) for the YAML mappings in Keboola Storage",
       "propertyOrder": 530
+    },
+    "inputMappingsYaml": {
+      "type": "string",
+      "title": "Table Mappings YAML Specification",
+      "default": "",
+      "description": "The YAML config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
+      "format": "json",
+      "propertyOrder": 540
     },
     "ssl": {
       "type": "boolean",
@@ -135,27 +143,18 @@
       "format": "password",
       "propertyOrder": 920
     },
-    "storageMappingsFile": {
+    "outputBucket": {
       "type": "string",
-      "title": "Output Storage Mappings File Name",
+      "title": "Output Bucket Destination",
       "default": "",
-      "description": "The name of the output file (no extension necessary) for the YAML mappings in Keboola Storage",
-      "format": "json",
-      "propertyOrder": 940
-    },
-    "inputMappingsYaml": {
-      "type": "string",
-      "title": "Table Mappings YAML Specification",
-      "default": "",
-      "description": "The YAML config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
-      "format": "json",
-      "propertyOrder": 945
+      "description": "(Optional) The name of bucket in Keboola storage where the data. Keboola will create a bucket for you if not specified",
+      "propertyOrder": 930
     },
     "base64TableMappingsJson": {
       "type": "string",
       "title": "Base64-Encoded Table Mappings JSON Specification",
       "default": "",
-      "description": "Optional, allows for the manual upload of a base64-encoded JSON specification for the database, only use if not using File Input mapping.",
+      "description": "Optional (Deprecated - prefer using YAML mapping above), allows for the manual upload of a base64-encoded JSON specification for the database, only use if not using File Input mapping.",
       "propertyOrder": 950
     },
     "base64StateJson": {

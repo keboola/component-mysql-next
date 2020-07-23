@@ -121,7 +121,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.5'
+APP_VERSION = '0.4.7'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1158,16 +1158,16 @@ class Component(KBCEnvHandler):
 
                 # TODO: Retain prior selected choices by user despite refresh.
                 input_file_name = self.params.get(KEY_MAPPINGS_FILE) or 'mappings'
-                if input_method == 'yaml':
-                    logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))
-                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
-                    with open(out_path, 'w') as yaml_out:
-                        yaml_out.write(yaml.dump(raw_yaml_mapping))
-                else:
-                    logging.info('Outputting JSON to file {}.json in KBC storage'.format(input_file_name))
+                if input_method == 'json':
+                    logging.info('Outputting legacy JSON to file {}.json in KBC storage'.format(input_file_name))
                     out_path = os.path.join(self.files_out_path, input_file_name + '_raw.json')
                     with open(out_path, 'w') as json_out:
                         json_out.write(table_mapping.dumps())
+
+                logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))
+                out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
+                with open(out_path, 'w') as yaml_out:
+                    yaml_out.write(yaml.dump(raw_yaml_mapping))
 
             elif table_mappings:
                 # Run extractor data sync.

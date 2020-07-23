@@ -1,3 +1,7 @@
+**0.4.8**
+
+- YAML support for input mapping specification
+
 **0.4.3**
 
 - Allows replication-method to be specified in any case (not just all caps)
