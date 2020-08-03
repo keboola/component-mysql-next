@@ -121,7 +121,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.7'
+APP_VERSION = '0.4.9'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1050,7 +1050,8 @@ class Component(KBCEnvHandler):
             timer.tags['csv_table'] = csv_table_path
             timer.tags['primary_key'] = primary_keys
 
-            df = pd.read_csv(csv_table_path)
+            # Read DF as Strings to avoid incorrect rounding issues with conversions of ints/numerics to floats
+            df = pd.read_csv(csv_table_path, dtype='string')
             df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
             df.columns = map(str.upper, df.columns)
             df.to_csv(csv_table_path, index=False)
