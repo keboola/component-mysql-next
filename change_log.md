@@ -1,6 +1,7 @@
-**0.4.8**
+**0.4.10**
 
 - YAML support for input mapping specification
+- Proper conversion to strings to avoid float/numeric conversion issues
 
 **0.4.3**
 

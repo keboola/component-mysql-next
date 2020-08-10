@@ -52,4 +52,6 @@ virtualenv/
 *.txt
 *.xml
 process_mappings.py
+
+# Handling for data path
 data/

@@ -8,18 +8,15 @@ Essentially at the table table and column level, add "replication-method" of: FU
 If INCREMENTAL, you need to specify a "replication-key".
 
 # Primary To-Do Items
-TODO: Update Config documentation on how to fill out table mappings [Done]
-TODO: Schema changes handling
-TODO: Numeric vs. Int Issue [Done]
-TODO: True/False vs. 1/0 Consistency [Done]
+TODO: Schema changes handling in extractor
+TODO: Handle schema changes in KBC Storage
+TODO: Switch to specifying schema based on array options?
 
 # Secondary To-do Items
 TODO: Table Mappings - Handle prior user inputs
 TODO: Option to do "one-time" table resync, where just one table resyncs once
 TODO: Add testing framework
-TODO: Confirm SSL works as expected [DONE]
 TODO: Support Ticket for UI for this component (maybe they handle SSL?)
-TODO: More User Options
 """
 import ast
 import base64
@@ -121,7 +118,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.9'
+APP_VERSION = '0.4.10'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
