@@ -1,5 +1,4 @@
 import json
-import logging
 # import yaml
 
 
@@ -42,7 +41,6 @@ def make_yaml_mapping_file(json_mappings: dict):
             databases_and_tables[stream_database]['tables'].append(table_mapping)
         else:
             databases_and_tables[stream_database] = {"tables": [table_mapping]}
-            # databases_and_tables[stream_database] = [table_mapping]
 
     yaml_data.append(databases_and_tables)
     return yaml_data
@@ -56,61 +54,97 @@ def convert_yaml_to_json_mapping(yaml_mappings, raw_json_mapping):
         yaml_mappings: The YAML mappings to be converted
         raw_json_mapping: The Raw JSON table mappings from the database
     """
-    stream_data = raw_json_mapping['streams']
+    syncing_tables = []
 
-    for schema_sets in yaml_mappings:
-        for schema_name, table_mappings in schema_sets.items():
-            for table_sets in table_mappings['tables']:
-                for table_name, mappings in table_sets.items():
-                    table_json_index = -1
-                    for index, stream in enumerate(stream_data):
-                        if stream.get('stream') == table_name:
-                            table_json_index = index
+    # First, determine which items to pull from YAML mappings
+    for database_mapping in yaml_mappings:
+        for database, tables_info in database_mapping.items():
 
-                    if table_json_index >= 0:
-                        table_metadata_location = stream_data[table_json_index]['metadata'][0]['metadata']
-                        table_metadata_location['selected'] = mappings['selected']
-                        table_metadata_location['replication-method'] = mappings['replication-method']
-                    else:
-                        logging.warning('Table {} specified in YAML config not found in database'.format(table_name))
-                        continue
+            for table in tables_info['tables']:
+                for table_name, table_metadata in table.items():
+                    stream_id = database + '-' + table_name
+                    table_columns = table_metadata.get('columns')
+                    selected_table = table_metadata.get('selected')
+                    replication_method = table_metadata.get('replication-method')
+                    replication_key = table_metadata.get('replication-key')
+                    output_table = table_metadata.get('output-table')
 
-                    table_column_metadata = stream_data[table_json_index]['metadata']
-                    for column_name, is_selected in mappings['columns'].items():
-                        column_json_index = -1
-                        for index, column_metadata in enumerate(table_column_metadata[1:]):
-                            if column_metadata['breadcrumb'][1] == column_name:
-                                column_json_index = index
+                    if selected_table:
+                        syncing_table_data = {
+                            "stream-id": stream_id,
+                            "selected": True,
+                            "replication-method": replication_method.upper(),
+                            "columns": table_columns
+                        }
+                        if replication_key:
+                            syncing_table_data['replication-key'] = replication_key
+                        if output_table:
+                            syncing_table_data['output-table'] = output_table
 
-                        if column_json_index >= 0:
-                            table_column_metadata[column_json_index]['metadata']['selected'] = is_selected
-                        else:
-                            logging.warning('Column {} in table {} in YAML config not found in database'.format(
-                                column_name, table_name
-                            ))
+                        syncing_tables.append(syncing_table_data)
 
-    output_stream_mappings = json.dumps({'streams': stream_data})
+    synced_stream_ids = [stream['stream-id'] for stream in syncing_tables]
+    json_mapping_streams = raw_json_mapping['streams']
+    for json_mapping in json_mapping_streams:
+        if json_mapping['tap_stream_id'] not in synced_stream_ids:
+            continue
+
+        matched_sync_table_index = -1
+        for index, synced_table in enumerate(syncing_tables):
+            if synced_table['stream-id'] == json_mapping['tap_stream_id']:
+                matched_sync_table_index = index
+
+        json_table_metadata = json_mapping['metadata'][0]['metadata']
+        json_table_metadata['selected'] = syncing_tables[matched_sync_table_index]['selected']
+        json_table_metadata['replication-method'] = syncing_tables[matched_sync_table_index]['replication-method']
+
+        if syncing_tables[matched_sync_table_index].get('replication-key'):
+            json_table_metadata['replication-key'] = syncing_tables[matched_sync_table_index]['replication-key']
+        if syncing_tables[matched_sync_table_index].get('output-table'):
+            json_table_metadata['output-table'] = syncing_tables[matched_sync_table_index]['output-table']
+
+        json_columns_metadata = json_mapping['metadata'][1:]
+        syncing_table_columns = syncing_tables[matched_sync_table_index]['columns']
+
+        for json_column_metadata in json_columns_metadata:
+            json_column_name = json_column_metadata['breadcrumb'][1]
+            json_column_metadata_metadata_path = json_column_metadata['metadata']
+
+            for syncing_column, column_selected in syncing_table_columns.items():
+                if json_column_name == syncing_column:
+                    if not column_selected:
+                        json_column_metadata_metadata_path['selected'] = False
+
+    output_stream_mappings = json.dumps({'streams': json_mapping_streams})
     return output_stream_mappings
 
 
+# Keeping the below for test purposes - can be used to test YAML mappings by running this file directly and plugging in
+# your testing files. If you do, uncomment both the code below (and substitute what you need to) as well as the Yaml
 # if __name__ == '__main__':
-    # table_mappings_file = '{json_file}'
-    # new_yaml_file = '{yaml_file}'
-
-    # new_mappings_file = '{new_mappings_file}'
-
+#     table_mappings_file = '{json_file}'
+#     new_yaml_file = '/Users/johnathanbrooks/PycharmProjects/keboola_ex_mysql_nextv2/data/in/files/mappings.yaml'
+#
+#     new_mappings = '/Users/johnathanbrooks/PycharmProjects/keboola_ex_mysql_nextv2/data/in/tables/xxl_tables.json'
+#
     # with open(table_mappings_file, encoding='utf-8') as json_input_mapping:
     #     json_mappings = json.load(json_input_mapping)
-
+    #
     # raw_yaml_mapping = make_yaml_mapping_file(json_mappings)
     #
     # with open(new_yaml_file, 'w') as yaml_out:
     #     yaml_out.write(yaml.dump(raw_yaml_mapping))
-
-    # with open(yaml_file, encoding='utf-8') as yaml_input_mapping:
+    #
+    # with open(new_yaml_file, encoding='utf-8') as yaml_input_mapping:
     #     yaml_mappings = yaml.safe_load(yaml_input_mapping)
     #
-    # with open(new_mappings_file, encoding='utf-8') as new_raw_mapping_file:
+    # with open(new_mappings, encoding='utf-8') as new_raw_mapping_file:
     #     new_raw_mappings = json.load(new_raw_mapping_file)
-    #     json_mapping = convert_yaml_to_json_mapping(yaml_mappings, new_raw_mappings)
-    #     # print(json_mapping)
+    #     # json_mapping = convert_yaml_to_json_mapping(yaml_mappings, new_raw_mappings)
+    #
+    # with open(new_yaml_file, encoding='utf-8') as yaml_input_mapping:
+    #     yaml_mappings = yaml.safe_load(yaml_input_mapping)
+
+    # print('got yaml mappings:')
+    # print(yaml_mappings)
+    # table_mappings = json.loads(convert_yaml_to_json_mapping(yaml_mappings, dict(new_raw_mappings)))
