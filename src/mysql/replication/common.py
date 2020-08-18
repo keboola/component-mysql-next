@@ -346,12 +346,13 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                         rows_with_metadata = row + KBC_METADATA
                         writer.writerow(rows_with_metadata)
 
+                chunk_end = utils.now()
+                chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
+                logging.info(
+                    'Chunk {} had processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
+
             else:
                 has_more_data = False
-
-            chunk_end = utils.now()
-            chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
-            logging.info('Chunk {} had processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
 
     except Exception:
         logging.error('Failed to execute query {}'.format(query_string))
