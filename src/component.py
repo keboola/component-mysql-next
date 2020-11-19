@@ -59,7 +59,7 @@ try:
     import mysql.replication.incremental as incremental
 
     from mysql.client import connect_with_backoff, MySQLConnection
-except ImportError as e:
+except ImportError:
     import src.core as core
     import src.core.metrics as metrics
     import src.core.datatypes as datatypes
@@ -638,8 +638,8 @@ class Component(KBCEnvHandler):
             exit(1)
 
         self.mysql_config_params = {
-            "host": LOCAL_ADDRESS,
-            "port": SSH_BIND_PORT,
+            "host": self.params[KEY_MYSQL_HOST],
+            "port": self.params[KEY_MYSQL_PORT],
             "user": self.params[KEY_MYSQL_USER],
             "password": self.params[KEY_MYSQL_PWD],
             "ssl": self.params.get(KEY_USE_SSL),
@@ -691,7 +691,7 @@ class Component(KBCEnvHandler):
         binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)
-        key_properties = common.get_key_properties(catalog_entry)
+        key_properties = common.get_key_properties(catalog_entry) # noqa
 
         if is_view:
             raise Exception(
@@ -703,7 +703,7 @@ class Component(KBCEnvHandler):
 
         max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
 
-        last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')
+        last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched') # noqa
 
         write_schema_message(catalog_entry, message_store=message_store)
 
@@ -741,7 +741,7 @@ class Component(KBCEnvHandler):
     def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
                            message_store: core.MessageStore = None):
         logging.info("Stream %s is using full table replication", catalog_entry.stream)
-        key_properties = common.get_key_properties(catalog_entry)
+        key_properties = common.get_key_properties(catalog_entry) # noqa
 
         write_schema_message(catalog_entry, message_store=message_store)
 
@@ -1099,7 +1099,7 @@ class Component(KBCEnvHandler):
     def run(self):
         """Execute main component extraction process."""
         table_mappings = {}
-        file_input_path = self._check_file_inputs()
+        file_input_path = self._check_file_inputs() # noqa
 
         # QA Input data
         self.walk_path(self.files_in_path)
