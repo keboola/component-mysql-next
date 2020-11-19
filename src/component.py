@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import sys
+import glob
 
 import pandas as pd
 import paramiko
@@ -1096,6 +1097,12 @@ class Component(KBCEnvHandler):
             logging.info('All directories at walked path: {}'.format(directories))
             logging.info('All files sent at walked path: {}'.format(files))
 
+    def _uppercase_table(self, table_path):
+
+        _df = pd.read_csv(table_path, dtype='str')
+        _df.columns = map(str.upper, _df.columns)
+        _df.to_csv(table_path, index=False)
+
     def run(self):
         """Execute main component extraction process."""
         table_mappings = {}
@@ -1282,6 +1289,13 @@ class Component(KBCEnvHandler):
                 logging.error('You have either specified incorrect input parameters, or have not chosen to either '
                               'specify a table mappings file manually or via the File Input Mappings configuration.')
                 exit(1)
+
+        all_tables = glob.glob(os.path.join(self.tables_in_path, '*.csv'))
+        for table in all_tables:
+            if os.path.isdir(table) is True:
+                pass
+            else:
+                self._uppercase_table(table)
 
         logging.info('Process execution completed')
 
