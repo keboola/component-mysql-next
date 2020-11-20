@@ -28,6 +28,7 @@ import logging
 import os
 import sys
 import glob
+# import csv
 
 import pandas as pd
 import paramiko
@@ -1051,7 +1052,7 @@ class Component(KBCEnvHandler):
             # Read DF as Strings to avoid incorrect rounding issues with conversions of ints/numerics to floats
             df = pd.read_csv(csv_table_path, dtype='string')
             df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
-            df.columns = map(str.upper, df.columns)
+            df.columns = [col.upper() for col in df.columns]
             df.to_csv(csv_table_path, index=False)
 
     def get_conn_context_manager(self):
@@ -1290,12 +1291,12 @@ class Component(KBCEnvHandler):
                               'specify a table mappings file manually or via the File Input Mappings configuration.')
                 exit(1)
 
-        all_tables = glob.glob(os.path.join(self.tables_in_path, '*.csv'))
-        for table in all_tables:
-            if os.path.isdir(table) is True:
-                pass
-            else:
-                self._uppercase_table(table)
+        # all_tables = glob.glob(os.path.join(self.tables_in_path, '*.csv'))
+        # for table in all_tables:
+        #     if os.path.isdir(table) is True:
+        #         pass
+        #     else:
+        #         self._uppercase_table(table)
 
         logging.info('Process execution completed')
 
