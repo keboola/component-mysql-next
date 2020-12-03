@@ -194,12 +194,12 @@ def update_incremental_full_table_state(catalog_entry, state, cursor):
 def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
     common.whitelist_bookmark_keys(generate_bookmark_keys(catalog_entry), catalog_entry.tap_stream_id, state)
 
-    bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
-    version_exists = True if 'version' in bookmark else False
+    # bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
+    # version_exists = True if 'version' in bookmark else False
 
-    initial_full_table_complete = core.get_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete')
+    # initial_full_table_complete = core.get_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete')
 
-    state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
+    # state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
 
     # activate_version_message = core.ActivateVersionMessage(
     #     stream=catalog_entry.stream,
@@ -242,12 +242,12 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
                       message_store: core.MessageStore = None):
     common.whitelist_bookmark_keys(generate_bookmark_keys(catalog_entry), catalog_entry.tap_stream_id, state)
 
-    bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
-    version_exists = True if 'version' in bookmark else False
+    # bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
+    # version_exists = True if 'version' in bookmark else False
 
-    initial_full_table_complete = core.get_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete')
+    # initial_full_table_complete = core.get_bookmark(state, catalog_entry.tap_stream_id, 'initial_full_table_complete')
 
-    state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
+    # state_version = core.get_bookmark(state, catalog_entry.tap_stream_id, 'version')
 
     # activate_version_message = core.ActivateVersionMessage(
     #     stream=catalog_entry.stream,

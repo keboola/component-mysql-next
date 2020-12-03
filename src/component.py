@@ -361,9 +361,8 @@ def discover_catalog(mysql_conn, config):
 
                     md_map = metadata.write(md_map, (), 'is-view', is_view)
 
-                def column_is_key_prop(c, s): return (  # noqa: E731
-                    c.column_key == 'PRI' and s.properties[c.column_name].inclusion != 'unsupported'
-                )
+                def column_is_key_prop(c, s):
+                    return c.column_key == 'PRI' and s.properties[c.column_name].inclusion != 'unsupported'
 
                 key_properties = [c.column_name for c in cols if column_is_key_prop(c, schema)]
 

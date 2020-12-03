@@ -284,7 +284,7 @@ def _add_kbc_metadata_to_rows(rows, catalog_entry):
 
 def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql, columns, stream_version,
                     params, tables_destination: str = None, message_store: core.MessageStore = None):
-    replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')
+    replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key') # noqa
 
     query_string = cursor.mogrify(select_sql, params)
     logging.info('Running query {}'.format(query_string))
