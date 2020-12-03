@@ -81,6 +81,8 @@ except ImportError:
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
 
+sys.tracebacklimit = 0
+
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
 KEY_TABLE_MAPPINGS_JSON = 'inputMappingsJson'
@@ -118,7 +120,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.11'
+APP_VERSION = '0.4.14'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
