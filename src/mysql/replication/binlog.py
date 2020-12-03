@@ -363,7 +363,8 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
             core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
 
-def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None):
+def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None,
+                       schemas=[], tables=[]):
     binlog_streams_map = generate_streams_map(binlog_streams)
 
     for tap_stream_id in binlog_streams_map.keys():
@@ -394,8 +395,11 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
             resume_stream=True,
             only_events=[RotateEvent, WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent],
             freeze_schema=True,
-            pymysql_wrapper=connection_wrapper
+            pymysql_wrapper=connection_wrapper,
+            only_schemas=schemas,
+            only_tables=tables
         )
+
         logging.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
         _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_store=message_store)
     finally:

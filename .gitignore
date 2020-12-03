@@ -55,3 +55,6 @@ process_mappings.py
 
 # Handling for data path
 data/
+
+# VSCode Folder
+.vscode/

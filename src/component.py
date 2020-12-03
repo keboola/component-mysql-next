@@ -83,7 +83,7 @@ module_path = os.path.dirname(current_path)
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
-KEY_TABLE_MAPPINGS_JSON = 'base64TableMappingsJson'
+KEY_TABLE_MAPPINGS_JSON = 'inputMappingsJson'
 KEY_DATABASES = 'databases'
 KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
@@ -361,7 +361,7 @@ def discover_catalog(mysql_conn, config):
 
                     md_map = metadata.write(md_map, (), 'is-view', is_view)
 
-                column_is_key_prop = lambda c, s: (  # noqa: E731
+                def column_is_key_prop(c, s): return (  # noqa: E731
                     c.column_key == 'PRI' and s.properties[c.column_name].inclusion != 'unsupported'
                 )
 
@@ -609,6 +609,7 @@ def write_schema_message(catalog_entry, message_store=None, bookmark_properties=
 
 class Component(KBCEnvHandler):
     """Keboola extractor component."""
+
     def __init__(self, debug: bool = False, data_path: str = None):
         KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
                                log_level=logging.DEBUG if debug else logging.INFO)
@@ -691,7 +692,7 @@ class Component(KBCEnvHandler):
         binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)
-        key_properties = common.get_key_properties(catalog_entry) # noqa
+        key_properties = common.get_key_properties(catalog_entry)  # noqa
 
         if is_view:
             raise Exception(
@@ -703,7 +704,7 @@ class Component(KBCEnvHandler):
 
         max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
 
-        last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched') # noqa
+        last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')  # noqa
 
         write_schema_message(catalog_entry, message_store=message_store)
 
@@ -741,7 +742,7 @@ class Component(KBCEnvHandler):
     def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
                            message_store: core.MessageStore = None):
         logging.info("Stream %s is using full table replication", catalog_entry.stream)
-        key_properties = common.get_key_properties(catalog_entry) # noqa
+        key_properties = common.get_key_properties(catalog_entry)  # noqa
 
         write_schema_message(catalog_entry, message_store=message_store)
 
@@ -804,16 +805,17 @@ class Component(KBCEnvHandler):
 
     @staticmethod
     def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
-                            message_store: core.MessageStore = None):
+                            message_store: core.MessageStore = None, schemas=[], tables=[]):
         if binlog_catalog.streams:
             for stream in binlog_catalog.streams:
                 write_schema_message(stream, message_store=message_store)
 
             with metrics.job_timer('sync_binlog'):
                 binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state,
-                                          message_store=message_store)
+                                          message_store=message_store, schemas=schemas, tables=tables)
 
-    def do_sync(self, mysql_conn, config, mysql_config, catalog, state, message_store: core.MessageStore = None):
+    def do_sync(self, mysql_conn, config, mysql_config, catalog, state,
+                message_store: core.MessageStore = None, schemas=[], tables=[]):
         non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
         logging.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
         binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
@@ -821,7 +823,8 @@ class Component(KBCEnvHandler):
 
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
                                      tables_destination=self.tables_out_path, message_store=message_store)
-        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state, message_store=message_store)
+        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
+                                 message_store=message_store, schemas=schemas, tables=tables)
 
     @staticmethod
     def log_server_params(mysql_conn):
@@ -1102,10 +1105,58 @@ class Component(KBCEnvHandler):
         _df.columns = map(str.upper, _df.columns)
         _df.to_csv(table_path, index=False)
 
+    def parse_input_mapping(self, input_mapping, input_mapping_type='json'):
+        """Parses provided input mappings and returns a list of selected tables and schemas."""
+        schemas = []
+        tables = []
+        output_mapping = []
+        if input_mapping_type == 'json':
+
+            for schema in input_mapping:
+                # Because yaml and json mapping have different specification. YAML is an array, JSON is an object.
+                # Converting this to be same as YAML mapping.
+                output_mapping += [{schema: input_mapping[schema]}]
+                _tables = input_mapping[schema].get('tables', [])
+
+                if _tables == []:
+                    logging.warn(f"No tables specified for schema {schema}. Skipping.")
+                elif isinstance(_tables, list) is False:
+                    logging.error(f"Tables for schema {schema} are not an array.")
+                    sys.exit(1)
+                else:
+                    schemas += [schema]
+                    tables += [list(table.keys())[0] for table in _tables]
+
+        elif input_mapping_type == 'yaml':
+            # Because yaml and json mapping have different specification. YAML is an array, JSON is an object.
+            output_mapping = input_mapping
+
+            for schema_spec in input_mapping:
+                schema = list(schema_spec.keys())[0]
+                _tables = schema_spec[schema]['tables']
+
+                if _tables == []:
+                    logging.warn(f"No tables specified for schema {schema}. Skipping.")
+                elif isinstance(_tables, list) is False:
+                    logging.error(f"Tables for schema {schema} are not an array.")
+                    sys.exit(1)
+                else:
+                    schemas += [schema]
+                    tables += [list(table.keys())[0] for table in _tables]
+
+        else:
+            logging.error(f"Incorrect mapping file specification provided: {input_mapping_type}.")
+            sys.exit(1)
+
+        logging.debug(f"Parsed following schemas: {schemas}.")
+        logging.debug(f"Parsed following tables: {tables}.")
+
+        return output_mapping, schemas, tables
+
     def run(self):
         """Execute main component extraction process."""
         table_mappings = {}
-        file_input_path = self._check_file_inputs() # noqa
+        file_input_path = self._check_file_inputs()  # noqa
 
         # QA Input data
         self.walk_path(self.files_in_path)
@@ -1130,25 +1181,38 @@ class Component(KBCEnvHandler):
             #         table_mappings = json.load(mappings_file)
 
             # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
-            table_mapping = discover_catalog(mysql_client, self.params)
+            catalog_mapping = discover_catalog(mysql_client, self.params)
 
             # Make Raw Mapping file to allow edits
-            raw_yaml_mapping = make_yaml_mapping_file(table_mapping.to_dict())
+            raw_yaml_mapping = make_yaml_mapping_file(catalog_mapping.to_dict())
 
-            if self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
-                input_method = 'yaml'
-                logging.info('Using table mappings based on input YAML mappings')
-                yaml_mappings = yaml.safe_load(self.params[KEY_INPUT_MAPPINGS_YAML])
-                table_mappings = json.loads(convert_yaml_to_json_mapping(yaml_mappings, table_mapping.to_dict()))
-            elif self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON):
+            if (_json := self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':
                 input_method = 'json'
-                logging.warning('Using table mappings based on Base64-encoded table mappings JSON input parameter. '
-                                'Note: this option will be deprecated with version 0.5.0 of the extractor')
-                table_mappings = json.loads(base64.b64decode(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON),
-                                                             validate=True).decode('utf-8'))
+                logging.info('Using table mappings based on input JSON mappings.')
+
+                try:
+                    input_mapping = json.loads(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON))
+                    logging.debug(f"Received input schema: {input_mapping}")
+                except ValueError:
+                    logging.error("Invalid JSON mappins provided. Could not parse JSON.")
+                    sys.exit(1)
+
+                input_mapping, schemas_to_sync, tables_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
+
+            elif self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
+                input_method = 'yaml'
+                logging.info('Using table mappings based on input YAML mappings.')
+                input_mapping = yaml.safe_load(self.params[KEY_INPUT_MAPPINGS_YAML])
+                table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
+
+                logging.debug(f"Received input schema: {input_mapping}")
+
+                _, schemas_to_sync, tables_to_sync = self.parse_input_mapping(input_mapping, input_method)
+
             else:
-                raise AttributeError('You are missing either a YAML input mapping, or the legacy Base-64 encoded table '
-                                     'mappings JSON. Please specify either to appropriately execute the extractor')
+                raise AttributeError('You are missing either a YAML input mapping, or the '
+                                     'JSON input mapping. Please specify either to appropriately execute the extractor')
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
@@ -1157,23 +1221,20 @@ class Component(KBCEnvHandler):
                 # TODO: Retain prior selected choices by user despite refresh.
                 input_file_name = self.params.get(KEY_MAPPINGS_FILE) or 'mappings'
                 if input_method == 'json':
-                    logging.info('Outputting legacy JSON to file {}.json in KBC storage'.format(input_file_name))
+                    logging.info('Outputting JSON to file {}.json in KBC storage'.format(input_file_name))
                     out_path = os.path.join(self.files_out_path, input_file_name + '_raw.json')
                     with open(out_path, 'w') as json_out:
-                        json_out.write(table_mapping.dumps())
+                        json_out.write(catalog_mapping.dumps())
 
-                logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))
-                out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
-                with open(out_path, 'w') as yaml_out:
-                    yaml_out.write(yaml.dump(raw_yaml_mapping))
+                elif input_method == 'yaml':
+                    logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))
+                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
+                    with open(out_path, 'w') as yaml_out:
+                        yaml_out.write(yaml.dump(raw_yaml_mapping))
 
             elif table_mappings:
                 # Run extractor data sync.
-                manually_entered_b64_state = self.cfg_params.get(KEY_STATE_JSON)
-                if manually_entered_b64_state:
-                    logging.info('Manually input prior state parameter populated for incremental execution')
-                    prior_state = base64.b64decode(manually_entered_b64_state, validate=True).decode('utf-8')
-                elif self.cfg_params[KEY_INCREMENTAL_SYNC]:
+                if self.cfg_params[KEY_INCREMENTAL_SYNC]:
                     prior_state = self.get_state_file() or {}
                 else:
                     prior_state = {}
@@ -1189,7 +1250,7 @@ class Component(KBCEnvHandler):
                                        output_table_path=self.tables_out_path) as message_store:
                     catalog = Catalog.from_dict(table_mappings)
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
-                                 message_store=message_store)
+                                 message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync)
 
                     logging.info('Data extraction completed')
 
