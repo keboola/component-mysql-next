@@ -1225,7 +1225,7 @@ class Component(KBCEnvHandler):
                     logging.info('Outputting JSON to file {}.json in KBC storage'.format(input_file_name))
                     out_path = os.path.join(self.files_out_path, input_file_name + '_raw.json')
                     with open(out_path, 'w') as json_out:
-                        json_out.write(catalog_mapping.dumps())
+                        json.dump(raw_yaml_mapping, json_out)
 
                 elif input_method == 'yaml':
                     logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))

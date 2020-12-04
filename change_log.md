@@ -1,3 +1,7 @@
+**0.4.14**
+- Reduced traceback
+- Fixed JSON mappings of database objects
+
 **0.4.13**
 - Added option to specify input mapping tables with JSON
 - Binlog events are now filtered for specified tables only. This drastically improves replication speed.
