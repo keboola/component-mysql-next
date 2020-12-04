@@ -14,8 +14,7 @@
     "verifyCert",
     "sshTunnel",
     "storageMappingsFile",
-    "inputMappingsJson",
-    "inputMappingsYaml"
+    "inputMappingsJson"
   ],
   "properties": {
     "fetchObjectsOnly": {
@@ -82,14 +81,6 @@
       "description": "The JSON config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
       "format": "json",
       "propertyOrder": 540
-    },
-    "inputMappingsYaml": {
-      "type": "string",
-      "title": "Table Mappings JSON Specification",
-      "default": "",
-      "description": "The JSON config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
-      "format": "textarea",
-      "propertyOrder": 541
     },
     "ssl": {
       "type": "boolean",
