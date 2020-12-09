@@ -148,6 +148,13 @@
       "default": "",
       "description": "(Optional) The name of bucket in Keboola storage where the data. Keboola will create a bucket for you if not specified",
       "propertyOrder": 930
+    },
+    "appendMode": {
+      "type": "boolean",
+      "title": "Append Mode",
+      "default": false,
+      "description": "If set to true, application will only insert new updates into the result table. The updates then have to be deduped in a transformation, to get the resulting table. This mode is faster, but requires extra work.",
+      "propertyOrder": 1000
     }
   }
 }

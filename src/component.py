@@ -98,6 +98,7 @@ KEY_USE_SSL = 'ssl'
 KEY_MAPPINGS_FILE = 'storageMappingsFile'
 KEY_INPUT_MAPPINGS_YAML = 'inputMappingsYaml'
 KEY_STATE_JSON = 'base64StateJson'
+KEY_APPEND_MODE = 'appendMode'
 
 # Define optional parameters as constants for later use.
 KEY_SSH_HOST = 'sshHost'
@@ -120,7 +121,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.14'
+APP_VERSION = '0.4.15'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -974,7 +975,9 @@ class Component(KBCEnvHandler):
         :param output_bucket: The name of the output bucket to be written to Storage
         :return:
         """
-        if entry.get('primary_keys'):
+        if bool(self.cfg_params.get(KEY_APPEND_MODE, False)) is True:
+            primary_keys = None
+        elif entry.get('primary_keys'):
             primary_keys = [key.upper() for key in entry.get('primary_keys')]
         else:
             primary_keys = None

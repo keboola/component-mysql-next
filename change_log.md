@@ -1,3 +1,6 @@
+**0.4.15**
+- Added option for append mode only, which speeds up write to storage.
+
 **0.4.14**
 - Reduced traceback
 - Fixed JSON mappings of database objects
