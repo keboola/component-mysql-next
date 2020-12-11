@@ -8,6 +8,8 @@ services:
         - ./data:/data
     environment:
       - KBC_DATADIR=./data
+      - KBC_CONFIGID=12345
+      - KBC_COMPONENTID=kds-team.ex-mysql-next
   test:
     # Use to run flake8 and unittests checks
     build: .

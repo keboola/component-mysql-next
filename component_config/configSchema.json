@@ -80,7 +80,10 @@
       "default": "",
       "description": "The JSON config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
       "format": "json",
-      "propertyOrder": 540
+      "propertyOrder": 540,
+      "options": {
+        "input_height": "150px"
+      }
     },
     "ssl": {
       "type": "boolean",

@@ -1,3 +1,9 @@
+**0.4.17**
+- Output bucket option working correctly
+
+**0.4.16**
+- Append mode will not deduplicate based on primary key
+
 **0.4.15**
 - Added option for append mode only, which speeds up write to storage.
 

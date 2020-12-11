@@ -109,6 +109,9 @@ KEY_SSH_USERNAME = 'sshUser'
 KEY_SSL_CA = 'sslCa'
 KEY_VERIFY_CERT = 'verifyCert'
 
+ENV_COMPONENT_ID = 'KBC_COMPONENTID'
+ENV_CONFIGURATION_ID = 'KBC_CONFIGID'
+
 MAPPINGS_FILE = 'table_mappings.json'
 LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
@@ -121,7 +124,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.16'
+APP_VERSION = '0.4.17'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -988,10 +991,12 @@ class Component(KBCEnvHandler):
 
         # for r in results:
         if not columns:
-            self.write_table_manifest(result_full_path, primary_key=primary_keys, column_metadata=column_metadata,
+            self.write_table_manifest(result_full_path, destination=table_name,
+                                      primary_key=primary_keys, column_metadata=column_metadata,
                                       is_incremental=set_incremental, output_bucket=output_bucket)
         else:
-            self.write_table_manifest(result_full_path, primary_key=primary_keys, columns=columns,
+            self.write_table_manifest(result_full_path, destination=table_name,
+                                      primary_key=primary_keys, columns=columns,
                                       column_metadata=column_metadata, is_incremental=set_incremental,
                                       output_bucket=output_bucket)
 
@@ -1010,11 +1015,10 @@ class Component(KBCEnvHandler):
             output_bucket: The output bucket in storage
         """
         manifest = {}
-        if destination:
-            if output_bucket:
-                manifest['destination'] = 'in.c-' + output_bucket + '.' + destination
-            else:
-                manifest['destination'] = destination
+        if output_bucket:
+            manifest['destination'] = output_bucket + '.' + destination
+        else:
+            pass
         if primary_key:
             if isinstance(primary_key, list):
                 manifest['primary_key'] = primary_key
@@ -1169,6 +1173,22 @@ class Component(KBCEnvHandler):
 
         return output_mapping, schemas, tables
 
+    @staticmethod
+    def create_output_bucket(bucket_name: str = None):
+
+        if bucket_name is not None and bucket_name.strip() != '':
+            return f'in.c-{bucket_name.strip()}'
+
+        else:
+            _component_id = os.environ.get(ENV_COMPONENT_ID)
+            _configuration_id = os.environ.get(ENV_CONFIGURATION_ID)
+
+            if _component_id is not None and _component_id is not None:
+                return f"in.c-{_component_id.replace('.', '-')}-{_configuration_id}"
+
+            else:
+                return None
+
     def run(self):
         """Execute main component extraction process."""
         table_mappings = {}
@@ -1287,10 +1307,7 @@ class Component(KBCEnvHandler):
                     table_metadata = entry['metadata'][0]['metadata']
                     column_metadata = entry['metadata'][1:]
 
-                    if self.params.get(KEY_OUTPUT_BUCKET):
-                        output_bucket = self.params[KEY_OUTPUT_BUCKET]
-                    else:
-                        output_bucket = None
+                    output_bucket = self.create_output_bucket(self.cfg_params.get(KEY_OUTPUT_BUCKET))
 
                     if table_metadata.get('selected'):
                         table_replication_method = table_metadata.get('replication-method').upper()
