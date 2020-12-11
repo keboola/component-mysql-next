@@ -40,8 +40,10 @@ mysql_timestamp_types = {FIELD_TYPE.TIMESTAMP, FIELD_TYPE.TIMESTAMP2}
 def add_automatic_properties(catalog_entry, columns):
     catalog_entry.schema.properties[common.KBC_SYNCED] = Schema(type=["null", "string"], format="date-time")
     catalog_entry.schema.properties[common.KBC_DELETED] = Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[common.BINLOG_CHANGE_AT] = Schema(type=["null", "string"])
     columns.append(common.KBC_SYNCED)
     columns.append(common.KBC_DELETED)
+    columns.append(common.BINLOG_CHANGE_AT)
 
     return columns
 
@@ -232,6 +234,7 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         vals = row['values']
         vals[common.KBC_DELETED] = None
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
+        vals[common.BINLOG_CHANGE_AT] = event.timestamp
 
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
@@ -254,6 +257,8 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
 
         vals[common.KBC_DELETED] = None
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
+        vals[common.BINLOG_CHANGE_AT] = event.timestamp
+
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
@@ -277,6 +282,7 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
 
         vals[common.KBC_DELETED] = event_ts
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
+        vals[common.BINLOG_CHANGE_AT] = event.timestamp
 
         filtered_vals = {k: v for k, v in vals.items() if k in columns}
 

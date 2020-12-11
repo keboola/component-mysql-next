@@ -28,6 +28,9 @@ class MessageStore(dict):
         self._processed_records = 0
         self._flush_count = 0
 
+        # self.io = {}
+        # self.io_csv = {}
+
     def __str__(self):
         return str(self._data_store)
         # return json.dumps(self._data_store)
@@ -78,7 +81,7 @@ class MessageStore(dict):
         for schema in self._found_schemas:
             for table in self.found_tables:
                 if self._data_store[schema][table].get('records'):
-                    logging.debug('got records for {} {}'.format(schema, table))
+                    # logging.debug('got records for {} {}'.format(schema, table))
                     file_output = table.upper() + '.csv'
 
                     self.write_to_csv(self._data_store[schema][table].get('records'), file_output)
@@ -87,12 +90,29 @@ class MessageStore(dict):
         self._processed_records = 0
         self._flush_count += 1
 
-    def write_to_csv(self, data_records: dict, file_name: str):
+    def write_to_csv(self, data_records: list, file_name: str):
         full_path = os.path.expanduser(os.path.join(self.output_table_path, file_name))
-        logging.debug('Opening full path {} to write CSV {}'.format(self.output_table_path, file_name))
+
+        # if len(data_records) == 0:
+        #     return
+
+        # if full_path not in self.io:
+        #     self.io[full_path] = open(full_path, 'w')
+
+        # if full_path not in self.io_csv:
+        #     _csv = csv.DictWriter(self.io[full_path], fieldnames=data_records[0].keys())
+        #     _csv.writeheader()
+        #     self.io_csv[full_path] = _csv
+        #     logging.debug(f'Opening full path {full_path} to write CSV {file_name}.')
+
+        # writer = self.io_csv[full_path]
+        # for row in data_records:
+        #     writer.writerow(row)
+
         file_is_empty = (not os.path.isfile(full_path))
 
         if file_is_empty:
+            logging.debug(f"Opening full path at {full_path}.")
             with open(full_path, 'w') as csv_file:
                 first_record = True
                 for record in data_records:
@@ -322,7 +342,7 @@ def parse_message(msg):
         if time_extracted:
             try:
                 time_extracted = ciso8601.parse_datetime(time_extracted)
-            except:
+            except Exception:
                 logging.warning("unable to parse time_extracted with ciso8601 library")
                 time_extracted = None
 

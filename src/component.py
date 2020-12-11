@@ -121,7 +121,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.15'
+APP_VERSION = '0.4.16'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -894,6 +894,8 @@ class Component(KBCEnvHandler):
         # Append KBC metadata column types, hard coded for now
         table_columns_metadata[common.KBC_SYNCED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
         table_columns_metadata[common.KBC_DELETED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
+        table_columns_metadata[common.BINLOG_CHANGE_AT] = self.generate_column_metadata(data_type='integer',
+                                                                                        nullable=True)
 
         return table_columns_metadata
 
@@ -1036,19 +1038,13 @@ class Component(KBCEnvHandler):
             logging.info('Wrote manifest table {}'.format(file_name + '.manifest'))
 
     @staticmethod
-    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list = None) -> None:
+    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list = None,
+                                         append_mode: bool = False) -> None:
         """For given result CSV file path, remove non-latest binlog event by primary key.
 
         A primary key can only have a single Write Event and a max of one Delete Event. It can have infinite Update
         Events. Each event returns the current state of the row, so we just want the latest row per extraction.
         """
-        if primary_keys:
-            logging.info('Keeping only latest per primary key from binary row event results for {} '
-                         'based on table primary keys: {}'.format(csv_table_path, primary_keys))
-        else:
-            logging.warning('Table at path {} does not have primary key, so no binlog de-duplication will occur, '
-                            'records must be processed downstream'.format(csv_table_path))
-            return
 
         with metrics.job_timer('latest_binlog_results') as timer:
             timer.tags['csv_table'] = csv_table_path
@@ -1056,7 +1052,23 @@ class Component(KBCEnvHandler):
 
             # Read DF as Strings to avoid incorrect rounding issues with conversions of ints/numerics to floats
             df = pd.read_csv(csv_table_path, dtype='string')
-            df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+
+            if primary_keys and append_mode is not True:
+                logging.info('Keeping only latest per primary key from binary row event results for {} '
+                             'based on table primary keys: {}'.format(csv_table_path, primary_keys))
+
+                df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+
+            else:
+
+                if append_mode is True:
+                    logging.info("Append mode active, no deduplication of rows occuring.")
+
+                else:
+                    logging.warning('Table at path {} does not have primary key, '
+                                    'so no binlog de-duplication will occur, '
+                                    'records must be processed downstream'.format(csv_table_path))
+
             df.columns = [col.upper() for col in df.columns]
             df.to_csv(csv_table_path, index=False)
 
@@ -1334,7 +1346,8 @@ class Component(KBCEnvHandler):
                                                   set_incremental=manifest_incremental, output_bucket=output_bucket)
 
                             # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
-                            self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'))
+                            self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'),
+                                                                  self.cfg_params.get(KEY_APPEND_MODE, False))
                         else:
                             logging.info('No manifest file found for selected table {}, because no data was synced '
                                          'from the database for this table. This may be expected behavior if the table '

@@ -36,8 +36,13 @@ CSV_CHUNK_SIZE = 100000
 SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_KBC_SYNCED_AT'
 KBC_DELETED = '_KBC_DELETED_AT'
+BINLOG_CHANGE_AT = '_BINLOG_CHANGE_AT'
 KBC_METADATA_COLS = (KBC_SYNCED, KBC_DELETED)
 KBC_METADATA = (SYNC_STARTED_AT, None)
+
+
+def now():
+    return time.time()
 
 
 def patch_datetime(datetime_str):
@@ -278,6 +283,7 @@ def _add_kbc_metadata_to_rows(rows, catalog_entry):
     # Add headers to schema definition (data is added in write step)
     catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
     catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[BINLOG_CHANGE_AT] = core.schema.Schema(type=["null", "string"])
 
     return rows
 
