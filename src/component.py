@@ -124,7 +124,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.17'
+APP_VERSION = '0.4.18'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1055,13 +1055,15 @@ class Component(KBCEnvHandler):
             timer.tags['primary_key'] = primary_keys
 
             # Read DF as Strings to avoid incorrect rounding issues with conversions of ints/numerics to floats
-            df = pd.read_csv(csv_table_path, dtype='string')
 
             if primary_keys and append_mode is not True:
                 logging.info('Keeping only latest per primary key from binary row event results for {} '
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
+                df = pd.read_csv(csv_table_path, dtype='string')
                 df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+                df.columns = [col.upper() for col in df.columns]
+                df.to_csv(csv_table_path, index=False)
 
             else:
 
@@ -1072,9 +1074,6 @@ class Component(KBCEnvHandler):
                     logging.warning('Table at path {} does not have primary key, '
                                     'so no binlog de-duplication will occur, '
                                     'records must be processed downstream'.format(csv_table_path))
-
-            df.columns = [col.upper() for col in df.columns]
-            df.to_csv(csv_table_path, index=False)
 
     def get_conn_context_manager(self):
         if self.cfg_params[KEY_USE_SSH_TUNNEL]:

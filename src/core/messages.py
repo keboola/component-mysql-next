@@ -116,9 +116,12 @@ class MessageStore(dict):
             with open(full_path, 'w') as csv_file:
                 first_record = True
                 for record in data_records:
-                    writer = csv.DictWriter(csv_file, fieldnames=record.keys())
                     if first_record:
+                        writer = csv.DictWriter(csv_file, fieldnames=[x.upper() for x in record.keys()])
                         writer.writeheader()
+                        writer.fieldnames = list(record.keys())
+                    else:
+                        writer = csv.DictWriter(csv_file, fieldnames=record.keys())
 
                     writer.writerow(record)
                     first_record = False
