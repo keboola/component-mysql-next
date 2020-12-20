@@ -124,7 +124,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.18'
+APP_VERSION = '0.4.19'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -265,7 +265,7 @@ def create_column_metadata(cols):
     return metadata.to_list(mdata)
 
 
-def discover_catalog(mysql_conn, config):
+def discover_catalog(mysql_conn, config, append_mode):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
     logging.debug('Filtering databases via config to: {}'.format(filter_dbs_config))
@@ -278,7 +278,8 @@ def discover_catalog(mysql_conn, config):
         WHERE table_schema NOT IN (
         'information_schema',
         'performance_schema',
-        'mysql'
+        'mysql',
+        'sys'
         )"""
 
     with connect_with_backoff(mysql_conn) as open_conn:
@@ -290,6 +291,7 @@ def discover_catalog(mysql_conn, config):
                    table_rows
             FROM information_schema.tables
                 {}
+            AND table_type != 'VIEW'
             """.format(table_schema_clause))
 
             table_info = {}
@@ -304,26 +306,29 @@ def discover_catalog(mysql_conn, config):
                 }
 
                 # Get primary keys
-                pk_sql = """
-                SELECT
-                    k.column_name
-                FROM
-                    information_schema.table_constraints t
-                    INNER JOIN information_schema.key_column_usage k
-                        USING(constraint_name, table_schema, table_name)
-                WHERE
-                    t.constraint_type='PRIMARY KEY'
-                    AND t.table_schema = '{}'
-                    AND t.table_name='{}';""".format(db, table)
-                cur.execute(pk_sql)
+                if append_mode is True:
+                    table_info[db][table]['primary_keys'] = []
+                else:
+                    pk_sql = """
+                    SELECT
+                        k.column_name
+                    FROM
+                        information_schema.table_constraints t
+                        INNER JOIN information_schema.key_column_usage k
+                            USING(constraint_name, table_schema, table_name)
+                    WHERE
+                        t.constraint_type='PRIMARY KEY'
+                        AND t.table_schema = '{}'
+                        AND t.table_name='{}';""".format(db, table)
+                    cur.execute(pk_sql)
 
-                rec = cur.fetchone()
-                table_primary_keys = []
-                while rec is not None:
-                    table_primary_keys.append(rec[0])
                     rec = cur.fetchone()
+                    table_primary_keys = []
+                    while rec is not None:
+                        table_primary_keys.append(rec[0])
+                        rec = cur.fetchone()
 
-                table_info[db][table]['primary_keys'] = table_primary_keys
+                    table_info[db][table]['primary_keys'] = table_primary_keys
 
             cur.execute("""
                 SELECT table_schema,
@@ -384,8 +389,8 @@ def discover_catalog(mysql_conn, config):
     return Catalog(entries)
 
 
-def do_discover(mysql_conn, config):
-    return discover_catalog(mysql_conn, config).dumps()
+def do_discover(mysql_conn, config, append_mode):
+    return discover_catalog(mysql_conn, config, append_mode=append_mode).dumps()
 
 
 def desired_columns(selected, table_schema):
@@ -517,7 +522,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
 
 
 # TODO: Add check for change in schema for new column, if so full sync that table.
-def get_non_binlog_streams(mysql_conn, catalog, config, state):
+def get_non_binlog_streams(mysql_conn, catalog, config, state, append_mode):
     """Returns the Catalog of data we're going to sync for all SELECT-based
     streams (i.e. INCREMENTAL, FULL_TABLE, and LOG_BASED that require a historical
     sync). LOG_BASED streams that require a historical sync are inferred from lack
@@ -534,7 +539,7 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
       2. any streams that do not have state
       3. any streams that do not have a replication method of LOG_BASED
     """
-    discovered = discover_catalog(mysql_conn, config)
+    discovered = discover_catalog(mysql_conn, config, append_mode)
 
     # Filter catalog to include only selected streams
     selected_streams = list(filter(lambda s: common.stream_is_selected(s), catalog.streams))
@@ -587,8 +592,8 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state):
     return resolve_catalog(discovered, streams_to_sync)
 
 
-def get_binlog_streams(mysql_conn, catalog, config, state):
-    discovered = discover_catalog(mysql_conn, config)
+def get_binlog_streams(mysql_conn, catalog, config, state, append_mode):
+    discovered = discover_catalog(mysql_conn, config, append_mode)
 
     selected_streams = list(filter(lambda s: common.stream_is_selected(s), catalog.streams))
     binlog_streams = []
@@ -821,9 +826,10 @@ class Component(KBCEnvHandler):
 
     def do_sync(self, mysql_conn, config, mysql_config, catalog, state,
                 message_store: core.MessageStore = None, schemas=[], tables=[]):
-        non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state)
+        non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state,
+                                                    self.params.get(KEY_APPEND_MODE))
         logging.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
-        binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state)
+        binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state, self.params.get(KEY_APPEND_MODE))
         logging.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
 
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
@@ -1216,7 +1222,7 @@ class Component(KBCEnvHandler):
             #         table_mappings = json.load(mappings_file)
 
             # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
-            catalog_mapping = discover_catalog(mysql_client, self.params)
+            catalog_mapping = discover_catalog(mysql_client, self.params, append_mode=self.params.get(KEY_APPEND_MODE))
 
             # Make Raw Mapping file to allow edits
             raw_yaml_mapping = make_yaml_mapping_file(catalog_mapping.to_dict())
