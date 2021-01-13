@@ -117,11 +117,12 @@ class MessageStore(dict):
                 first_record = True
                 for record in data_records:
                     if first_record:
-                        writer = csv.DictWriter(csv_file, fieldnames=[x.upper() for x in record.keys()])
+                        writer = csv.DictWriter(csv_file, fieldnames=[x.upper() for x in record.keys()], restval='',
+                                                quoting=csv.QUOTE_ALL)
                         writer.writeheader()
                         writer.fieldnames = list(record.keys())
                     else:
-                        writer = csv.DictWriter(csv_file, fieldnames=record.keys())
+                        writer = csv.DictWriter(csv_file, fieldnames=record.keys(), restval='', quoting=csv.QUOTE_ALL)
 
                     writer.writerow(record)
                     first_record = False
