@@ -110,6 +110,12 @@ class MessageStore(dict):
         #     writer.writerow(row)
 
         file_is_empty = (not os.path.isfile(full_path))
+        COLUMNS = []
+
+        for record in data_records:
+            COLUMNS += list(record.keys())
+
+        COLUMNS = list(set(COLUMNS))
 
         if file_is_empty:
             logging.debug(f"Opening full path at {full_path}.")
@@ -117,19 +123,19 @@ class MessageStore(dict):
                 first_record = True
                 for record in data_records:
                     if first_record:
-                        writer = csv.DictWriter(csv_file, fieldnames=[x.upper() for x in record.keys()], restval='',
+                        writer = csv.DictWriter(csv_file, fieldnames=[x.upper() for x in COLUMNS], restval='',
                                                 quoting=csv.QUOTE_ALL)
                         writer.writeheader()
-                        writer.fieldnames = list(record.keys())
+                        writer.fieldnames = list(COLUMNS)
                     else:
-                        writer = csv.DictWriter(csv_file, fieldnames=record.keys(), restval='', quoting=csv.QUOTE_ALL)
+                        writer = csv.DictWriter(csv_file, fieldnames=COLUMNS, restval='', quoting=csv.QUOTE_ALL)
 
                     writer.writerow(record)
                     first_record = False
         else:
             with open(full_path, 'a') as csv_file:
                 for record in data_records:
-                    writer = csv.DictWriter(csv_file, fieldnames=record.keys())
+                    writer = csv.DictWriter(csv_file, fieldnames=COLUMNS)
                     writer.writerow(record)
 
     def add_message(self, schema: str, input_message: dict):

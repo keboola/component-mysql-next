@@ -236,9 +236,9 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
 
-        filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
@@ -259,9 +259,9 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
 
-        filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
@@ -284,9 +284,9 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
 
-        filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
