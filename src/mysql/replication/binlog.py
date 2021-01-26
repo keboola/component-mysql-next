@@ -40,10 +40,12 @@ mysql_timestamp_types = {FIELD_TYPE.TIMESTAMP, FIELD_TYPE.TIMESTAMP2}
 def add_automatic_properties(catalog_entry, columns):
     catalog_entry.schema.properties[common.KBC_SYNCED] = Schema(type=["null", "string"], format="date-time")
     catalog_entry.schema.properties[common.KBC_DELETED] = Schema(type=["null", "string"], format="date-time")
-    catalog_entry.schema.properties[common.BINLOG_CHANGE_AT] = Schema(type=["null", "string"])
+    catalog_entry.schema.properties[common.BINLOG_CHANGE_AT] = Schema(type=["null", "integer"])
+    catalog_entry.schema.properties[common.BINLOG_READ_AT] = Schema(type=["null", "integer"])
     columns.append(common.KBC_SYNCED)
     columns.append(common.KBC_DELETED)
     columns.append(common.BINLOG_CHANGE_AT)
+    columns.append(common.BINLOG_READ_AT)
 
     return columns
 
@@ -235,10 +237,11 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         vals[common.KBC_DELETED] = None
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
+        vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
 
-        filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
@@ -258,10 +261,11 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
         vals[common.KBC_DELETED] = None
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
+        vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
 
-        filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
@@ -283,10 +287,11 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
         vals[common.KBC_DELETED] = event_ts
         vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
+        vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
 
-        filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)

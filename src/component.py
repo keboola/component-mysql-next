@@ -624,15 +624,17 @@ class Component(KBCEnvHandler):
         KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
                                log_level=logging.DEBUG if debug else logging.INFO)
 
-        if self.cfg_params.get(KEY_DEBUG):
-            debug = True
+        if self.cfg_params.get(KEY_DEBUG, False) is True:
+            logger = logging.getLogger()
+            logger.setLevel(logging.DEBUG)
+            sys.tracebacklimit = 3
 
-        log_level = logging.DEBUG if debug else logging.INFO
-        # setup GELF if available
-        if os.getenv('KBC_LOGGER_ADDR', None):
-            self.set_gelf_logger(log_level)
-        else:
-            self.set_default_logger(log_level)
+        # log_level = logging.DEBUG if debug else logging.INFO
+        # # setup GELF if available
+        # if os.getenv('KBC_LOGGER_ADDR', None):
+        #     self.set_gelf_logger(log_level)
+        # else:
+        #     self.set_default_logger(log_level)
 
         self.files_out_path = os.path.join(self.data_path, 'out', 'files')
         self.files_in_path = os.path.join(self.data_path, 'in', 'files')
@@ -902,9 +904,12 @@ class Component(KBCEnvHandler):
 
         # Append KBC metadata column types, hard coded for now
         table_columns_metadata[common.KBC_SYNCED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
-        table_columns_metadata[common.KBC_DELETED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
+        table_columns_metadata[common.KBC_DELETED] = self.generate_column_metadata(
+            data_type='timestamp', nullable=True)
         table_columns_metadata[common.BINLOG_CHANGE_AT] = self.generate_column_metadata(data_type='integer',
                                                                                         nullable=True)
+        table_columns_metadata[common.BINLOG_READ_AT] = self.generate_column_metadata(data_type='integer',
+                                                                                      nullable=True)
 
         return table_columns_metadata
 

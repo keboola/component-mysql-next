@@ -37,8 +37,9 @@ SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
 KBC_SYNCED = '_KBC_SYNCED_AT'
 KBC_DELETED = '_KBC_DELETED_AT'
 BINLOG_CHANGE_AT = '_BINLOG_CHANGE_AT'
-KBC_METADATA_COLS = (KBC_SYNCED, KBC_DELETED)
-KBC_METADATA = (SYNC_STARTED_AT, None)
+BINLOG_READ_AT = '_BINLOG_READ_AT'
+KBC_METADATA_COLS = (KBC_SYNCED, KBC_DELETED, BINLOG_CHANGE_AT, BINLOG_READ_AT)
+KBC_METADATA = (SYNC_STARTED_AT, None, 0, 0)
 
 
 def now():
@@ -171,12 +172,14 @@ def to_utc_datetime_str(val):
 def row_to_data_record(catalog_entry, version, row, columns, time_extracted):
     # Adding metadata for Keboola. Can presume not there since should only be called for full sync
 
-    kbc_metadata = (SYNC_STARTED_AT, None)
-    kbc_metadata_cols = (KBC_SYNCED, KBC_DELETED)
+    kbc_metadata = (SYNC_STARTED_AT, None, 0, 0)
+    kbc_metadata_cols = (KBC_SYNCED, KBC_DELETED, BINLOG_CHANGE_AT, BINLOG_READ_AT)
     row_with_metadata = row + kbc_metadata
     columns.extend(kbc_metadata_cols)
     catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
     catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
+    catalog_entry.schema.properties[BINLOG_CHANGE_AT] = core.schema.Schema(type=["null", "integer"])
+    catalog_entry.schema.properties[BINLOG_READ_AT] = core.schema.Schema(type=["null", "integer"])
 
     row_to_persist = ()
     for idx, elem in enumerate(row_with_metadata):
@@ -283,7 +286,8 @@ def _add_kbc_metadata_to_rows(rows, catalog_entry):
     # Add headers to schema definition (data is added in write step)
     catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
     catalog_entry.schema.properties[KBC_DELETED] = core.schema.Schema(type=["null", "string"], format="date-time")
-    catalog_entry.schema.properties[BINLOG_CHANGE_AT] = core.schema.Schema(type=["null", "string"])
+    catalog_entry.schema.properties[BINLOG_CHANGE_AT] = core.schema.Schema(type=["null", "integer"])
+    catalog_entry.schema.properties[BINLOG_READ_AT] = core.schema.Schema(type=["null", "integer"])
 
     return rows
 
