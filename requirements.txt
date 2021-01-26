@@ -8,7 +8,7 @@ logging-gelf==0.0.26
 pygelf==0.3.6
 mock==4.0.2
 mysql-replication==0.21
-pandas==1.0.3
+pandas==1.2.1
 paramiko==2.7.1
 pendulum==1.2.0
 pymysql==0.9.3
