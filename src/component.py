@@ -116,7 +116,7 @@ MAPPINGS_FILE = 'table_mappings.json'
 LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
-FLUSH_STORE_THRESHOLD = 5000
+FLUSH_STORE_THRESHOLD = 1000000
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
@@ -627,7 +627,7 @@ class Component(KBCEnvHandler):
         if self.cfg_params.get(KEY_DEBUG, False) is True:
             logger = logging.getLogger()
             logger.setLevel(logging.DEBUG)
-            sys.tracebacklimit = 3
+            sys.tracebacklimit = 10
 
         # log_level = logging.DEBUG if debug else logging.INFO
         # # setup GELF if available

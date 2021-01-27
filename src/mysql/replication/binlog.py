@@ -131,8 +131,17 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
     row_to_persist = {}
 
     for column_name, val in row.items():
-        property_type = catalog_entry.schema.properties[column_name].type
-        db_column_type = db_column_map.get(column_name)
+
+        try:
+            property_type = catalog_entry.schema.properties[column_name].type
+            db_column_type = db_column_map.get(column_name)
+        except KeyError:
+            # Omitting already dropped columns as it's not possible to get data about them anymore, but
+            # they still appear in the BINLOG as '__dropped_col_XXX__'
+            if column_name.startswith('__dropped_col_') is True:
+                continue
+            else:
+                raise
 
         if isinstance(val, (datetime.datetime, datetime.date, datetime.timedelta)):
             the_utc_date = common.to_utc_datetime_str(val)
