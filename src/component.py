@@ -1072,7 +1072,7 @@ class Component(KBCEnvHandler):
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
                 df = pd.read_csv(csv_table_path, dtype='string')
-                df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+                df.drop_duplicates(subset=[pk.upper() for pk in primary_keys], keep='last', inplace=True)
                 df.columns = [col.upper() for col in df.columns]
                 df.to_csv(csv_table_path, index=False)
 
