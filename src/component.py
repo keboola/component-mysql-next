@@ -116,7 +116,7 @@ MAPPINGS_FILE = 'table_mappings.json'
 LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
-FLUSH_STORE_THRESHOLD = 5000
+FLUSH_STORE_THRESHOLD = 1000000
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
@@ -124,7 +124,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.4.23'
+APP_VERSION = '0.5.0'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -624,15 +624,17 @@ class Component(KBCEnvHandler):
         KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
                                log_level=logging.DEBUG if debug else logging.INFO)
 
-        if self.cfg_params.get(KEY_DEBUG):
-            debug = True
+        if self.cfg_params.get(KEY_DEBUG, False) is True:
+            logger = logging.getLogger()
+            logger.setLevel(logging.DEBUG)
+            sys.tracebacklimit = 10
 
-        log_level = logging.DEBUG if debug else logging.INFO
-        # setup GELF if available
-        if os.getenv('KBC_LOGGER_ADDR', None):
-            self.set_gelf_logger(log_level)
-        else:
-            self.set_default_logger(log_level)
+        # log_level = logging.DEBUG if debug else logging.INFO
+        # # setup GELF if available
+        # if os.getenv('KBC_LOGGER_ADDR', None):
+        #     self.set_gelf_logger(log_level)
+        # else:
+        #     self.set_default_logger(log_level)
 
         self.files_out_path = os.path.join(self.data_path, 'out', 'files')
         self.files_in_path = os.path.join(self.data_path, 'in', 'files')
@@ -902,9 +904,12 @@ class Component(KBCEnvHandler):
 
         # Append KBC metadata column types, hard coded for now
         table_columns_metadata[common.KBC_SYNCED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
-        table_columns_metadata[common.KBC_DELETED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
+        table_columns_metadata[common.KBC_DELETED] = self.generate_column_metadata(
+            data_type='timestamp', nullable=True)
         table_columns_metadata[common.BINLOG_CHANGE_AT] = self.generate_column_metadata(data_type='integer',
                                                                                         nullable=True)
+        table_columns_metadata[common.BINLOG_READ_AT] = self.generate_column_metadata(data_type='integer',
+                                                                                      nullable=True)
 
         return table_columns_metadata
 
@@ -1067,7 +1072,7 @@ class Component(KBCEnvHandler):
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
                 df = pd.read_csv(csv_table_path, dtype='string')
-                df.drop_duplicates(subset=primary_keys, keep='last', inplace=True)
+                df.drop_duplicates(subset=[pk.upper() for pk in primary_keys], keep='last', inplace=True)
                 df.columns = [col.upper() for col in df.columns]
                 df.to_csv(csv_table_path, index=False)
 

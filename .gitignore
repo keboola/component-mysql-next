@@ -58,3 +58,6 @@ data/
 
 # VSCode Folder
 .vscode/
+
+# MacOS folder
+.DS_Store

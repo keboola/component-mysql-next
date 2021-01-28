@@ -18,12 +18,17 @@ import backoff as backoff_module
 from .catalog import Catalog
 
 DATETIME_PARSE = "%Y-%m-%dT%H:%M:%SZ"
-DATETIME_FMT = "%04Y-%m-%dT%H:%M:%S.%fZ"
+DATETIME_FMT = "%04Y-%m-%d %H:%M:%S.%f"
 DATETIME_FMT_SAFE = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
-def now():
-    return datetime.datetime.utcnow().replace(tzinfo=pytz.UTC)
+def now(format='dt'):
+    if format == 'dt':
+        return datetime.datetime.utcnow().replace(tzinfo=pytz.UTC)
+    elif format == 'ts_1e6':
+        return int(time.time() * 1e6)
+    else:
+        raise ValueError(f"Invalid format {format}.")
 
 
 def strptime_with_tz(dtime):
