@@ -125,7 +125,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.5.2'
+APP_VERSION = '0.5.3'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1361,14 +1361,19 @@ class Component(KBCEnvHandler):
                                 fields = rdr.fieldnames
                         except FileNotFoundError:
                             fields = []
+                        except IsADirectoryError:
+                            fields = None
 
                         logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
                                                                                   entry_table_name))
 
-                        table_column_metadata = dict()
-                        for key, val in _table_column_metadata.items():
-                            if key in fields:
-                                table_column_metadata[key] = val
+                        if fields is not None:
+                            table_column_metadata = dict()
+                            for key, val in _table_column_metadata.items():
+                                if key in fields:
+                                    table_column_metadata[key] = val
+                        else:
+                            table_column_metadata = _table_column_metadata
 
                         # Write manifest files
                         if output_is_sliced:
