@@ -1359,7 +1359,7 @@ class Component(KBCEnvHandler):
                             with open(table_specific_sliced_path) as io:
                                 rdr = csv.DictReader(io)
                                 fields = rdr.fieldnames
-                        except Exception:
+                        except FileNotFoundError:
                             fields = []
 
                         logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
