@@ -125,7 +125,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.5.0'
+APP_VERSION = '0.5.2'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -1355,9 +1355,12 @@ class Component(KBCEnvHandler):
 
                         _table_column_metadata = self.get_table_column_metadata(column_metadata)
 
-                        with open(table_specific_sliced_path) as io:
-                            rdr = csv.DictReader(io)
-                            fields = rdr.fieldnames
+                        try:
+                            with open(table_specific_sliced_path) as io:
+                                rdr = csv.DictReader(io)
+                                fields = rdr.fieldnames
+                        except Exception:
+                            fields = []
 
                         logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
                                                                                   entry_table_name))
