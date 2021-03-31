@@ -21,6 +21,7 @@ TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 import ast
 import base64
 import binascii
+import csv
 import copy
 import itertools
 import json
@@ -1352,10 +1353,19 @@ class Component(KBCEnvHandler):
                             ))
                             manifest_incremental = True
 
-                        table_column_metadata = self.get_table_column_metadata(column_metadata)
+                        _table_column_metadata = self.get_table_column_metadata(column_metadata)
+
+                        with open(table_specific_sliced_path) as io:
+                            rdr = csv.DictReader(io)
+                            fields = rdr.fieldnames
 
                         logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
                                                                                   entry_table_name))
+
+                        table_column_metadata = dict()
+                        for key, val in _table_column_metadata.items():
+                            if key in fields:
+                                table_column_metadata[key] = val
 
                         # Write manifest files
                         if output_is_sliced:

@@ -61,3 +61,6 @@ data/
 
 # MacOS folder
 .DS_Store
+
+# pyenv
+.python-version
