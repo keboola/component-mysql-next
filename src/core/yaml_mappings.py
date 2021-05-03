@@ -63,8 +63,8 @@ def convert_yaml_to_json_mapping(yaml_mappings, raw_json_mapping):
             for table in tables_info['tables']:
                 for table_name, table_metadata in table.items():
                     stream_id = database + '-' + table_name
-                    table_columns = table_metadata.get('columns')
-                    selected_table = table_metadata.get('selected')
+                    table_columns = table_metadata.get('columns', {})
+                    selected_table = table_metadata.get('selected', False)
                     replication_method = table_metadata.get('replication-method')
                     replication_key = table_metadata.get('replication-key')
                     output_table = table_metadata.get('output-table')

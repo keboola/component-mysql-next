@@ -1,3 +1,16 @@
+**0.5.4**
+- Added option to specify `columns` for each table, marking column, which should be downloaded from MySQL binary log
+- Added option to specify `columns_to_ignore`. If a change is made in these columns and there's no change in any other column, the event will not be written to storage.
+- Added option to specify `columns_to_watch`. If a change happens outside of these columns, the event will not be written to storage.
+
+**0.5.1**
+- Fixed bug, where metadata was written to storage for a column, which was not yet occupied with columns
+
+**0.5.0**
+- Minor refactoring of code
+- Added BINLOG_READ_AT column
+- Fixed full load
+
 **0.4.17**
 - Output bucket option working correctly
 

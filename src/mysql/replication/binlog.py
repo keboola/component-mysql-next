@@ -248,9 +248,12 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
         vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
 
-        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        if columns == [] or columns is None:
+            filtered_vals = vals
+        else:
+            filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
@@ -259,29 +262,63 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
     return rows_saved
 
 
-def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
-                             message_store: core.MessageStore = None):
+def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted, watch_columns=None,
+                             ignore_columns=None, message_store: core.MessageStore = None):
     stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
     db_column_types = get_db_column_types(event)
 
     for row in event.rows:
-        vals = row['after_values']
 
-        vals[common.KBC_DELETED] = None
-        vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
-        vals[common.BINLOG_CHANGE_AT] = event.timestamp
-        vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
+        changed = False
+        if ignore_columns is not None and ignore_columns != []:
+            all_cols = list(row['after_values'].keys())
 
-        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
+            for wc in all_cols:
+                if wc in ignore_columns:
+                    continue
+                else:
+                    before_value = row['before_values'].get(wc)
+                    after_value = row['after_values'].get(wc)
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
-                                            time_extracted)
+                    if before_value != after_value:
+                        changed = True
+                        break
 
-        core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
+        elif watch_columns is not None and watch_columns != []:
+            for wc in watch_columns:
+                before_value = row['before_values'].get(wc)
+                after_value = row['after_values'].get(wc)
 
-        rows_saved += 1
+                if before_value != after_value:
+                    changed = True
+                    break
 
-    return rows_saved
+        else:
+            changed = True
+
+        if changed is False:
+            pass
+        else:
+            vals = row['after_values']
+
+            vals[common.KBC_DELETED] = None
+            vals[common.KBC_SYNCED] = common.SYNC_STARTED_AT
+            vals[common.BINLOG_CHANGE_AT] = event.timestamp
+            vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
+
+            if columns == [] or columns is None:
+                filtered_vals = vals
+            else:
+                filtered_vals = {k: v for k, v in vals.items() if k in columns}
+
+            record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
+                                                time_extracted)
+
+            core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
+
+            rows_saved += 1
+
+        return rows_saved
 
 
 def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
@@ -298,9 +335,12 @@ def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, t
         vals[common.BINLOG_CHANGE_AT] = event.timestamp
         vals[common.BINLOG_READ_AT] = utils.now(format='ts_1e6')
 
-        # filtered_vals = {k: v for k, v in vals.items() if k in columns}
+        if columns == [] or columns is None:
+            filtered_vals = vals
+        else:
+            filtered_vals = {k: v for k, v in vals.items() if k in columns}
 
-        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, vals,
+        record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
 
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
@@ -325,7 +365,8 @@ def generate_streams_map(binlog_streams):
     return stream_map
 
 
-def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_store: core.MessageStore = None):
+def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
+                     message_store: core.MessageStore = None):
     time_extracted = utils.now()
 
     rows_saved = 0
@@ -341,7 +382,9 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
             tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
             streams_map_entry = binlog_streams_map.get(tap_stream_id, {})
             catalog_entry = streams_map_entry.get('catalog_entry')
-            desired_columns = streams_map_entry.get('desired_columns')
+            desired_columns = columns[tap_stream_id].get('desired', [])
+            ignored_columns = columns[tap_stream_id].get('ignore', [])
+            watched_columns = columns[tap_stream_id].get('watch', [])
 
             if not catalog_entry:
                 logging.debug('No catalog entry, skip events number: {}'.format(events_skipped))
@@ -358,7 +401,9 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
 
                 elif isinstance(binlog_event, UpdateRowsEvent):
                     rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                          rows_saved, time_extracted, message_store=message_store)
+                                                          rows_saved, time_extracted,
+                                                          watch_columns=watched_columns, ignore_columns=ignored_columns,
+                                                          message_store=message_store)
 
                 elif isinstance(binlog_event, DeleteRowsEvent):
                     rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
@@ -384,7 +429,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_stor
 
 
 def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None,
-                       schemas=[], tables=[]):
+                       schemas=[], tables=[], columns={}):
     binlog_streams_map = generate_streams_map(binlog_streams)
 
     for tap_stream_id in binlog_streams_map.keys():
@@ -421,7 +466,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
         )
 
         logging.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
-        _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, message_store=message_store)
+        _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns, message_store=message_store)
     finally:
         # BinLogStreamReader doesn't implement the `with` methods
         # So, try/finally will close the chain from the top

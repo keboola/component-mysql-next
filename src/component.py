@@ -125,7 +125,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.5.3'
+APP_VERSION = '0.5.4'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -818,17 +818,17 @@ class Component(KBCEnvHandler):
 
     @staticmethod
     def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
-                            message_store: core.MessageStore = None, schemas=[], tables=[]):
+                            message_store: core.MessageStore = None, schemas=[], tables=[], columns={}):
         if binlog_catalog.streams:
             for stream in binlog_catalog.streams:
                 write_schema_message(stream, message_store=message_store)
 
             with metrics.job_timer('sync_binlog'):
                 binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state,
-                                          message_store=message_store, schemas=schemas, tables=tables)
+                                          message_store=message_store, schemas=schemas, tables=tables, columns=columns)
 
     def do_sync(self, mysql_conn, config, mysql_config, catalog, state,
-                message_store: core.MessageStore = None, schemas=[], tables=[]):
+                message_store: core.MessageStore = None, schemas=[], tables=[], columns={}):
         non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state,
                                                     self.params.get(KEY_APPEND_MODE))
         logging.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
@@ -838,7 +838,7 @@ class Component(KBCEnvHandler):
         self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
                                      tables_destination=self.tables_out_path, message_store=message_store)
         self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
-                                 message_store=message_store, schemas=schemas, tables=tables)
+                                 message_store=message_store, schemas=schemas, tables=tables, columns=columns)
 
     @staticmethod
     def log_server_params(mysql_conn):
@@ -1141,6 +1141,8 @@ class Component(KBCEnvHandler):
         schemas = []
         tables = []
         output_mapping = []
+        columns = {}
+
         if input_mapping_type == 'json':
 
             for schema in input_mapping:
@@ -1157,6 +1159,20 @@ class Component(KBCEnvHandler):
                 else:
                     schemas += [schema]
                     tables += [list(table.keys())[0] for table in _tables]
+
+                for table in _tables:
+
+                    table_name = list(table.keys())[0]
+
+                    tap_stream_id = '-'.join([schema, table_name])
+                    desired_columns = [k for k, v in table[table_name].get('columns', {}).items() if v is True]
+                    columns_to_watch = table[table_name].get('columns_to_watch')
+                    columns_to_ignore = table[table_name].get('columns_to_ignore')
+                    columns[tap_stream_id] = {
+                        'desired': None if desired_columns == [] else desired_columns + list(common.KBC_METADATA_COLS),
+                        'watch': columns_to_watch,
+                        'ignore': columns_to_ignore
+                    }
 
         elif input_mapping_type == 'yaml':
             # Because yaml and json mapping have different specification. YAML is an array, JSON is an object.
@@ -1175,6 +1191,20 @@ class Component(KBCEnvHandler):
                     schemas += [schema]
                     tables += [list(table.keys())[0] for table in _tables]
 
+                for table in _tables:
+
+                    table_name = list(table.keys())[0]
+
+                    tap_stream_id = '-'.join([schema, table_name])
+                    desired_columns = [k for k, v in table[table_name].get('columns', {}).items() if v is True]
+                    columns_to_watch = table[table_name].get('columns_to_watch', [])
+                    columns_to_ignore = table[table_name].get('columns_to_ignore', [])
+                    columns[tap_stream_id] = {
+                        'desired': None if desired_columns == [] else desired_columns + list(common.KBC_METADATA_COLS),
+                        'watch': columns_to_watch,
+                        'ignore': columns_to_ignore
+                    }
+
         else:
             logging.error(f"Incorrect mapping file specification provided: {input_mapping_type}.")
             sys.exit(1)
@@ -1182,7 +1212,7 @@ class Component(KBCEnvHandler):
         logging.debug(f"Parsed following schemas: {schemas}.")
         logging.debug(f"Parsed following tables: {tables}.")
 
-        return output_mapping, schemas, tables
+        return output_mapping, schemas, tables, columns
 
     @staticmethod
     def create_output_bucket(bucket_name: str = None):
@@ -1244,7 +1274,8 @@ class Component(KBCEnvHandler):
                     logging.error("Invalid JSON mappins provided. Could not parse JSON.")
                     sys.exit(1)
 
-                input_mapping, schemas_to_sync, tables_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                input_mapping, schemas_to_sync, tables_to_sync, \
+                    columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
                 table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
 
             elif self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
@@ -1255,7 +1286,8 @@ class Component(KBCEnvHandler):
 
                 logging.debug(f"Received input schema: {input_mapping}")
 
-                _, schemas_to_sync, tables_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                _, schemas_to_sync, tables_to_sync, \
+                    columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
 
             else:
                 raise AttributeError('You are missing either a YAML input mapping, or the '
@@ -1297,7 +1329,8 @@ class Component(KBCEnvHandler):
                                        output_table_path=self.tables_out_path) as message_store:
                     catalog = Catalog.from_dict(table_mappings)
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
-                                 message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync)
+                                 message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,
+                                 columns=columns_to_sync)
 
                     logging.info('Data extraction completed')
 
