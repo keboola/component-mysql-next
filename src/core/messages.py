@@ -1,3 +1,4 @@
+import base64
 import csv
 import logging
 import os
@@ -12,14 +13,41 @@ except ImportError:
     import src.core.utils as u
 
 
+def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, replace_nulls: bool = False):
+
+    for column in binary_columns:
+        if column not in row:
+            pass
+
+        else:
+
+            value_to_convert = row[column]
+
+            if replace_nulls is True:
+                value_to_convert = value_to_convert.replace(b'\x00', b'')
+
+            if binary_data_handler == 'plain':
+                row[column] = value_to_convert.decode()
+            elif binary_data_handler == 'hex':
+                row[column] = value_to_convert.hex().upper()
+            elif binary_data_handler == 'base64':
+                row[column] = base64.b64encode(value_to_convert).decode()
+            else:
+                logging.error(f"Unknown binary data handler format: {binary_data_handler}.")
+                exit(1)
+
+    return row
+
+
 class MessageStore(dict):
     """Storage for log-based messages"""
     def __init__(self, state: dict = None, flush_row_threshold: int = 5000,
-                 output_table_path: str = '/data/out/tables'):
+                 output_table_path: str = '/data/out/tables', binary_handler: str = 'plain'):
         super().__init__()
         self.state = state
         self.flush_row_threshold = flush_row_threshold
         self.output_table_path = output_table_path
+        self.binary_data_handler = binary_handler
 
         self._data_store = {}
         self._found_schemas = []
@@ -82,15 +110,38 @@ class MessageStore(dict):
             for table in self.found_tables:
                 if self._data_store[schema][table].get('records'):
                     # logging.debug('got records for {} {}'.format(schema, table))
+
+                    binary_columns = self._data_store[schema][table]['schemas'][0]['binary']
+                    if binary_columns == []:
+                        binary_columns = None
                     file_output = table.upper() + '.csv'
 
-                    self.write_to_csv(self._data_store[schema][table].get('records'), file_output)
+                    self.write_to_csv(self._data_store[schema][table].get('records'), file_output, binary_columns)
                     self._clear_records(schema, table)
 
         self._processed_records = 0
         self._flush_count += 1
 
-    def write_to_csv(self, data_records: list, file_name: str):
+    # def handle_binary_data(self, row: dict, binary_columns: list):
+
+    #     for column in binary_columns:
+    #         if column not in row:
+    #             pass
+
+    #         else:
+    #             if self.binary_data_handler == 'plain':
+    #                 row[column] = row[column].decode()
+    #             elif self.binary_data_handler == 'hex':
+    #                 row[column] = row[column].hex().upper()
+    #             elif self.binary_data_handler == 'base64':
+    #                 row[column] = base64.b64encode(row[column]).decode()
+    #             else:
+    #                 logging.error(f"Unknown binary data handler format: {self.binary_data_handler}.")
+    #                 exit(1)
+
+    #     return row
+
+    def write_to_csv(self, data_records: list, file_name: str, binary_columns: list = None):
         full_path = os.path.expanduser(os.path.join(self.output_table_path, file_name))
 
         # if len(data_records) == 0:
@@ -130,12 +181,16 @@ class MessageStore(dict):
                     else:
                         writer = csv.DictWriter(csv_file, fieldnames=COLUMNS, restval='', quoting=csv.QUOTE_ALL)
 
+                    if binary_columns is not None:
+                        record = handle_binary_data(record, binary_columns, self.binary_data_handler)
                     writer.writerow(record)
                     first_record = False
         else:
             with open(full_path, 'a') as csv_file:
                 for record in data_records:
                     writer = csv.DictWriter(csv_file, fieldnames=COLUMNS)
+                    if binary_columns is not None:
+                        record = handle_binary_data(record, binary_columns, self.binary_data_handler)
                     writer.writerow(record)
 
     def add_message(self, schema: str, input_message: dict):
@@ -177,6 +232,13 @@ class MessageStore(dict):
         self._processed_records += 1
 
     def _add_schema_message(self, schema: str, table: str, schema_message: dict):
+        binary_columns = []
+
+        for column_name, column_schema in schema_message['properties'].items():
+            if 'binary' in column_schema['type']:
+                binary_columns += [column_name]
+
+        schema_message['binary'] = binary_columns
         self._data_store[schema][table]['schemas'].append(schema_message)
         if not self.found_headers.get(schema):
             self._found_headers[schema] = []

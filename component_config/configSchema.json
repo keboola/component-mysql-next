@@ -14,7 +14,8 @@
     "verifyCert",
     "sshTunnel",
     "storageMappingsFile",
-    "inputMappingsJson"
+    "inputMappingsJson",
+    "handle_binary"
   ],
   "properties": {
     "fetchObjectsOnly": {
@@ -158,6 +159,18 @@
       "default": false,
       "description": "If set to true, application will only insert new updates into the result table. The updates then have to be deduped in a transformation, to get the resulting table. This mode is faster, but requires extra work.",
       "propertyOrder": 1000
+    },
+    "handle_binary": {
+      "type": "string",
+      "title": "Binary data handler",
+      "default": "plain",
+      "enum": [
+        "plain",
+        "hex",
+        "base64"
+      ],
+      "description": "Marks how to handle binary data:<ul><li><strong>plain</strong> - data in decoded from binary to string using Python's <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.decode' target='_blank'>bytes.decode()</a></i> method,</li><li><strong>hex</strong> - data is converted to hex representation of binary string using <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.hex' target='_blank'>bytes.hex()</a></i> method,</li><li><strong>base64</strong> - data is converted to a base64 string, using <i><a href='https://docs.python.org/3/library/base64.html#base64.b64encode' target='_blank'>base64.b64encode()</a></i> method.</li></ul>All trailing or leading null bytes are replaced.",
+      "propertyOrder": 1100
     }
   }
 }

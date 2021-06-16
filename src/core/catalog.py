@@ -23,7 +23,8 @@ class CatalogEntry:
     """Table mapping catalog."""
     def __init__(self, tap_stream_id=None, stream=None, primary_keys: list = None, key_properties=None,
                  schema=None, replication_key=None, is_view=None, database=None, table=None, row_count=None,
-                 stream_alias=None, metadata=None, replication_method=None, ordered_output_columns: list = None):
+                 stream_alias=None, metadata=None, replication_method=None, ordered_output_columns: list = None,
+                 binary_columns: list = None):
 
         self.tap_stream_id = tap_stream_id
         self.stream = stream
@@ -38,6 +39,7 @@ class CatalogEntry:
         self.row_count = row_count
         self.stream_alias = stream_alias
         self.metadata = metadata
+        self.binary_columns = binary_columns
 
         self.primary_keys = primary_keys
 
@@ -83,6 +85,10 @@ class CatalogEntry:
             result['metadata'] = self.metadata
         if self.ordered_output_columns is not None:
             result['schema_ordered_list'] = self.ordered_output_columns
+        if self.binary_columns is not None:
+            result['binary_columns'] = self.binary_columns
+        else:
+            result['binary_columns'] = []
         return result
 
 
@@ -126,6 +132,7 @@ class Catalog:
             entry.metadata = stream.get('metadata')
             entry.primary_keys = stream.get('primary_keys')
             entry.replication_method = stream.get('replication_method')
+            entry.binary_columns = stream.get('binary_columns')
             streams.append(entry)
         return Catalog(streams)
 

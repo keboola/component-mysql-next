@@ -100,6 +100,7 @@ KEY_MAPPINGS_FILE = 'storageMappingsFile'
 KEY_INPUT_MAPPINGS_YAML = 'inputMappingsYaml'
 KEY_STATE_JSON = 'base64StateJson'
 KEY_APPEND_MODE = 'appendMode'
+KEY_HANDLE_BINARY = 'handle_binary'
 
 # Define optional parameters as constants for later use.
 KEY_SSH_HOST = 'sshHost'
@@ -125,7 +126,7 @@ MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_US
                   KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
 
-APP_VERSION = '0.5.4'
+APP_VERSION = '0.6.0'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -141,6 +142,7 @@ BYTES_FOR_INTEGER_TYPE = {
     'int': 4,
     'bigint': 8
 }
+BINARY_TYPES = {'binary'}
 
 Column = namedtuple('Column', [
     "table_schema",
@@ -242,6 +244,9 @@ def schema_for_column(c):
 
     elif data_type.startswith(SET_TYPE):
         result.type = ['null', 'string']
+
+    elif data_type in BINARY_TYPES:
+        result.type = ['null', 'binary']
 
     else:
         result = Schema(None, inclusion='unsupported', description='Unsupported column type {}'.format(column_type))
@@ -381,9 +386,14 @@ def discover_catalog(mysql_conn, config, append_mode):
                 if not is_view:
                     md_map = metadata.write(md_map, (), 'table-key-properties', key_properties)
 
+                binary_columns = []
+                for column in cols:
+                    if column.data_type.lower() == 'binary':
+                        binary_columns += [column.column_name]
                 entry = CatalogEntry(table=table_name, stream=table_name, metadata=metadata.to_list(md_map),
                                      tap_stream_id=common.generate_tap_stream_id(table_schema, table_name),
-                                     schema=schema, primary_keys=primary_keys, database=table_schema)
+                                     schema=schema, primary_keys=primary_keys, database=table_schema,
+                                     binary_columns=binary_columns)
 
                 entries.append(entry)
 
@@ -505,6 +515,11 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
 
         # These are the columns we need to select
         columns = desired_columns(selected, discovered_table.schema)
+        binary_columns = []
+
+        for column, column_vals in discovered_table.schema.properties.items():
+            if 'binary' in column_vals.type:
+                binary_columns += [column]
 
         result.streams.append(CatalogEntry(
             tap_stream_id=catalog_entry.tap_stream_id,
@@ -516,7 +531,8 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                 type='object',
                 properties={col: discovered_table.schema.properties[col]
                             for col in columns}
-            )
+            ),
+            binary_columns=binary_columns
         ))
 
     return result
@@ -630,12 +646,8 @@ class Component(KBCEnvHandler):
             logger.setLevel(logging.DEBUG)
             sys.tracebacklimit = 10
 
-        # log_level = logging.DEBUG if debug else logging.INFO
-        # # setup GELF if available
-        # if os.getenv('KBC_LOGGER_ADDR', None):
-        #     self.set_gelf_logger(log_level)
-        # else:
-        #     self.set_default_logger(log_level)
+            for h in logger.handlers:
+                h.setFormatter(logging.Formatter('%(levelname)10s - %(filename)s - %(lineno)4d: %(message)s'))
 
         self.files_out_path = os.path.join(self.data_path, 'out', 'files')
         self.files_in_path = os.path.join(self.data_path, 'in', 'files')
@@ -922,7 +934,8 @@ class Component(KBCEnvHandler):
         # Append metadata per input parameter, if present
         if data_type:
             type_metadata = {}
-            type_key, type_value = 'KBC.datatype.type', data_type
+            type_key, type_value = 'KBC.datatype.type', data_type if 'binary' not in data_type.lower() \
+                else data_type.lower().replace('binary', 'varchar')
             type_metadata['key'] = type_key
             type_metadata['value'] = type_value
             column_metadata.append(type_metadata)
@@ -1326,7 +1339,8 @@ class Component(KBCEnvHandler):
                     logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
 
                 with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
-                                       output_table_path=self.tables_out_path) as message_store:
+                                       output_table_path=self.tables_out_path,
+                                       binary_handler=self.cfg_params.get(KEY_HANDLE_BINARY, 'plain')) as message_store:
                     catalog = Catalog.from_dict(table_mappings)
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
                                  message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,

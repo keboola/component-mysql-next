@@ -64,3 +64,6 @@ data/
 
 # pyenv
 .python-version
+
+# Testing notebook
+src/test.ipynb

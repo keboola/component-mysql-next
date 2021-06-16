@@ -16,11 +16,13 @@ try:
     import core.metrics as metrics
     from core import metadata
     from core import utils
+    from core.messages import handle_binary_data
 except ImportError:
     import src.core as core
     import src.core.metrics as metrics
     from src.core import metadata
     from src.core import utils
+    from src.core.messages import handle_binary_data
 
 CURRENT_PATH = os.path.dirname(__file__)
 
@@ -149,7 +151,8 @@ def to_utc_datetime_str(val):
     if isinstance(val, datetime.datetime):
         the_datetime = val
     elif isinstance(val, datetime.date):
-        the_datetime = datetime.datetime.combine(val, datetime.datetime.min.time())
+        # the_datetime = datetime.datetime.combine(val, datetime.datetime.min.time())
+        return val.strftime('%Y-%m-%d')
 
     elif isinstance(val, datetime.timedelta):
         epoch = datetime.datetime.utcfromtimestamp(0)
@@ -294,7 +297,7 @@ def _add_kbc_metadata_to_rows(rows, catalog_entry):
 
 def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql, columns, stream_version,
                     params, tables_destination: str = None, message_store: core.MessageStore = None):
-    replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key') # noqa
+    replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')  # noqa
 
     query_string = cursor.mogrify(select_sql, params)
     logging.info('Running query {}'.format(query_string))
@@ -351,10 +354,13 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                                         str(current_chunk) + '.csv')
 
                 with open(csv_path, 'w', encoding='utf-8') as output_data_file:
-                    writer = csv.writer(output_data_file, quoting=csv.QUOTE_MINIMAL)
+                    writer = csv.DictWriter(output_data_file, fieldnames=headers, quoting=csv.QUOTE_MINIMAL)
                     for row in rows:
                         rows_with_metadata = row + KBC_METADATA
-                        writer.writerow(rows_with_metadata)
+                        rows_dict = dict(zip(headers, rows_with_metadata))
+                        rows_to_write = handle_binary_data(rows_dict, catalog_entry.binary_columns,
+                                                           message_store.binary_data_handler, True)
+                        writer.writerow(rows_to_write)
 
                 chunk_end = utils.now()
                 chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
