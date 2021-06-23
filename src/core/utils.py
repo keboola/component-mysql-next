@@ -19,7 +19,7 @@ from .catalog import Catalog
 
 DATETIME_PARSE = "%Y-%m-%dT%H:%M:%SZ"
 DATETIME_FMT = "%04Y-%m-%d %H:%M:%S.%f"
-DATETIME_FMT_SAFE = "%Y-%m-%dT%H:%M:%S.%fZ"
+DATETIME_FMT_SAFE = "%Y-%m-%d %H:%M:%S.%f"
 
 
 def now(format='dt'):

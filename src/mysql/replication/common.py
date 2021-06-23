@@ -35,7 +35,7 @@ original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
 CSV_CHUNK_SIZE = 100000
-SYNC_STARTED_AT = datetime.datetime.utcnow().isoformat()
+SYNC_STARTED_AT = datetime.datetime.utcnow().strftime(utils.DATETIME_FMT_SAFE)
 KBC_SYNCED = '_KBC_SYNCED_AT'
 KBC_DELETED = '_KBC_DELETED_AT'
 BINLOG_CHANGE_AT = '_BINLOG_CHANGE_AT'
