@@ -24,7 +24,7 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
             value_to_convert = row[column]
 
             if replace_nulls is True:
-                value_to_convert = value_to_convert.replace(b'\x00', b'')
+                value_to_convert = value_to_convert.strip(b'\x00')
 
             if binary_data_handler == 'plain':
                 row[column] = value_to_convert.decode()
