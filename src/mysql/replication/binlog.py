@@ -318,7 +318,7 @@ def handle_update_rows_event(event, catalog_entry, state, columns, rows_saved, t
 
             rows_saved += 1
 
-        return rows_saved
+    return rows_saved
 
 
 def handle_delete_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
