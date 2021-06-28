@@ -41,6 +41,7 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
 
 class MessageStore(dict):
     """Storage for log-based messages"""
+
     def __init__(self, state: dict = None, flush_row_threshold: int = 5000,
                  output_table_path: str = '/data/out/tables', binary_handler: str = 'plain'):
         super().__init__()
@@ -116,32 +117,24 @@ class MessageStore(dict):
                         binary_columns = None
                     file_output = table.upper() + '.csv'
 
-                    self.write_to_csv(self._data_store[schema][table].get('records'), file_output, binary_columns)
+                    if self._data_store[schema][table].get('write_schema') is None:
+                        table_schema = list(self._data_store[schema][table]['schemas'][0]['properties'].keys())
+                        established_schema = False
+
+                    else:
+                        table_schema = self._data_store[schema][table].get('write_schema')
+                        established_schema = True
+
+                    write_schema = self.write_to_csv(self._data_store[schema][table].get('records'), file_output,
+                                                     table_schema, established_schema, binary_columns)
+                    self._data_store[schema][table]['write_schema'] = write_schema
                     self._clear_records(schema, table)
 
         self._processed_records = 0
         self._flush_count += 1
 
-    # def handle_binary_data(self, row: dict, binary_columns: list):
-
-    #     for column in binary_columns:
-    #         if column not in row:
-    #             pass
-
-    #         else:
-    #             if self.binary_data_handler == 'plain':
-    #                 row[column] = row[column].decode()
-    #             elif self.binary_data_handler == 'hex':
-    #                 row[column] = row[column].hex().upper()
-    #             elif self.binary_data_handler == 'base64':
-    #                 row[column] = base64.b64encode(row[column]).decode()
-    #             else:
-    #                 logging.error(f"Unknown binary data handler format: {self.binary_data_handler}.")
-    #                 exit(1)
-
-    #     return row
-
-    def write_to_csv(self, data_records: list, file_name: str, binary_columns: list = None):
+    def write_to_csv(self, data_records: list, file_name: str, schema: list, final_schema: bool,
+                     binary_columns: list = None):
         full_path = os.path.expanduser(os.path.join(self.output_table_path, file_name))
 
         # if len(data_records) == 0:
@@ -161,12 +154,19 @@ class MessageStore(dict):
         #     writer.writerow(row)
 
         file_is_empty = (not os.path.isfile(full_path))
-        COLUMNS = []
+        if final_schema is True:
+            COLUMNS = schema
+        else:
+            COLUMNS = []
 
-        for record in data_records:
-            COLUMNS += list(record.keys())
+            for record in data_records:
+                COLUMNS += list(record.keys())
 
-        COLUMNS = list(set(COLUMNS))
+            COLUMNS = list(set(COLUMNS))
+
+            for c in schema:
+                if c not in COLUMNS:
+                    COLUMNS += [c]
 
         if file_is_empty:
             logging.debug(f"Opening full path at {full_path}.")
@@ -188,10 +188,12 @@ class MessageStore(dict):
         else:
             with open(full_path, 'a') as csv_file:
                 for record in data_records:
-                    writer = csv.DictWriter(csv_file, fieldnames=COLUMNS)
+                    writer = csv.DictWriter(csv_file, fieldnames=COLUMNS, restval='', quoting=csv.QUOTE_ALL)
                     if binary_columns is not None:
                         record = handle_binary_data(record, binary_columns, self.binary_data_handler)
                     writer.writerow(record)
+
+        return COLUMNS
 
     def add_message(self, schema: str, input_message: dict):
         msg_type = get_message_type(input_message)
@@ -250,6 +252,7 @@ class MessageStore(dict):
 
 class Message:
     """Base class for messages."""
+
     def asdict(self):  # pylint: disable=no-self-use
         raise Exception('Not implemented')
 
@@ -320,6 +323,7 @@ class SchemaMessage(Message):
                },
         key_properties=['id'])
     """
+
     def __init__(self, stream, schema, key_properties, bookmark_properties=None):
         self.stream = stream
         self.schema = schema
@@ -351,6 +355,7 @@ class StateMessage(Message):
     msg = core.StateMessage(
         value={'users': '2017-06-19T00:00:00'})
     """
+
     def __init__(self, value):
         self.value = value
 
@@ -376,6 +381,7 @@ class ActivateVersionMessage(Message):
         stream='users',
         version=2)
     """
+
     def __init__(self, stream, version):
         self.stream = stream
         self.version = version
