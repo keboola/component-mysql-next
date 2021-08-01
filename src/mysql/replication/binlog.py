@@ -374,12 +374,18 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
 
     current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn)
     parsing_log_file = ''
+    parsing_log_pos = current_log_pos
 
     for binlog_event in reader:
 
         if parsing_log_file != reader.log_file:
             parsing_log_file = reader.log_file
-            logging.info(f"Parsing binary logs file {parsing_log_file}.")
+            parsing_log_pos = reader.log_pos
+            logging.info(f"Parsing binary logs file {parsing_log_file}, position {parsing_log_pos}.")
+
+        if reader.log_pos - parsing_log_pos > 5000000:
+            parsing_log_pos = reader.log_pos
+            logging.info(f"Parsing binary logs file {parsing_log_file}, position {parsing_log_pos}.")
 
         if isinstance(binlog_event, RotateEvent):
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
