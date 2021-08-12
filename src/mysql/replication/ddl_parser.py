@@ -59,9 +59,10 @@ class AlterStatementParser:
         return match
 
     def _is_supported_alter_table_statement(self, normalized_statement):
-        if not (normalized_statement.get_type() == 'ALTER' and len(
-                normalized_statement.tokens) > self.MINIMAL_TOKEN_COUNT
-                and normalized_statement.tokens[2].value == 'TABLE'):
+        token_count = len(normalized_statement.tokens)
+        if not (normalized_statement.get_type() == 'ALTER' and
+                token_count > self.MINIMAL_TOKEN_COUNT and
+                normalized_statement.tokens[2].value == 'TABLE'):
             return False
         else:
             for pattern in self.SUPPORTED_ALTER_TABLE_STATEMENTS:
@@ -73,8 +74,8 @@ class AlterStatementParser:
 
     @staticmethod
     def __is_column_identifier(token: Token) -> bool:
-        return isinstance(token, Identifier) or (
-                token.ttype == sqlparse.tokens.Name and isinstance(token.parent, Identifier))
+        parent_is_name = (token.ttype == sqlparse.tokens.Name and isinstance(token.parent, Identifier))
+        return isinstance(token, Identifier) or parent_is_name
 
     @staticmethod
     def __ungroup_identifier_lists(statement: Statement):

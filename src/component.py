@@ -1294,7 +1294,7 @@ class Component(KBCEnvHandler):
             # Make Raw Mapping file to allow edits
             raw_yaml_mapping = make_yaml_mapping_file(catalog_mapping.to_dict())
 
-            if (_json := self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':
+            if (_json := self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':  # noqa
                 input_method = 'json'
                 logging.info('Using table mappings based on input JSON mappings.')
 
@@ -1305,8 +1305,8 @@ class Component(KBCEnvHandler):
                     logging.error("Invalid JSON mappins provided. Could not parse JSON.")
                     sys.exit(1)
 
-                input_mapping, schemas_to_sync, tables_to_sync, \
-                columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                input_mapping, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(
+                    input_mapping, input_method)
                 table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
 
             elif self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
@@ -1317,8 +1317,8 @@ class Component(KBCEnvHandler):
 
                 logging.debug(f"Received input schema: {input_mapping}")
 
-                _, schemas_to_sync, tables_to_sync, \
-                columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                _, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(input_mapping,
+                                                                                               input_method)
 
             else:
                 raise AttributeError('You are missing either a YAML input mapping, or the '
