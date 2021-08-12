@@ -8,8 +8,9 @@ import logging
 import os
 import time
 
-import pytz
 import pymysql
+import pytz
+
 
 try:
     import core as core

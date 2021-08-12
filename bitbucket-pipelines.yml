@@ -6,6 +6,7 @@ pipelines:
     - step:
         script:
           - export APP_IMAGE=$APP_IMAGE
+          - export TAG=alter.1
           - docker build . --tag=$APP_IMAGE
           - docker images
           - docker -v
@@ -13,11 +14,11 @@ pipelines:
           - echo "Running unit-tests..."
           - docker run $APP_IMAGE python -m unittest discover
           # push test image to ecr - uncomment for testing before deployment
-          - echo 'Pushing test image to repo. [tag=0.5.0b1]'
+          - echo 'Pushing test image to repo. $TAG'
           - export REPOSITORY=`docker run --rm -e KBC_DEVELOPERPORTAL_USERNAME -e KBC_DEVELOPERPORTAL_PASSWORD -e KBC_DEVELOPERPORTAL_URL quay.io/keboola/developer-portal-cli-v2:latest ecr:get-repository $KBC_DEVELOPERPORTAL_VENDOR $KBC_DEVELOPERPORTAL_APP`
-          - docker tag $APP_IMAGE:latest $REPOSITORY:0.5.0b1
+          - docker tag $APP_IMAGE:latest $REPOSITORY:$TAG
           - eval $(docker run --rm -e KBC_DEVELOPERPORTAL_USERNAME -e KBC_DEVELOPERPORTAL_PASSWORD -e KBC_DEVELOPERPORTAL_URL quay.io/keboola/developer-portal-cli-v2:latest ecr:get-login $KBC_DEVELOPERPORTAL_VENDOR $KBC_DEVELOPERPORTAL_APP)
-          - docker push $REPOSITORY:0.5.0b1
+          - docker push $REPOSITORY:$TAG
 
   branches:
     master:

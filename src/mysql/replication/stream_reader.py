@@ -10,7 +10,6 @@ from pymysqlreplication.column import Column
 from pymysqlreplication.constants.BINLOG import TABLE_MAP_EVENT, ROTATE_EVENT, QUERY_EVENT
 from pymysqlreplication.event import (QueryEvent, RotateEvent, BinLogEvent)
 from pymysqlreplication.packet import BinLogPacketWrapper
-from pymysqlreplication.row_event import (TableMapEvent)
 from pymysqlreplication.table import Table
 
 from mysql.replication import common
@@ -27,6 +26,8 @@ except ImportError:
 # 2006 MySQL server has gone away
 MYSQL_EXPECTED_ERROR_CODES = [2013, 2006]
 
+
+# TODO: BUG: stores varchar data as binary
 
 class SchemaOffsyncError(Exception):
     pass
@@ -68,6 +69,24 @@ class TableColumnSchemaCache:
         #         (possibly newer than table_schema_cache)
         self._table_schema_current = table_schema_current or {}
 
+    @staticmethod
+    def build_column_schema(column_name: str, ordinal_position: int, column_type: str, is_primary_key: bool,
+                            collation=None,
+                            character_set_name=None, column_comment=None) -> dict:
+        if is_primary_key:
+            key = 'PRI'
+        else:
+            key = ''
+        return {
+            'COLUMN_NAME': column_name,
+            'ORDINAL_POSITION': ordinal_position,
+            'COLLATION_NAME': collation,
+            'CHARACTER_SET_NAME': character_set_name,
+            'COLUMN_COMMENT': column_comment,
+            'COLUMN_TYPE': column_type,
+            'COLUMN_KEY': key
+        }
+
     def is_current_schema_cached(self, schema: str, table: str):
         if self._table_schema_current.get(self.get_table_cache_index(schema, table)):
             return True
@@ -84,6 +103,8 @@ class TableColumnSchemaCache:
         Returns:
 
         """
+        index = self.get_table_cache_index(schema, table)
+        self._table_schema_current[index] = column_schema
 
     def get_column_schema(self, schema: str, table: str) -> List[dict]:
         index = self.get_table_cache_index(schema, table)
@@ -250,16 +271,11 @@ class TableColumnSchemaCache:
         index = self.get_table_cache_index(table_change.schema, table_change.table_name)
 
         current_schema = self._table_schema_current.get(index, [])
-        new_column = {
-            'COLUMN_NAME': '',
-            'ORDINAL_POSITION': 0,
-            'COLLATION_NAME': None,
-            'CHARACTER_SET_NAME': None,
-            'COLUMN_COMMENT': None,
-            'COLUMN_TYPE': 'BLOB',
-            'COLUMN_KEY': ''
-        }
         existing_col = None
+
+        # check if column exists in current schema
+        # this allows to get all column metadata properly in case
+        # we missed some ALTER COLUMN statement, e.g. for changing datatypes
         for c in current_schema:
             if c['COLUMN_NAME'].upper() == table_change.column_name.upper():
                 existing_col = c
@@ -268,10 +284,16 @@ class TableColumnSchemaCache:
             new_column = existing_col
         else:
             # add metadata from the ALTER event
-            new_column['COLUMN_KEY'] = table_change.column_key
-            new_column['COLLATION_NAME'] = table_change.collation
-
-        new_column['COLUMN_NAME'] = table_change.column_name.upper()
+            is_pkey = table_change.column_key == 'PRI'
+            charset_name = table_change.charset_name or current_schema.get(0, {}).get('DEFAULT_CHARSET', 'utf8')
+            new_column = self.build_column_schema(column_name=table_change.column_name.upper(),
+                                                  # to be updated later
+                                                  ordinal_position=0,
+                                                  column_type=table_change.data_type,
+                                                  is_primary_key=is_pkey,
+                                                  collation=table_change.collation,
+                                                  character_set_name=charset_name
+                                                  )
 
         return new_column
 
@@ -361,7 +383,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         # We can't filter on packet level TABLE_MAP, Query and rotate event because
         # we need them for handling other operations
         self._BinLogStreamReader__allowed_events_in_packet = frozenset(
-            [TableMapEvent, RotateEvent, QueryEvent]).union(self._BinLogStreamReader__allowed_events)
+            [TableMapEventAlterTracking, RotateEvent, QueryEvent]).union(self._BinLogStreamReader__allowed_events)
         # expose
         self.__allowed_events = self._BinLogStreamReader__allowed_events
 
@@ -398,16 +420,16 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
             if not pkt.is_ok_packet():
                 continue
 
-            binlog_event = BinLogPacketWrapper(pkt, self.table_map,
-                                               self._ctl_connection,
-                                               self._BinLogStreamReader__use_checksum,
-                                               self._BinLogStreamReader__allowed_events_in_packet,
-                                               self._BinLogStreamReader__only_tables,
-                                               self._BinLogStreamReader__ignored_tables,
-                                               self._BinLogStreamReader__only_schemas,
-                                               self._BinLogStreamReader__ignored_schemas,
-                                               self._BinLogStreamReader__freeze_schema,
-                                               self._BinLogStreamReader__fail_on_table_metadata_unavailable)
+            binlog_event = BinLogPacketWrapperModified(pkt, self.table_map,
+                                                       self._ctl_connection,
+                                                       self._BinLogStreamReader__use_checksum,
+                                                       self._BinLogStreamReader__allowed_events_in_packet,
+                                                       self._BinLogStreamReader__only_tables,
+                                                       self._BinLogStreamReader__ignored_tables,
+                                                       self._BinLogStreamReader__only_schemas,
+                                                       self._BinLogStreamReader__ignored_schemas,
+                                                       self._BinLogStreamReader__freeze_schema,
+                                                       self._BinLogStreamReader__fail_on_table_metadata_unavailable)
 
             if binlog_event.event_type == ROTATE_EVENT:
                 self.log_pos = binlog_event.event.position
@@ -514,17 +536,57 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
 
         """
         if self.schema_cache.get_column_schema(schema, table):
-            return self.schema_cache.get_column_schema(schema, table)
+            return self._get_column_schema_from_cache(schema, table)
         else:
             # hacky way to call the parent secret method
-            current_column_schema = super(BinLogStreamReaderAlterTracking,
-                                          self)._BinLogStreamReader__get_table_information(schema, table)
+            current_column_schema = self._get_table_information_from_db(schema, table)
             # update cache with current schema
             self.schema_cache.set_column_schema(schema, table, current_column_schema)
 
             # TODO: consider moving this to the binlog init so it's in sync and done only once
             self.schema_cache.update_current_schema_cache(schema, table, current_column_schema)
             return current_column_schema
+
+    def _get_table_information_from_db(self, schema, table):
+        for i in range(1, 3):
+            try:
+                if not self._BinLogStreamReader__connected_ctl:
+                    self._BinLogStreamReader__connect_to_ctl()
+
+                cur = self._ctl_connection.cursor()
+                cur.execute("""SELECT
+                        COLUMN_NAME, COLLATION_NAME, CHARACTER_SET_NAME,
+                        COLUMN_COMMENT, COLUMN_TYPE, COLUMN_KEY, ORDINAL_POSITION, defaults.DEFAULT_COLLATION_NAME,
+                        defaults.DEFAULT_CHARSET
+                    FROM
+                        information_schema.columns col
+                    JOIN (SELECT
+                              default_character_set_name AS DEFAULT_CHARSET
+                            , DEFAULT_COLLATION_NAME     AS DEFAULT_COLLATION_NAME
+                        FROM information_schema.SCHEMATA
+                        WHERE
+                            SCHEMA_NAME = %s) as defaults ON 1=1
+                    WHERE
+                        table_schema = %s AND table_name = %s
+                    ORDER BY ORDINAL_POSITION;
+                    """, (schema, schema, table))
+
+                return cur.fetchall()
+            except pymysql.OperationalError as error:
+                code, message = error.args
+                if code in MYSQL_EXPECTED_ERROR_CODES:
+                    self._BinLogStreamReader__connected_ctl = False
+                    continue
+                else:
+                    raise error
+
+    def _get_column_schema_from_cache(self, schema: str, table: str):
+        column_schema = self.schema_cache.get_column_schema(schema, table)
+        # convert to upper case
+        for c in column_schema:
+            c['COLUMN_NAME'] = c['COLUMN_NAME'].upper()
+
+        return column_schema
 
 
 class TableMapEventAlterTracking(BinLogEvent):
@@ -533,6 +595,8 @@ class TableMapEventAlterTracking(BinLogEvent):
     An end user of the lib should have no usage of this.
 
     Modified to work with table schema cache, regularly updated from ALTER events.
+
+    Converts column names to upper case.
 
     """
 
@@ -592,6 +656,9 @@ class TableMapEventAlterTracking(BinLogEvent):
                 try:
                     column_schema = self.column_schemas[ordinal_pos_loc]
 
+                    # normalize header
+                    column_schema['COLUMN_NAME'] = column_schema['COLUMN_NAME'].upper()
+
                     # only acknowledge the column definition if the iteration matches with ordinal position of
                     # the column. this helps in maintaining support for restricted columnar access
                     if i != (column_schema['ORDINAL_POSITION'] - 1):
@@ -634,7 +701,7 @@ class BinLogPacketWrapperModified(BinLogPacketWrapper):
     to the original packet objects variables and methods.
     """
 
-    __event_map = {
+    _BinLogPacketWrapper__event_map = {
         # event
         constants.QUERY_EVENT: event.QueryEvent,
         constants.ROTATE_EVENT: event.RotateEvent,

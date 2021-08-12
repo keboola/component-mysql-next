@@ -7,14 +7,15 @@ import json
 import logging
 import uuid
 
-import pytz
 import pymysql.connections
 import pymysql.err
-
+import pytz
 from pymysqlreplication.constants import FIELD_TYPE
-from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import RotateEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
+
+from core import bookmarks
+from mysql.replication.stream_reader import BinLogStreamReaderAlterTracking, SchemaOffsyncError
 
 try:
     import core as core
@@ -133,15 +134,17 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
     for column_name, val in row.items():
 
         try:
-            property_type = catalog_entry.schema.properties[column_name].type
-            db_column_type = db_column_map.get(column_name)
+            # TODO: WTF is this?? aparently coming from the actual datatype name
+            # property_type = catalog_entry.schema.properties[column_name].type replaced with type got from the
+            # BinlogReader
+            is_boolean_type = db_column_map[column_name].get('is_boolean')
+            db_column_type = db_column_map[column_name].get('type')
         except KeyError:
-            # Omitting already dropped columns as it's not possible to get data about them anymore, but
-            # they still appear in the BINLOG as '__dropped_col_XXX__'
-            if column_name.startswith('__dropped_col_') is True:
+            # skip system columns
+            if column_name.startswith('_KBC') or column_name.startswith('_BINLOG'):
                 continue
             else:
-                raise
+                raise SchemaOffsyncError(f'Schema for {column_name} is not available!')
 
         if isinstance(val, (datetime.datetime, datetime.date, datetime.timedelta)):
             the_utc_date = common.to_utc_datetime_str(val)
@@ -149,8 +152,9 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
 
         elif db_column_type == FIELD_TYPE.JSON:
             row_to_persist[column_name] = json.dumps(json_bytes_to_string(val))
-
-        elif 'boolean' in property_type or property_type == 'boolean':
+        # TODO: WTF is this??
+        # elif 'boolean' in property_type or property_type == 'boolean':
+        elif is_boolean_type:
             if val is None:
                 boolean_representation = None
             elif val == 0:
@@ -167,7 +171,9 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
         else:
             row_to_persist[column_name] = val
 
-    return core.RecordMessage(stream=catalog_entry.stream, record=row_to_persist, version=version,
+    return core.RecordMessage(stream=catalog_entry.stream, record=row_to_persist,
+                              column_map=catalog_entry.current_column_cache,
+                              version=version,
                               time_extracted=time_extracted)
 
 
@@ -233,7 +239,7 @@ def update_bookmarks(state, binlog_streams_map, log_file, log_pos):
 
 
 def get_db_column_types(event):
-    return {c.name: c.type for c in event.columns}
+    return {c.name: {"type": c.type, "is_boolean": c.type_is_bool} for c in event.columns}
 
 
 def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, time_extracted,
@@ -365,7 +371,7 @@ def generate_streams_map(binlog_streams):
     return stream_map
 
 
-def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
+def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog_streams_map, state, columns={},
                      message_store: core.MessageStore = None):
     time_extracted = utils.now()
 
@@ -382,6 +388,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
             tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
             streams_map_entry = binlog_streams_map.get(tap_stream_id, {})
             catalog_entry = streams_map_entry.get('catalog_entry')
+
             desired_columns = columns[tap_stream_id].get('desired', [])
             ignored_columns = columns[tap_stream_id].get('ignore', [])
             watched_columns = columns[tap_stream_id].get('watch', [])
@@ -395,6 +402,10 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
                                  events_skipped, rows_saved)
 
             elif catalog_entry:
+                # ugly injection of current schema
+                current_column_schema = reader.schema_cache.get_column_schema(binlog_event.schema, binlog_event.table)
+                catalog_entry.current_column_cache = current_column_schema
+
                 if isinstance(binlog_event, WriteRowsEvent):
                     rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
                                                          rows_saved, time_extracted, message_store=message_store)
@@ -414,6 +425,8 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
                                  binlog_event.table)
 
         state = update_bookmarks(state, binlog_streams_map, reader.log_file, reader.log_pos)
+        # Store last schema cache
+        state = bookmarks.update_schema_in_state(state, reader.schema_cache.table_schema_cache)
 
         # The iterator across python-mysql-replication's fetchone method should ultimately terminate
         # upon receiving an EOF packet. There seem to be some cases when a MySQL server will not send
@@ -430,6 +443,7 @@ def _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns={},
 
 def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None,
                        schemas=[], tables=[], columns={}):
+    last_table_schema_cache = state.get(bookmarks.KEY_LAST_TABLE_SCHEMAS, {})
     binlog_streams_map = generate_streams_map(binlog_streams)
 
     for tap_stream_id in binlog_streams_map.keys():
@@ -437,6 +451,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
 
     log_file, log_pos = calculate_bookmark(mysql_conn, binlog_streams_map, state)
 
+    # TODO: is this needed? already checked in step before?
     verify_log_file_exists(mysql_conn, log_file, log_pos)
 
     if config.get('server_id'):
@@ -451,7 +466,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
     slave_uuid = 'kbc-slave-{}-{}'.format(str(uuid.uuid4()), server_id)
     logging.info('Connecting with Stream Reader to Slave UUID {}'.format(slave_uuid))
     try:
-        reader = BinLogStreamReader(
+        reader = BinLogStreamReaderAlterTracking(
             connection_settings={},
             server_id=server_id,
             slave_uuid=slave_uuid,
@@ -462,11 +477,15 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
             freeze_schema=True,
             pymysql_wrapper=connection_wrapper,
             only_schemas=schemas,
-            only_tables=tables
+            only_tables=tables,
+            table_schema_cache=last_table_schema_cache
         )
 
         logging.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
         _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns, message_store=message_store)
+    except Exception as e:
+        logging.exception(e)
+        raise e
     finally:
         # BinLogStreamReader doesn't implement the `with` methods
         # So, try/finally will close the chain from the top

@@ -46,6 +46,7 @@ from .bookmarks import (
     get_offset,
     set_currently_syncing,
     get_currently_syncing,
+    update_schema_in_state
 )
 
 from .env_handler import (

@@ -21,13 +21,16 @@ TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 import ast
 import base64
 import binascii
-import csv
 import copy
+import csv
 import itertools
 import json
 import logging
 import os
 import sys
+from collections import namedtuple
+from contextlib import nullcontext
+from io import StringIO
 
 import pandas as pd
 import paramiko
@@ -35,12 +38,9 @@ import pendulum
 import pymysql
 import pymysqlreplication
 import yaml
-
-from collections import namedtuple
-from contextlib import nullcontext
-from io import StringIO
 from sshtunnel import SSHTunnelForwarder
 
+from mysql.replication.stream_reader import TableColumnSchemaCache
 
 try:
     import core as core
@@ -763,6 +763,25 @@ class Component(KBCEnvHandler):
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
+            # Update state last_table_schema with current schema, and store KBC cols
+            state = core.update_schema_in_state(state, catalog_entry)
+
+    @staticmethod
+    def _build_schema_cache_from_catalog_entry(catalog_entry):
+
+        table_schema = []
+        primary_keys = common.get_key_properties(catalog_entry)
+
+        for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
+            col_name = column_metadata['breadcrumb'][1]
+            col_type = column_metadata['metadata']['sql-datatype']
+            ordinal_position = idx
+            is_pkey = col_name in primary_keys
+            schema = TableColumnSchemaCache.build_column_schema(col_name.upper(), ordinal_position, col_type, is_pkey)
+            table_schema.append(schema)
+
+        return table_schema
+
     @staticmethod
     def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
                            message_store: core.MessageStore = None):
@@ -884,6 +903,7 @@ class Component(KBCEnvHandler):
 
             except pymysql.err.InternalError as ie:
                 logging.warning("Encountered error checking server params. Error: (%s) %s", *ie.args)
+
     # End of sync methods
 
     def write_table_mappings_file(self, table_mapping: Catalog, file_name: str = 'table_mappings.json'):
@@ -1174,7 +1194,6 @@ class Component(KBCEnvHandler):
                     tables += [list(table.keys())[0] for table in _tables]
 
                 for table in _tables:
-
                     table_name = list(table.keys())[0]
 
                     tap_stream_id = '-'.join([schema, table_name])
@@ -1205,7 +1224,6 @@ class Component(KBCEnvHandler):
                     tables += [list(table.keys())[0] for table in _tables]
 
                 for table in _tables:
-
                     table_name = list(table.keys())[0]
 
                     tap_stream_id = '-'.join([schema, table_name])
@@ -1288,7 +1306,7 @@ class Component(KBCEnvHandler):
                     sys.exit(1)
 
                 input_mapping, schemas_to_sync, tables_to_sync, \
-                    columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
                 table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
 
             elif self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
@@ -1300,7 +1318,7 @@ class Component(KBCEnvHandler):
                 logging.debug(f"Received input schema: {input_mapping}")
 
                 _, schemas_to_sync, tables_to_sync, \
-                    columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
 
             else:
                 raise AttributeError('You are missing either a YAML input mapping, or the '

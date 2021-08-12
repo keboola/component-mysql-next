@@ -27,6 +27,7 @@ class TableSchemaChange:
     data_type: str = None
     collation: str = None
     column_key: str = None
+    charset_name: str = None
 
 
 class AlterStatementParser:
@@ -110,7 +111,8 @@ class AlterStatementParser:
         return self._normalize_identifier(schema), self._normalize_identifier(table_name)
 
     def _get_element_next_to_position(self, statement: TokenList, position):
-        return statement.token_next(position, skip_cm=True)[1].normalized
+        index, value = statement.token_next(position, skip_cm=True)
+        return index, value.normalized
 
     def _process_drop_event(self, table_name, schema, statement: Statement) -> List[TableSchemaChange]:
         schema_changes = []
@@ -128,36 +130,47 @@ class AlterStatementParser:
         flattened_tokens = self.__ungroup_identifier_lists(statement)
         schema_changes = []
         schema_change = None
-        is_after_statement = False
         token_count = len(flattened_tokens.tokens)
+
+        # index of first keyword after ADD statement
+        first_keyword_index = FIRST_KEYWORD_INDEX
         for idx, value in enumerate(flattened_tokens.tokens[FIRST_KEYWORD_INDEX:], start=FIRST_KEYWORD_INDEX):
-            if self._is_column_keyword(value):
+
+            if (idx != token_count - 1) and value.ttype in [sqlparse.tokens.Whitespace, sqlparse.tokens.Newline]:
+                # skip empty chars if not end
                 continue
-
-
-
             # capture new col name
-            elif self.__is_column_identifier(value) and not is_after_statement:
-                column_name = value.normalized
+            elif idx == first_keyword_index:
+                next_index = idx
+                if self._is_column_keyword(value):
+                    next_index, column_name = self._get_element_next_to_position(flattened_tokens, idx)
+                else:
+                    column_name = value.normalized
                 # next one is always datatype
-                data_type = self._get_element_next_to_position(flattened_tokens, idx).upper()
+                next_index, data_type = self._get_element_next_to_position(flattened_tokens, next_index)
                 schema_change = TableSchemaChange(TableChangeType.ADD_COLUMN, table_name, schema, column_name,
-                                                  data_type=data_type)
+                                                  data_type=data_type.upper())
 
             # AFTER statement
             elif value.ttype == sqlparse.tokens.Keyword and value.normalized == 'AFTER':
                 # next one is always column name
-                is_after_statement = True
-                schema_change.after_column = self._get_element_next_to_position(flattened_tokens, idx)
+                next_index, schema_change.after_column = self._get_element_next_to_position(flattened_tokens, idx)
+
+            # CHARACTER SET statement
+            elif value.ttype == sqlparse.tokens.Keyword and value.normalized == 'CHARACTER':
+                # next should be SET statement
+                next_index, next_element = self._get_element_next_to_position(flattened_tokens, idx)
+                if 'SET' == next_element:
+                    schema_change.charset_name = self._get_element_next_to_position(flattened_tokens, next_index)[1]
 
             # COLLATE  statement
             elif value.ttype == sqlparse.tokens.Keyword and value.normalized == 'COLLATE':
                 # next one is always column name
-                schema_change.collation = self._get_element_next_to_position(flattened_tokens, idx)
+                next_index, schema_change.collation = self._get_element_next_to_position(flattened_tokens, idx)
 
             # PRIMARY KEY  statement
             elif value.ttype == sqlparse.tokens.Keyword and value.normalized == 'PRIMARY' \
-                    and self._get_element_next_to_position(flattened_tokens, idx) == 'KEY':
+                    and self._get_element_next_to_position(flattened_tokens, idx)[1] == 'KEY':
                 # next one is always column name
                 schema_change.column_key = 'PRI'
 
@@ -166,16 +179,22 @@ class AlterStatementParser:
                 schema_change.first_position = True
 
             # is at the end of multiline statement or end of the query
-            elif (value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',') or idx == token_count - 1:
+            elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':
                 schema_changes.append(schema_change)
+                # next is always another ADD
+                add_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, idx)
+                first_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
 
-                # reset
-                is_after_statement = False
+            # save schema change on end, should never be empty
+            if idx == token_count - 1:
+                if schema_change is None:
+                    raise RuntimeError(f"Invalid ALTER statement query: {flattened_tokens.normalized}")
+                schema_changes.append(schema_change)
 
         return schema_changes
 
     def _get_schema_from_use_statement(self, statement: Statement):
-        schema = self._get_element_next_to_position(statement, 0)
+        schema = self._get_element_next_to_position(statement, 0)[1]
         return self._normalize_identifier(schema)
 
     def _extract_alter_statement_and_schema(self, normalized_statements: Statement):

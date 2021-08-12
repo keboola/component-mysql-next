@@ -43,6 +43,8 @@ class CatalogEntry:
 
         self.primary_keys = primary_keys
 
+        self.current_column_cache = {}
+
     def __str__(self):
         return str(self.__dict__)
 
@@ -89,6 +91,9 @@ class CatalogEntry:
             result['binary_columns'] = self.binary_columns
         else:
             result['binary_columns'] = []
+
+        if self.current_column_cache:
+            result['current_column_cache'] = self.current_column_cache
         return result
 
 
