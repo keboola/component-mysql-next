@@ -764,7 +764,8 @@ class Component(KBCEnvHandler):
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
             # Update state last_table_schema with current schema, and store KBC cols
-            state = core.update_schema_in_state(state, catalog_entry)
+            table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
+            state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
 
     @staticmethod
     def _build_schema_cache_from_catalog_entry(catalog_entry):
