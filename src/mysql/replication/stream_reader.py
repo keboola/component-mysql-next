@@ -150,7 +150,7 @@ class TableColumnSchemaCache:
 
     def get_table_cache_index(self, schema: str, table: str):
         # index as not case sensitive, use the same method as the tap_stream_id
-        return common.generate_tap_stream_id(schema.lower(), table.lower())
+        return common.generate_tap_stream_id(schema, table)
 
     def update_cache(self, table_change: TableSchemaChange):
         """
