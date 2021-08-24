@@ -142,7 +142,7 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
         except KeyError:
             # skip system columns
             if column_name.startswith('_KBC') or column_name.startswith('_BINLOG'):
-                continue
+                pass
             else:
                 raise SchemaOffsyncError(f'Schema for {column_name} is not available!')
 
