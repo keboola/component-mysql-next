@@ -153,7 +153,8 @@ Column = namedtuple('Column', [
     "numeric_precision",
     "numeric_scale",
     "column_type",
-    "column_key"
+    "column_key",
+    "character_set_name"
 ])
 
 
@@ -237,6 +238,7 @@ def schema_for_column(c):
     elif data_type in STRING_TYPES:
         result.type = ['null', 'string']
         result.maxLength = c.character_maximum_length
+        result.characterSet = c.character_set_name
 
     elif data_type in DATETIME_TYPES:
         result.type = ['null', 'string']
@@ -345,7 +347,8 @@ def discover_catalog(mysql_conn, config, append_mode):
                        numeric_precision,
                        numeric_scale,
                        column_type,
-                       column_key
+                       column_key,
+                       character_set_name 
                     FROM information_schema.columns
                     {}
                     ORDER BY table_schema, table_name
@@ -772,13 +775,15 @@ class Component(KBCEnvHandler):
 
         table_schema = []
         primary_keys = common.get_key_properties(catalog_entry)
-
+        column_properties = catalog_entry.schema.properties
         for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
             col_name = column_metadata['breadcrumb'][1]
             col_type = column_metadata['metadata']['sql-datatype']
             ordinal_position = idx
             is_pkey = col_name in primary_keys
-            schema = TableColumnSchemaCache.build_column_schema(col_name.upper(), ordinal_position, col_type, is_pkey)
+            character_set = column_properties[col_name].characterSet
+            schema = TableColumnSchemaCache.build_column_schema(col_name.upper(), ordinal_position, col_type, is_pkey,
+                                                                character_set_name=character_set)
             table_schema.append(schema)
 
         return table_schema
@@ -1422,9 +1427,12 @@ class Component(KBCEnvHandler):
                         _table_column_metadata = self.get_table_column_metadata(column_metadata)
 
                         try:
-                            with open(table_specific_sliced_path) as io:
-                                rdr = csv.DictReader(io)
-                                fields = rdr.fieldnames
+                            if not output_is_sliced:
+                                with open(table_specific_sliced_path) as io:
+                                    rdr = csv.DictReader(io)
+                                    fields = rdr.fieldnames
+                            else:
+                                fields = None
                         except FileNotFoundError:
                             fields = []
                         except IsADirectoryError:
