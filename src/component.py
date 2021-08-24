@@ -348,7 +348,7 @@ def discover_catalog(mysql_conn, config, append_mode):
                        numeric_scale,
                        column_type,
                        column_key,
-                       character_set_name 
+                       character_set_name
                     FROM information_schema.columns
                     {}
                     ORDER BY table_schema, table_name
