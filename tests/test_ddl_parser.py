@@ -36,9 +36,27 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1, change2], table_changes)
 
-    def test_multi_add_statement(self):
+    def test_multi_add_statement_w_additional_params(self):
         add_multi = """ALTER TABLE employee_settings ADD zenefits_id INT DEFAULT NULL, ADD paylocity_id VARCHAR(255) 
         DEFAULT NULL, ALGORITHM=INPLACE, LOCK=NONE"""
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='employee_settings',
+                                    schema='cdc',
+                                    column_name='zenefits_id',
+                                    data_type='INT')
+        change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='employee_settings',
+                                    schema='cdc',
+                                    column_name='paylocity_id',
+                                    data_type='VARCHAR(255)')
+        table_changes = self.parser.get_table_changes(add_multi, 'cdc')
+
+        self.assertEqual([change1, change2], table_changes)
+
+    def test_multi_add_statement_w_additional_params2(self):
+        add_multi = """ALTER TABLE employee_settings ADD zenefits_id INT DEFAULT NULL, ALGORITHM=INPLACE, LOCK=NONE,
+         ADD paylocity_id VARCHAR(255) DEFAULT NULL"""
 
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='employee_settings',
@@ -59,6 +77,28 @@ class TestComponent(unittest.TestCase):
             DROP ColuMN Column1,
             DROP COLUMN Column2,
             DROP column_3, ALGORITHM=INPLACE, LOCK=NONE;"""
+
+        change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='TableName',
+                                    schema='cdc',
+                                    column_name='Column1')
+        change2 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='TableName',
+                                    schema='cdc',
+                                    column_name='Column2')
+        change3 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='TableName',
+                                    schema='cdc',
+                                    column_name='column_3')
+        table_changes = self.parser.get_table_changes(drop_multi, 'cdc')
+
+        self.assertEqual([change1, change2, change3], table_changes)
+
+    def test_multi_drop_statement_w_additional_params2(self):
+        drop_multi = """ALTER   TABLE      TableName
+            DROP ColuMN Column1, ALGORITHM=INPLACE, LOCK=NONE,
+            DROP COLUMN Column2,
+            DROP column_3;"""
 
         change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
