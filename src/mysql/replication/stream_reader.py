@@ -285,7 +285,7 @@ class TableColumnSchemaCache:
         else:
             # add metadata from the ALTER event
             is_pkey = table_change.column_key == 'PRI'
-            charset_name = table_change.charset_name or current_schema.get(0, {}).get('DEFAULT_CHARSET', 'utf8')
+            charset_name = table_change.charset_name or current_schema[0].get('DEFAULT_CHARSET', 'utf8')
             new_column = self.build_column_schema(column_name=table_change.column_name.upper(),
                                                   # to be updated later
                                                   ordinal_position=0,
