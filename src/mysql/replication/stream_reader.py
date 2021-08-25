@@ -518,8 +518,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         Keeps current schema (at the point of execution) for later reference
         """
         if not self.schema_cache.is_current_schema_cached(schema, table):
-            column_schema = super(BinLogStreamReaderAlterTracking,
-                                  self)._BinLogStreamReader__get_table_information(schema, table)
+            column_schema = self._get_table_information_from_db(schema, table)
             self.schema_cache.update_current_schema_cache(schema, table, column_schema)
 
     def _update_cache_and_map(self, binlog_event: QueryEvent):
