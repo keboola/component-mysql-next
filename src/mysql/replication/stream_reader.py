@@ -27,8 +27,6 @@ except ImportError:
 MYSQL_EXPECTED_ERROR_CODES = [2013, 2006]
 
 
-# TODO: BUG: stores varchar data as binary
-
 class SchemaOffsyncError(Exception):
     pass
 
@@ -68,6 +66,19 @@ class TableColumnSchemaCache:
         # internal cache of column schema that is actual at the time of execution
         #         (possibly newer than table_schema_cache)
         self._table_schema_current = table_schema_current or {}
+
+    def _get_db_default_schema(self):
+        table_schema = {}
+        if self._table_schema_current:
+            key = next(iter(self._table_schema_current))
+            current_schema = self._table_schema_current[key]
+            if current_schema:
+                table_schema = current_schema[0]
+
+        if not table_schema.get('DEFAULT_CHARSET'):
+            logging.warning('No default charset found, using utf8',
+                            extra={"current_cache": self._table_schema_current})
+        return table_schema.get('DEFAULT_CHARSET', 'utf8')
 
     @staticmethod
     def build_column_schema(column_name: str, ordinal_position: int, column_type: str, is_primary_key: bool,
@@ -271,6 +282,9 @@ class TableColumnSchemaCache:
         index = self.get_table_cache_index(table_change.schema, table_change.table_name)
 
         current_schema = self._table_schema_current.get(index, [])
+        if not current_schema:
+            logging.warning(f'Table {table_change.table_name} not found in current schema cache.',
+                            extra={'table_schema': self._table_schema_current})
         existing_col = None
 
         # check if column exists in current schema
@@ -285,7 +299,8 @@ class TableColumnSchemaCache:
         else:
             # add metadata from the ALTER event
             is_pkey = table_change.column_key == 'PRI'
-            charset_name = table_change.charset_name or current_schema[0].get('DEFAULT_CHARSET', 'utf8')
+
+            charset_name = table_change.charset_name or self._get_db_default_schema()
             new_column = self.build_column_schema(column_name=table_change.column_name.upper(),
                                                   # to be updated later
                                                   ordinal_position=0,
