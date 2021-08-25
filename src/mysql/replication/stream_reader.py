@@ -77,7 +77,7 @@ class TableColumnSchemaCache:
 
         if not table_schema.get('DEFAULT_CHARSET'):
             logging.warning('No default charset found, using utf8',
-                            extra={"current_cache": self._table_schema_current})
+                            extra={"full_message": self._table_schema_current})
         return table_schema.get('DEFAULT_CHARSET', 'utf8')
 
     @staticmethod
@@ -284,7 +284,7 @@ class TableColumnSchemaCache:
         current_schema = self._table_schema_current.get(index, [])
         if not current_schema:
             logging.warning(f'Table {table_change.table_name} not found in current schema cache.',
-                            extra={'table_schema': self._table_schema_current})
+                            extra={'full_message': self._table_schema_current})
         existing_col = None
 
         # check if column exists in current schema
