@@ -82,7 +82,7 @@ except ImportError:
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
 
-sys.tracebacklimit = 0
+# sys.tracebacklimit = 0
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
@@ -647,7 +647,7 @@ class Component(KBCEnvHandler):
         if self.cfg_params.get(KEY_DEBUG, False) is True:
             logger = logging.getLogger()
             logger.setLevel(logging.DEBUG)
-            sys.tracebacklimit = 10
+            # sys.tracebacklimit = 10
 
             for h in logger.handlers:
                 h.setFormatter(logging.Formatter('%(levelname)10s - %(filename)s - %(lineno)4d: %(message)s'))
