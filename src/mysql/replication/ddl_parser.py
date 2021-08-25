@@ -117,12 +117,30 @@ class AlterStatementParser:
 
     def _process_drop_event(self, table_name, schema, statement: Statement) -> List[TableSchemaChange]:
         schema_changes = []
-        for idx, value in enumerate(statement.tokens[FIRST_KEYWORD_INDEX:], start=FIRST_KEYWORD_INDEX):
-            if self._is_column_keyword(value):
+        flattened_tokens = self.__ungroup_identifier_lists(statement)
+
+        token_count = len(flattened_tokens.tokens)
+        first_keyword_index = FIRST_KEYWORD_INDEX
+        for idx, value in enumerate(flattened_tokens.tokens[FIRST_KEYWORD_INDEX:], start=FIRST_KEYWORD_INDEX):
+            if (idx != token_count - 1) and value.ttype in [sqlparse.tokens.Whitespace, sqlparse.tokens.Newline]:
+                # skip empty chars if not end
                 continue
-            if isinstance(value, Identifier):
-                column_name = value.normalized
+                # capture new col name
+            elif idx == first_keyword_index:
+                next_index = idx
+                if self._is_column_keyword(value):
+                    next_index, column_name = self._get_element_next_to_position(flattened_tokens, idx)
+                else:
+                    column_name = value.normalized
                 schema_changes.append(TableSchemaChange(TableChangeType.DROP_COLUMN, table_name, schema, column_name))
+
+            elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':
+                # next is always another DROP, if not it may algorithm, lock, etc, so quit
+                add_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, idx)
+                if statement.upper() != 'DROP':
+                    break
+                first_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
+
         return schema_changes
 
     def _process_add_event(self, table_name, schema, statement: Statement) -> List[TableSchemaChange]:
@@ -182,8 +200,10 @@ class AlterStatementParser:
             # is at the end of multiline statement or end of the query
             elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':
                 schema_changes.append(schema_change)
-                # next is always another ADD
+                # next is always another ADD, if not it may algorithm, lock, etc, so quit
                 add_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, idx)
+                if statement.upper() != 'ADD':
+                    break
                 first_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
 
             # save schema change on end, should never be empty
