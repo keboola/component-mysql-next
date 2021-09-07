@@ -261,7 +261,10 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
 
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
-
+        # TODO: remove
+        if record_message.record[common.KBC_SYNCED] == 1:
+            logging.warning(f'Invalid synced, {filtered_vals}',
+                            extra={"full_message": db_column_types, "values": filtered_vals})
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
         rows_saved = rows_saved + 1
 

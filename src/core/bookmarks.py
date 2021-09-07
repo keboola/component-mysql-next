@@ -64,7 +64,7 @@ def get_currently_syncing(state, default=None):
 # ################ state parameters
 
 def update_schema_in_state(state: dict, table_schema_cache: dict):
-    state[KEY_LAST_TABLE_SCHEMAS] = {**table_schema_cache, **state.get(KEY_LAST_TABLE_SCHEMAS, {})}
+    state[KEY_LAST_TABLE_SCHEMAS] = {**state.get(KEY_LAST_TABLE_SCHEMAS, {}), **table_schema_cache}
     # store columns
     if not state.get(KEY_STORAGE_COLUMNS):
         state[KEY_STORAGE_COLUMNS] = {}

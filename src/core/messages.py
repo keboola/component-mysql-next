@@ -339,7 +339,7 @@ class MessageStore(dict):
         self._processed_records = 0
         self._flush_count += 1
 
-    def write_to_csv(self, data_records: List[RecordMessage], file_name: str, schema: list,
+    def write_to_csv(self, data_records: List[dict], file_name: str, schema: list,
                      binary_columns: list = None):
         full_path = os.path.expanduser(os.path.join(self.output_table_path, file_name))
         if not data_records:
