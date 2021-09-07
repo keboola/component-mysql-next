@@ -164,9 +164,24 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1], table_changes)
 
-    def test_single_with_charset(self):
+    def test_single_add_with_charset(self):
         add_single = """/* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE cdc.`customers_binary`
     ADD COLUMN charset_col VARCHAR(255) CHARACTER SET utf8 FIRST"""
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='customers_binary',
+                                    schema='cdc',
+                                    column_name='charset_col',
+                                    data_type='VARCHAR(255)',
+                                    charset_name='utf8',
+                                    first_position=True)
+        table_changes = self.parser.get_table_changes(add_single, 'cdc')
+
+        self.assertEqual([change1], table_changes)
+
+    def test_single_add_with_idenitifier_quotes(self):
+        add_single = """/* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE cdc.`customers_binary`
+    ADD COLUMN `charset_col` VARCHAR(255) CHARACTER SET utf8 FIRST"""
 
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='customers_binary',

@@ -167,7 +167,8 @@ class AlterStatementParser:
                     column_name = value.normalized
                 # next one is always datatype
                 next_index, data_type = self._get_element_next_to_position(flattened_tokens, next_index)
-                schema_change = TableSchemaChange(TableChangeType.ADD_COLUMN, table_name, schema, column_name,
+                schema_change = TableSchemaChange(TableChangeType.ADD_COLUMN, table_name, schema,
+                                                  self._normalize_identifier(column_name),
                                                   data_type=data_type.upper())
 
             # AFTER statement
