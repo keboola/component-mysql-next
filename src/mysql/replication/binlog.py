@@ -132,7 +132,8 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
     row_to_persist = {}
 
     for column_name, val in row.items():
-
+        db_column_type = None
+        is_boolean_type = False
         try:
             # TODO: WTF is this?? aparently coming from the actual datatype name
             # property_type = catalog_entry.schema.properties[column_name].type replaced with type got from the
