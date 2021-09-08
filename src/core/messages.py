@@ -13,6 +13,8 @@ from kbc.csv_tools import CachedOrthogonalDictWriter
 from core.bookmarks import KEY_STORAGE_COLUMNS
 from mysql.replication import common
 
+SCHEMA_CHANGE_COLS = ['schema', 'table', 'change_type', 'column_name', 'query', 'timestamp']
+
 try:
     import core.utils as u
 except ImportError:
@@ -251,6 +253,7 @@ class MessageStore(dict):
 
         # cache of dict writers
         self._writer_cache: Dict[str, CachedOrthogonalDictWriter] = {}
+        self._schema_change_writer = None
 
         self._data_store = {}
         self._found_schemas = []
@@ -316,6 +319,20 @@ class MessageStore(dict):
             if c not in columns:
                 columns.append(c)
         return columns
+
+    def write_schema_change_message(self, message: dict):
+        if self._schema_change_writer is None:
+            path = os.path.join(self.output_table_path, 'SCHEMA_CHANGES.csv')
+            writer = csv.DictWriter(open(path, 'w+', newline=''), fieldnames=SCHEMA_CHANGE_COLS)
+            self._schema_change_writer = writer
+            self._schema_change_writer.writeheader()
+            # create manifest
+            manifest = {'primary_key': ['column_name', 'query', 'timestamp'],
+                        'incremental': True}
+            with open(path + '.manifest', 'w') as manifest_file:
+                json.dump(manifest, manifest_file)
+
+        self._schema_change_writer.writerow(message)
 
     def flush_records(self):
         logging.debug('Flushing records for each of found tables: {}'.format(self._found_tables))

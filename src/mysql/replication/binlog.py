@@ -1,6 +1,7 @@
 """
 Binary log row-based replication.
 """
+
 import copy
 import datetime
 import json
@@ -15,7 +16,8 @@ from pymysqlreplication.event import RotateEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
 
 from core import bookmarks
-from mysql.replication.stream_reader import BinLogStreamReaderAlterTracking, SchemaOffsyncError
+from mysql.replication.stream_reader import BinLogStreamReaderAlterTracking, SchemaOffsyncError, \
+    QueryEventWithSchemaChanges
 
 try:
     import core as core
@@ -262,10 +264,6 @@ def handle_write_rows_event(event, catalog_entry, state, columns, rows_saved, ti
 
         record_message = row_to_data_record(catalog_entry, stream_version, db_column_types, filtered_vals,
                                             time_extracted)
-        # TODO: remove
-        if record_message.record[common.KBC_SYNCED] == 1:
-            logging.warning(f'Invalid synced, {filtered_vals}',
-                            extra={"full_message": db_column_types, "values": filtered_vals})
         core.write_message(record_message, message_store=message_store, database_schema=catalog_entry.database)
         rows_saved = rows_saved + 1
 
@@ -375,6 +373,20 @@ def generate_streams_map(binlog_streams):
     return stream_map
 
 
+def handle_schema_change_event(binlog_event: QueryEventWithSchemaChanges, message_store):
+    if binlog_event.event_type != QueryEventWithSchemaChanges.QueryType.ALTER_QUERY:
+        return
+
+    for change in binlog_event.schema_changes:
+        row = {'schema': change.schema,
+               'table': change.table_name,
+               'change_type': change.type.value,
+               'column_name': change.column_name,
+               'query': change.query,
+               'timestamp': str(binlog_event.timestamp)}
+        message_store.write_schema_change_message(row)
+
+
 def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog_streams_map, state, columns={},
                      message_store: core.MessageStore = None):
     time_extracted = utils.now()
@@ -388,6 +400,10 @@ def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog
 
         if isinstance(binlog_event, RotateEvent):
             state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
+
+        elif isinstance(binlog_event, QueryEventWithSchemaChanges):
+            handle_schema_change_event(binlog_event, message_store)
+
         else:
             tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
             streams_map_entry = binlog_streams_map.get(tap_stream_id, {})
@@ -477,7 +493,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
             log_file=log_file,
             log_pos=log_pos,
             resume_stream=True,
-            only_events=[RotateEvent, WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent],
+            only_events=[RotateEvent, WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent, QueryEventWithSchemaChanges],
             freeze_schema=True,
             pymysql_wrapper=connection_wrapper,
             only_schemas=schemas,

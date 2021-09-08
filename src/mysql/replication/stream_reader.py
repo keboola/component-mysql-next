@@ -1,5 +1,6 @@
 import logging
 import struct
+from enum import Enum
 from typing import List
 
 import pymysql
@@ -396,9 +397,10 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                          slave_heartbeat=slave_heartbeat)
 
         # We can't filter on packet level TABLE_MAP, Query and rotate event because
-        # we need them for handling other operations
+        # we need them for handling other operations. Add custom events
         self._BinLogStreamReader__allowed_events_in_packet = frozenset(
-            [TableMapEventAlterTracking, RotateEvent, QueryEvent]).union(self._BinLogStreamReader__allowed_events)
+            [TableMapEventAlterTracking, RotateEvent, QueryEventWithSchemaChanges]).union(
+            self._BinLogStreamReader__allowed_events)
         # expose
         self.__allowed_events = self._BinLogStreamReader__allowed_events
 
@@ -504,7 +506,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
 
             # Process ALTER events and update schema cache so the mapping works properly
             if binlog_event.event_type == QUERY_EVENT and 'ALTER' in binlog_event.event.query.upper():
-                self._update_cache_and_map(binlog_event.event)
+                table_changes = self._update_cache_and_map(binlog_event.event)
+                binlog_event.event.schema_changes = table_changes
 
             # event is none if we have filter it on packet level
             # we filter also not allowed events
@@ -535,6 +538,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
 
             # invalidate table_map cache so it is rebuilt from schema cache next TABLE_MAP_EVENT
             self._invalidate_table_map(table_change.schema, table_change.table_name)
+        return table_changes
 
     def _invalidate_table_map(self, schema: str, table_name: str):
         indexes = self.schema_cache.get_table_ids(schema, table_name)
@@ -707,6 +711,36 @@ class TableMapEventAlterTracking(BinLogEvent):
         print("Columns: %s" % (self.column_count))
 
 
+class QueryEventWithSchemaChanges(QueryEvent):
+    """
+    Query event wrapper that contains list of Alter Table Changes.
+
+
+    """
+
+    class QueryType(Enum):
+        QUERY = 'query'
+        ALTER_QUERY = 'alter_query'
+
+    def __init__(self, from_packet, event_size, table_map,
+                 ctl_connection, **kwargs):
+        super().__init__(from_packet, event_size, table_map,
+                         ctl_connection, **kwargs)
+
+        self._schema_changes = []
+        # default event type
+        self.event_type = QueryEventWithSchemaChanges.QueryType.QUERY
+
+    @property
+    def schema_changes(self) -> List[TableSchemaChange]:
+        return self._schema_changes
+
+    @schema_changes.setter
+    def schema_changes(self, schema_changes: List[TableSchemaChange]):
+        self.event_type = QueryEventWithSchemaChanges.QueryType.ALTER_QUERY
+        self._schema_changes = schema_changes
+
+
 class BinLogPacketWrapperModified(BinLogPacketWrapper):
     """
     Modified version of BinLogPacketWrapper to include custom TABLE_MAP event class
@@ -717,7 +751,7 @@ class BinLogPacketWrapperModified(BinLogPacketWrapper):
 
     _BinLogPacketWrapper__event_map = {
         # event
-        constants.QUERY_EVENT: event.QueryEvent,
+        constants.QUERY_EVENT: QueryEventWithSchemaChanges,
         constants.ROTATE_EVENT: event.RotateEvent,
         constants.FORMAT_DESCRIPTION_EVENT: event.FormatDescriptionEvent,
         constants.XID_EVENT: event.XidEvent,

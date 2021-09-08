@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 from typing import List, Optional
 
 import sqlparse
@@ -12,8 +12,8 @@ FIRST_KEYWORD_INDEX = 8
 
 
 class TableChangeType(Enum):
-    DROP_COLUMN = auto()
-    ADD_COLUMN = auto()
+    DROP_COLUMN = 'DROP_COLUMN'
+    ADD_COLUMN = 'ADD_COLUMN'
 
 
 @dataclass
@@ -28,6 +28,7 @@ class TableSchemaChange:
     collation: str = None
     column_key: str = None
     charset_name: str = None
+    query: str = ''
 
 
 class AlterStatementParser:
@@ -132,7 +133,8 @@ class AlterStatementParser:
                     next_index, column_name = self._get_element_next_to_position(flattened_tokens, idx)
                 else:
                     column_name = value.normalized
-                schema_changes.append(TableSchemaChange(TableChangeType.DROP_COLUMN, table_name, schema, column_name))
+                schema_changes.append(TableSchemaChange(TableChangeType.DROP_COLUMN, table_name, schema, column_name,
+                                                        query=statement.normalized))
 
             elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':
                 # next is always another DROP, if not it may algorithm, lock, etc, so quit
@@ -169,7 +171,8 @@ class AlterStatementParser:
                 next_index, data_type = self._get_element_next_to_position(flattened_tokens, next_index)
                 schema_change = TableSchemaChange(TableChangeType.ADD_COLUMN, table_name, schema,
                                                   self._normalize_identifier(column_name),
-                                                  data_type=data_type.upper())
+                                                  data_type=data_type.upper(),
+                                                  query=statement.normalized)
 
             # AFTER statement
             elif value.ttype == sqlparse.tokens.Keyword and value.normalized == 'AFTER':
