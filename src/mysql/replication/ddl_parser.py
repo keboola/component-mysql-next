@@ -138,10 +138,10 @@ class AlterStatementParser:
 
             elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':
                 # next is always another DROP, if not it may algorithm, lock, etc, so quit
-                add_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, idx)
-                if statement.upper() != 'DROP':
+                add_keyword_index, element = self._get_element_next_to_position(flattened_tokens, idx)
+                if element.upper() != 'DROP':
                     continue
-                first_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
+                first_keyword_index, element = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
 
         return schema_changes
 
@@ -204,10 +204,10 @@ class AlterStatementParser:
             # is at the end of multiline statement or end of the query
             elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':
                 # next is always another ADD, if not it may algorithm, lock, etc, so quit
-                add_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, idx)
-                if statement.upper() != 'ADD':
+                add_keyword_index, element = self._get_element_next_to_position(flattened_tokens, idx)
+                if element.upper() != 'ADD':
                     continue
-                first_keyword_index, statement = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
+                first_keyword_index, element = self._get_element_next_to_position(flattened_tokens, add_keyword_index)
                 schema_changes.append(schema_change)
 
             # save schema change on end, should never be empty

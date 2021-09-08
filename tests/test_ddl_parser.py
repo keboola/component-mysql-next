@@ -5,10 +5,17 @@ Created on 12. 11. 2018
 """
 import unittest
 
+import sqlparse
+
 from mysql.replication.ddl_parser import AlterStatementParser, TableSchemaChange, TableChangeType
 
 
 class TestComponent(unittest.TestCase):
+
+    def normalize_sql(self, sql):
+        normalized = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True))
+        use_schema, normalized_statement = self.parser._extract_alter_statement_and_schema(normalized)
+        return normalized_statement.normalized
 
     def setUp(self) -> None:
         self.parser = AlterStatementParser()
@@ -19,19 +26,23 @@ class TestComponent(unittest.TestCase):
             ADD COLUMN email VARCHAR(100) CHARACTER SET utf8 NOT NULL FIRST,
         ADD COLUMN hourly_rate char NOT NULL AFTER some_col;"""
 
+        normalized = self.normalize_sql(add_multi)
+
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
                                     column_name='email',
                                     first_position=True,
                                     data_type='VARCHAR(100)',
-                                    charset_name='utf8')
+                                    charset_name='utf8',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
                                     column_name='hourly_rate',
                                     after_column='some_col',
-                                    data_type='CHAR')
+                                    data_type='CHAR',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_multi, 'cdc')
 
         self.assertEqual([change1, change2], table_changes)
@@ -40,16 +51,20 @@ class TestComponent(unittest.TestCase):
         add_multi = """ALTER TABLE employee_settings ADD zenefits_id INT DEFAULT NULL, ADD paylocity_id VARCHAR(255) 
         DEFAULT NULL, ALGORITHM=INPLACE, LOCK=NONE"""
 
+        normalized = self.normalize_sql(add_multi)
+
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='employee_settings',
                                     schema='cdc',
                                     column_name='zenefits_id',
-                                    data_type='INT')
+                                    data_type='INT',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='employee_settings',
                                     schema='cdc',
                                     column_name='paylocity_id',
-                                    data_type='VARCHAR(255)')
+                                    data_type='VARCHAR(255)',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_multi, 'cdc')
 
         self.assertEqual([change1, change2], table_changes)
@@ -58,16 +73,20 @@ class TestComponent(unittest.TestCase):
         add_multi = """ALTER TABLE employee_settings ADD zenefits_id INT DEFAULT NULL, ALGORITHM=INPLACE, LOCK=NONE,
          ADD paylocity_id VARCHAR(255) DEFAULT NULL"""
 
+        normalized = self.normalize_sql(add_multi)
+
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='employee_settings',
                                     schema='cdc',
                                     column_name='zenefits_id',
-                                    data_type='INT')
+                                    data_type='INT',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='employee_settings',
                                     schema='cdc',
                                     column_name='paylocity_id',
-                                    data_type='VARCHAR(255)')
+                                    data_type='VARCHAR(255)',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_multi, 'cdc')
 
         self.assertEqual([change1, change2], table_changes)
@@ -78,18 +97,22 @@ class TestComponent(unittest.TestCase):
             DROP COLUMN Column2,
             DROP column_3, ALGORITHM=INPLACE, LOCK=NONE;"""
 
+        normalized = self.normalize_sql(drop_multi)
+
         change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='Column1')
+                                    column_name='Column1',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='Column2')
+                                    column_name='Column2', query=normalized)
         change3 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='column_3')
+                                    column_name='column_3',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(drop_multi, 'cdc')
 
         self.assertEqual([change1, change2, change3], table_changes)
@@ -100,18 +123,23 @@ class TestComponent(unittest.TestCase):
             DROP COLUMN Column2,
             DROP column_3;"""
 
+        normalized = self.normalize_sql(drop_multi)
+
         change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='Column1')
+                                    column_name='Column1',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='Column2')
+                                    column_name='Column2',
+                                    query=normalized)
         change3 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='column_3')
+                                    column_name='column_3',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(drop_multi, 'cdc')
 
         self.assertEqual([change1, change2, change3], table_changes)
@@ -122,19 +150,23 @@ class TestComponent(unittest.TestCase):
             DROP ColuMN Column1,
             DROP COLUMN Column2,
             DROP column_3;"""
+        normalized = self.normalize_sql(drop_multi)
 
         change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='Column1')
+                                    column_name='Column1',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='Column2')
+                                    column_name='Column2',
+                                    query=normalized)
         change3 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
-                                    column_name='column_3')
+                                    column_name='column_3',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(drop_multi, 'cdc')
 
         self.assertEqual([change1, change2, change3], table_changes)
@@ -142,12 +174,14 @@ class TestComponent(unittest.TestCase):
     def test_single_add_statement_w_comments_use_schema(self):
         add_single = """ use `cdc`; /* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE customers_binary
             ADD COLUMN tests_col5 VARCHAR(255)"""
+        normalized = self.normalize_sql(add_single)
 
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='customers_binary',
                                     schema='cdc',
                                     column_name='tests_col5',
-                                    data_type='VARCHAR(255)')
+                                    data_type='VARCHAR(255)',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_single, '')
 
         self.assertEqual([change1], table_changes)
@@ -155,11 +189,13 @@ class TestComponent(unittest.TestCase):
     def test_single_drop_statement_w_comments_use_schema(self):
         add_single = """ use `cdc`; /* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE customers_binary
             DROP COLUMN tests_col5"""
+        normalized = self.normalize_sql(add_single)
 
         change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
                                     table_name='customers_binary',
                                     schema='cdc',
-                                    column_name='tests_col5')
+                                    column_name='tests_col5',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_single, '')
 
         self.assertEqual([change1], table_changes)
@@ -167,6 +203,7 @@ class TestComponent(unittest.TestCase):
     def test_single_add_with_charset(self):
         add_single = """/* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE cdc.`customers_binary`
     ADD COLUMN charset_col VARCHAR(255) CHARACTER SET utf8 FIRST"""
+        normalized = self.normalize_sql(add_single)
 
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='customers_binary',
@@ -174,7 +211,8 @@ class TestComponent(unittest.TestCase):
                                     column_name='charset_col',
                                     data_type='VARCHAR(255)',
                                     charset_name='utf8',
-                                    first_position=True)
+                                    first_position=True,
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_single, 'cdc')
 
         self.assertEqual([change1], table_changes)
@@ -182,6 +220,7 @@ class TestComponent(unittest.TestCase):
     def test_single_add_with_idenitifier_quotes(self):
         add_single = """/* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE cdc.`customers_binary`
     ADD COLUMN `charset_col` VARCHAR(255) CHARACTER SET utf8 FIRST"""
+        normalized = self.normalize_sql(add_single)
 
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='customers_binary',
@@ -189,7 +228,8 @@ class TestComponent(unittest.TestCase):
                                     column_name='charset_col',
                                     data_type='VARCHAR(255)',
                                     charset_name='utf8',
-                                    first_position=True)
+                                    first_position=True,
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_single, 'cdc')
 
         self.assertEqual([change1], table_changes)
@@ -199,19 +239,22 @@ class TestComponent(unittest.TestCase):
           aaa */ ALTER   TABLE      `cdc`.`TableName`
             ADD COLUMN email VARCHAR(100) NOT NULL FIRST,
         ADD COLUMN hourly_rate decimal(10,2) NOT NULL AFTER some_col;"""
+        normalized = self.normalize_sql(add_multi)
 
         change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
                                     column_name='email',
                                     first_position=True,
-                                    data_type='VARCHAR(100)')
+                                    data_type='VARCHAR(100)',
+                                    query=normalized)
         change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='TableName',
                                     schema='cdc',
                                     column_name='hourly_rate',
                                     after_column='some_col',
-                                    data_type='DECIMAL(10,2)')
+                                    data_type='DECIMAL(10,2)',
+                                    query=normalized)
         table_changes = self.parser.get_table_changes(add_multi, '')
 
         self.assertEqual([change1, change2], table_changes)
