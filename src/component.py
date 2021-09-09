@@ -1361,10 +1361,11 @@ class Component(KBCEnvHandler):
                     logging.info('No prior state was found, will execute full data sync')
                 else:
                     logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
-
+                output_bucket = self.create_output_bucket(self.cfg_params.get(KEY_OUTPUT_BUCKET))
                 with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
                                        output_table_path=self.tables_out_path,
-                                       binary_handler=self.cfg_params.get(KEY_HANDLE_BINARY, 'plain')) as message_store:
+                                       binary_handler=self.cfg_params.get(KEY_HANDLE_BINARY, 'plain'),
+                                       output_bucket=output_bucket) as message_store:
                     catalog = Catalog.from_dict(table_mappings)
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
                                  message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,

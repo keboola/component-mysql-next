@@ -244,7 +244,7 @@ class MessageStore(dict):
     """Storage for log-based messages"""
 
     def __init__(self, state: dict = None, flush_row_threshold: int = 5000,
-                 output_table_path: str = '/data/out/tables', binary_handler: str = 'plain'):
+                 output_table_path: str = '/data/out/tables', binary_handler: str = 'plain', output_bucket=''):
         super().__init__()
         self.state = state
         self.flush_row_threshold = flush_row_threshold
@@ -261,6 +261,7 @@ class MessageStore(dict):
         self._found_headers = {}
         self._processed_records = 0
         self._flush_count = 0
+        self.output_bucket = output_bucket
 
         # self.io = {}
         # self.io_csv = {}
@@ -328,7 +329,8 @@ class MessageStore(dict):
             self._schema_change_writer.writeheader()
             # create manifest
             manifest = {'primary_key': ['column_name', 'query', 'timestamp'],
-                        'incremental': True}
+                        'incremental': True,
+                        'destination': f'{self.output_bucket}.SCHEMA_CHANGES'}
             with open(path + '.manifest', 'w') as manifest_file:
                 json.dump(manifest, manifest_file)
 
