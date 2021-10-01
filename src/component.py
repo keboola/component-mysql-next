@@ -21,13 +21,16 @@ TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 import ast
 import base64
 import binascii
-import csv
 import copy
+import csv
 import itertools
 import json
 import logging
 import os
 import sys
+from collections import namedtuple
+from contextlib import nullcontext
+from io import StringIO
 
 import pandas as pd
 import paramiko
@@ -35,12 +38,9 @@ import pendulum
 import pymysql
 import pymysqlreplication
 import yaml
-
-from collections import namedtuple
-from contextlib import nullcontext
-from io import StringIO
 from sshtunnel import SSHTunnelForwarder
 
+from mysql.replication.stream_reader import TableColumnSchemaCache
 
 try:
     import core as core
@@ -82,7 +82,7 @@ except ImportError:
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
 
-sys.tracebacklimit = 0
+# sys.tracebacklimit = 0
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
@@ -153,7 +153,8 @@ Column = namedtuple('Column', [
     "numeric_precision",
     "numeric_scale",
     "column_type",
-    "column_key"
+    "column_key",
+    "character_set_name"
 ])
 
 
@@ -237,6 +238,7 @@ def schema_for_column(c):
     elif data_type in STRING_TYPES:
         result.type = ['null', 'string']
         result.maxLength = c.character_maximum_length
+        result.characterSet = c.character_set_name
 
     elif data_type in DATETIME_TYPES:
         result.type = ['null', 'string']
@@ -345,7 +347,8 @@ def discover_catalog(mysql_conn, config, append_mode):
                        numeric_precision,
                        numeric_scale,
                        column_type,
-                       column_key
+                       column_key,
+                       character_set_name
                     FROM information_schema.columns
                     {}
                     ORDER BY table_schema, table_name
@@ -644,7 +647,7 @@ class Component(KBCEnvHandler):
         if self.cfg_params.get(KEY_DEBUG, False) is True:
             logger = logging.getLogger()
             logger.setLevel(logging.DEBUG)
-            sys.tracebacklimit = 10
+            # sys.tracebacklimit = 10
 
             for h in logger.handlers:
                 h.setFormatter(logging.Formatter('%(levelname)10s - %(filename)s - %(lineno)4d: %(message)s'))
@@ -762,6 +765,28 @@ class Component(KBCEnvHandler):
                                              tables_destination=tables_destination, message_store=message_store)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
+
+            # Update state last_table_schema with current schema, and store KBC cols
+            table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
+            state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
+
+    @staticmethod
+    def _build_schema_cache_from_catalog_entry(catalog_entry):
+
+        table_schema = []
+        primary_keys = common.get_key_properties(catalog_entry)
+        column_properties = catalog_entry.schema.properties
+        for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
+            col_name = column_metadata['breadcrumb'][1]
+            col_type = column_metadata['metadata']['sql-datatype']
+            ordinal_position = idx
+            is_pkey = col_name in primary_keys
+            character_set = column_properties[col_name].characterSet
+            schema = TableColumnSchemaCache.build_column_schema(col_name.upper(), ordinal_position, col_type, is_pkey,
+                                                                character_set_name=character_set)
+            table_schema.append(schema)
+
+        return table_schema
 
     @staticmethod
     def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
@@ -884,6 +909,7 @@ class Component(KBCEnvHandler):
 
             except pymysql.err.InternalError as ie:
                 logging.warning("Encountered error checking server params. Error: (%s) %s", *ie.args)
+
     # End of sync methods
 
     def write_table_mappings_file(self, table_mapping: Catalog, file_name: str = 'table_mappings.json'):
@@ -1174,7 +1200,6 @@ class Component(KBCEnvHandler):
                     tables += [list(table.keys())[0] for table in _tables]
 
                 for table in _tables:
-
                     table_name = list(table.keys())[0]
 
                     tap_stream_id = '-'.join([schema, table_name])
@@ -1205,7 +1230,6 @@ class Component(KBCEnvHandler):
                     tables += [list(table.keys())[0] for table in _tables]
 
                 for table in _tables:
-
                     table_name = list(table.keys())[0]
 
                     tap_stream_id = '-'.join([schema, table_name])
@@ -1276,7 +1300,7 @@ class Component(KBCEnvHandler):
             # Make Raw Mapping file to allow edits
             raw_yaml_mapping = make_yaml_mapping_file(catalog_mapping.to_dict())
 
-            if (_json := self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':
+            if (_json := self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':  # noqa
                 input_method = 'json'
                 logging.info('Using table mappings based on input JSON mappings.')
 
@@ -1287,8 +1311,8 @@ class Component(KBCEnvHandler):
                     logging.error("Invalid JSON mappins provided. Could not parse JSON.")
                     sys.exit(1)
 
-                input_mapping, schemas_to_sync, tables_to_sync, \
-                    columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                input_mapping, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(
+                    input_mapping, input_method)
                 table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
 
             elif self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
@@ -1299,8 +1323,8 @@ class Component(KBCEnvHandler):
 
                 logging.debug(f"Received input schema: {input_mapping}")
 
-                _, schemas_to_sync, tables_to_sync, \
-                    columns_to_sync = self.parse_input_mapping(input_mapping, input_method)
+                _, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(input_mapping,
+                                                                                               input_method)
 
             else:
                 raise AttributeError('You are missing either a YAML input mapping, or the '
@@ -1337,10 +1361,11 @@ class Component(KBCEnvHandler):
                     logging.info('No prior state was found, will execute full data sync')
                 else:
                     logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
-
+                output_bucket = self.create_output_bucket(self.cfg_params.get(KEY_OUTPUT_BUCKET))
                 with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
                                        output_table_path=self.tables_out_path,
-                                       binary_handler=self.cfg_params.get(KEY_HANDLE_BINARY, 'plain')) as message_store:
+                                       binary_handler=self.cfg_params.get(KEY_HANDLE_BINARY, 'plain'),
+                                       output_bucket=output_bucket) as message_store:
                     catalog = Catalog.from_dict(table_mappings)
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
                                  message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,
@@ -1403,9 +1428,12 @@ class Component(KBCEnvHandler):
                         _table_column_metadata = self.get_table_column_metadata(column_metadata)
 
                         try:
-                            with open(table_specific_sliced_path) as io:
-                                rdr = csv.DictReader(io)
-                                fields = rdr.fieldnames
+                            if not output_is_sliced:
+                                with open(table_specific_sliced_path) as io:
+                                    rdr = csv.DictReader(io)
+                                    fields = rdr.fieldnames
+                            else:
+                                fields = None
                         except FileNotFoundError:
                             fields = []
                         except IsADirectoryError:

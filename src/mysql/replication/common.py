@@ -8,8 +8,9 @@ import logging
 import os
 import time
 
-import pytz
 import pymysql
+import pytz
+
 
 try:
     import core as core
@@ -338,7 +339,7 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
 
                     # Write to CSV of specific structure: table, headers (no header is written to this CSV)
                     tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
-                    with open(tables_headers_path + 'table_headers.csv', 'a+') as headers_csv:
+                    with open(tables_headers_path + 'table_headers.csv', 'a+', newline='') as headers_csv:
                         writer = csv.writer(headers_csv, delimiter='\t')
                         writer.writerow([catalog_entry.table, headers])
                         logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
@@ -353,7 +354,7 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                 csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
                                         str(current_chunk) + '.csv')
 
-                with open(csv_path, 'w', encoding='utf-8') as output_data_file:
+                with open(csv_path, 'w', encoding='utf-8', newline='') as output_data_file:
                     writer = csv.DictWriter(output_data_file, fieldnames=headers, quoting=csv.QUOTE_MINIMAL)
                     for row in rows:
                         rows_with_metadata = row + KBC_METADATA

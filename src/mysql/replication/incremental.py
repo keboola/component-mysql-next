@@ -16,7 +16,6 @@ except ImportError:
     import src.mysql.replication.common as common
 
 BOOKMARK_KEYS = {'replication_key', 'replication_key_value', 'version'}
-# TODO: Test incremental to determine if needs KBC metadata additions
 
 
 def sync_table(mysql_conn, catalog_entry, state, columns, limit=None, message_store: core.MessageStore = None):
