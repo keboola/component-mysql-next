@@ -328,9 +328,10 @@ class MessageStore(dict):
             self._schema_change_writer = writer
             self._schema_change_writer.writeheader()
             # create manifest
+            _schema_changes_destination = f'{self.output_bucket}_metadata.SCHEMA_CHANGES'
             manifest = {'primary_key': ['column_name', 'query', 'timestamp'],
                         'incremental': True,
-                        'destination': f'{self.output_bucket}.SCHEMA_CHANGES'}
+                        'destination': _schema_changes_destination}
             with open(path + '.manifest', 'w') as manifest_file:
                 json.dump(manifest, manifest_file)
 
