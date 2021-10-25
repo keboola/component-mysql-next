@@ -47,6 +47,33 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1, change2], table_changes)
 
+    def test_multi_add_statement_w_comments_lowercase(self):
+        add_multi = """ /* some commmennts
+          aaa */ ALTER   TaBLe      TableName
+            AdD COLuMN email VarChar(100) character set utf8 not null first,
+        add column hourly_rate char not null after some_col;"""
+
+        normalized = self.normalize_sql(add_multi)
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='TableName',
+                                    schema='cdc',
+                                    column_name='email',
+                                    first_position=True,
+                                    data_type='VARCHAR(100)',
+                                    charset_name='utf8',
+                                    query=normalized)
+        change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='TableName',
+                                    schema='cdc',
+                                    column_name='hourly_rate',
+                                    after_column='some_col',
+                                    data_type='CHAR',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(add_multi, 'cdc')
+
+        self.assertEqual([change1, change2], table_changes)
+
     def test_multi_add_statement_w_additional_params(self):
         add_multi = """ALTER TABLE employee_settings ADD zenefits_id INT DEFAULT NULL, ADD paylocity_id VARCHAR(255) 
         DEFAULT NULL, ALGORITHM=INPLACE, LOCK=NONE"""

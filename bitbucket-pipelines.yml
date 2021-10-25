@@ -6,7 +6,7 @@ pipelines:
     - step:
         script:
           - export APP_IMAGE=$APP_IMAGE
-          - export TAG=alter.1
+          - export TAG=test
           - docker build . --tag=$APP_IMAGE
           - docker images
           - docker -v
