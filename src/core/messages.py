@@ -349,7 +349,7 @@ class MessageStore(dict):
                         binary_columns = None
                     file_output = table.upper() + '.csv'
 
-                    table_schema = list(self._data_store[schema][table]['column_schema'].keys())
+                    table_schema = self._get_all_table_columns(schema, table)
 
                     self.write_to_csv(self._data_store[schema][table].get('records'), file_output,
                                       table_schema, binary_columns)
