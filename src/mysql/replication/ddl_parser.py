@@ -63,7 +63,7 @@ class AlterStatementParser:
         token_count = len(normalized_statement.tokens)
         if not (normalized_statement.get_type() == 'ALTER' and
                 token_count > self.MINIMAL_TOKEN_COUNT and
-                normalized_statement.tokens[2].value == 'TABLE'):
+                normalized_statement.tokens[2].value.upper() == 'TABLE'):
             return False
         else:
             for pattern in self.SUPPORTED_ALTER_TABLE_STATEMENTS:
