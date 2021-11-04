@@ -534,6 +534,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
             # only monitored tables
             if table_change.table_name not in self._BinLogStreamReader__only_tables:
                 continue
+            # only monitored schemas
+            if table_change.schema not in self._BinLogStreamReader__only_schemas:
+                continue
 
             self.schema_cache.update_cache(table_change)
 
