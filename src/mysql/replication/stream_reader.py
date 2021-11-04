@@ -246,6 +246,7 @@ class TableColumnSchemaCache:
         index = self.get_table_cache_index(add_change.schema, add_change.table_name)
         column_schema = self.table_schema_cache.get(index, [])
 
+        logging.debug(f'Current column schema cache: {self.table_schema_cache}, index: {index}')
         column_names = [c['COLUMN_NAME'].upper() for c in column_schema]
         if not column_names:
             raise RuntimeError(f'The schema cache for table {index} is not initialized!')
