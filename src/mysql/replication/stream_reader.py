@@ -246,6 +246,7 @@ class TableColumnSchemaCache:
         index = self.get_table_cache_index(add_change.schema, add_change.table_name)
         column_schema = self.table_schema_cache.get(index, [])
 
+        logging.debug(f'Current column schema cache: {self.table_schema_cache}, index: {index}')
         column_names = [c['COLUMN_NAME'].upper() for c in column_schema]
         if not column_names:
             raise RuntimeError(f'The schema cache for table {index} is not initialized!')
@@ -532,6 +533,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         for table_change in table_changes:
             # only monitored tables
             if table_change.table_name not in self._BinLogStreamReader__only_tables:
+                continue
+            # only monitored schemas
+            if table_change.schema not in self._BinLogStreamReader__only_schemas:
                 continue
 
             self.schema_cache.update_cache(table_change)
