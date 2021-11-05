@@ -1,3 +1,5 @@
+import logging
+
 from mysql.replication import common
 
 KEY_STORAGE_COLUMNS = 'storage_columns'
@@ -74,6 +76,9 @@ def update_schema_in_state(state: dict, table_schema_cache: dict):
         # append non-existing
         for schema in table_schema_cache[table]:
             if schema['COLUMN_NAME'] not in columns:
+                logging.debug(f"Adding new column {schema['COLUMN_NAME']} to the column state "
+                              f"for table {schema}.{table}. "
+                              f"Current state: {columns}. Current table_schema_cache: {table_schema_cache} ")
                 columns.append(schema['COLUMN_NAME'])
 
         # append system
