@@ -298,6 +298,9 @@ class TableColumnSchemaCache:
                 f"Added column '{table_change.column_name.upper()}' "
                 f"exists in the current schema: {current_schema}")
             if c['COLUMN_NAME'].upper() == table_change.column_name.upper():
+                # convert name to upper_case just in case
+                # TODO: consider moving this to current_schema build-up
+                c['COLUMN_NAME'] = c['COLUMN_NAME'].upper()
                 existing_col = c
 
         if existing_col:
