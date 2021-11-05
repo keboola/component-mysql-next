@@ -1474,7 +1474,7 @@ class Component(KBCEnvHandler):
                                          'is empty or no new rows were added (if incremental)'.format(entry_table_name))
 
                         # Write output state file
-                        logging.info('Got final state {}'.format(message_store.get_state()))
+                        logging.debug('Got final state {}'.format(message_store.get_state()))
                         self.write_state_file(message_store.get_state())
                         file_state_destination = os.path.join(self.files_out_path, 'state.json')
                         self.write_state_file(message_store.get_state(), output_path=file_state_destination)
