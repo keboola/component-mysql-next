@@ -42,3 +42,14 @@ class TestComponent(unittest.TestCase):
         self.mock_stream_reader._update_cache_and_map(event)
         self.assertEqual(self.mock_stream_reader.schema_cache.table_schema_cache,
                          {f"{self.cached_schema}-{self.cached_table}": []})
+  #
+  #   @patch("pymysqlreplication.event.QueryEvent")
+  #   def test_update_cache_results_in_cache_updated(self, event):
+  #       event.schema = self.cached_schema.encode('utf-8')
+  #       event.query = '''ALTER TABLE test1 ADD shopify_do_not_change_fulfillment_service TINYINT(1) DEFAULT '0' NOT NULL,
+  #      ALGORITHM=INPLACE,
+  #      LOCK=
+  # NONE'''
+  #       self.mock_stream_reader._update_cache_and_map(event)
+  #       self.assertEqual(self.mock_stream_reader.schema_cache.table_schema_cache,
+  #                        {f"{self.cached_schema}-{self.cached_table}": []})

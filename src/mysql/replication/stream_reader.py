@@ -241,6 +241,7 @@ class TableColumnSchemaCache:
         if not update_ordinal_position:
             raise SchemaOffsyncError(f'Dropped column: "{added_column["COLUMN_NAME"]}" '
                                      f'is already missing in the provided starting schema => may lead to value shift!')
+        return new_schema
 
     def update_cache_add_column(self, add_change: TableSchemaChange):
         index = self.get_table_cache_index(add_change.schema, add_change.table_name)
