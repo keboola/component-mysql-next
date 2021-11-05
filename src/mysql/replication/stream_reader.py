@@ -256,9 +256,9 @@ class TableColumnSchemaCache:
             logging.warning(f'The added column "{add_change.column_name.upper()}" is already present '
                             f'in the schema "{index}", skipping.')
             return
-
+        logging.debug(f"New schema ADD change received {add_change}")
         added_column = self._build_new_column_schema(add_change)
-
+        logging.debug(f"New column schema built {added_column}")
         new_schema = []
         # get after_column
         if add_change.first_position:
@@ -294,6 +294,9 @@ class TableColumnSchemaCache:
         # this allows to get all column metadata properly in case
         # we missed some ALTER COLUMN statement, e.g. for changing datatypes
         for c in current_schema:
+            logging.debug(
+                f"Added column '{table_change.column_name.upper()}' "
+                f"exists in the current schema: {current_schema}")
             if c['COLUMN_NAME'].upper() == table_change.column_name.upper():
                 existing_col = c
 
