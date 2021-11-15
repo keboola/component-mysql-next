@@ -286,6 +286,28 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1, change2], table_changes)
 
+    def test_multi_add_and_drop_statements(self):
+        add_multi = """ALTER TABLE immex_product_information ADD immex_hs_code_id INT DEFAULT NULL, 
+                DROP immex_hs_code, ALGORITHM=INPLACE, LOCK=NONE
+                """
+
+        normalized = self.normalize_sql(add_multi)
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='immex_product_information',
+                                    schema='',
+                                    column_name='immex_hs_code_id',
+                                    data_type='INT',
+                                    query=normalized)
+        change2 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='immex_product_information',
+                                    schema='',
+                                    column_name='immex_hs_code',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(add_multi, '')
+
+        self.assertEqual([change2, change1], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
