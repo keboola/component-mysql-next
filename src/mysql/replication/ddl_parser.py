@@ -62,7 +62,7 @@ class AlterStatementParser:
     def _is_supported_alter_table_statement(self, normalized_statement):
         token_count = len(normalized_statement.tokens)
         if not (normalized_statement.get_type() == 'ALTER' and
-                token_count > self.MINIMAL_TOKEN_COUNT and
+                token_count >= self.MINIMAL_TOKEN_COUNT and
                 normalized_statement.tokens[2].value.upper() == 'TABLE'):
             return False
         else:
@@ -133,7 +133,8 @@ class AlterStatementParser:
                     next_index, column_name = self._get_element_next_to_position(statement, idx)
                 else:
                     column_name = value.normalized
-                schema_changes.append(TableSchemaChange(TableChangeType.DROP_COLUMN, table_name, schema, column_name,
+                schema_changes.append(TableSchemaChange(TableChangeType.DROP_COLUMN, table_name, schema,
+                                                        self._normalize_identifier(column_name),
                                                         query=original_statement_sql))
 
             elif value.ttype == sqlparse.tokens.Punctuation and value.normalized == ',':

@@ -3,6 +3,7 @@ Created on 12. 11. 2018
 
 @author: esner
 """
+import os
 import unittest
 
 import sqlparse
@@ -227,6 +228,33 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1], table_changes)
 
+    def test_single_drop_with_quotes(self):
+        query = "alter table `employee_settings` drop `new_lever_id`"
+        normalized = self.normalize_sql(query)
+
+        change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='employee_settings',
+                                    schema='',
+                                    column_name='new_lever_id',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(query, '')
+
+        self.assertEqual([change1], table_changes)
+
+    def test_single_add_with_quotes(self):
+        query = "alter table `employee_settings` add `new_lever_id` VARCHAR(255)"
+        normalized = self.normalize_sql(query)
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='employee_settings',
+                                    schema='',
+                                    data_type='VARCHAR(255)',
+                                    column_name='new_lever_id',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(query, '')
+
+        self.assertEqual([change1], table_changes)
+
     def test_single_add_with_charset(self):
         add_single = """/* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE cdc.`customers_binary`
     ADD COLUMN charset_col VARCHAR(255) CHARACTER SET utf8 FIRST"""
@@ -264,7 +292,7 @@ class TestComponent(unittest.TestCase):
     def test_multi_add_statement_w_comments_quotes(self):
         add_multi = """ /* some commmennts
           aaa */ ALTER   TABLE      `cdc`.`TableName`
-            ADD COLUMN email VARCHAR(100) NOT NULL FIRST,
+            ADD COLUMN `email` VARCHAR(100) NOT NULL FIRST,
         ADD COLUMN hourly_rate decimal(10,2) NOT NULL AFTER some_col;"""
         normalized = self.normalize_sql(add_multi)
 
@@ -307,6 +335,20 @@ class TestComponent(unittest.TestCase):
         table_changes = self.parser.get_table_changes(add_multi, '')
 
         self.assertEqual([change2, change1], table_changes)
+
+    def test_real_drop_statements(self):
+        file_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 'resources', 'drop_statements.sql')
+
+        with open(file_path) as in_sql:
+            queries = list(sqlparse.parsestream(in_sql))
+
+        table_changes = []
+        for q in queries:
+            normalized = self.normalize_sql(q.normalized)
+            table_changes.extend(self.parser.get_table_changes(q.normalized, ''))
+
+        # TODO: validate parsed changes
 
 
 if __name__ == "__main__":
