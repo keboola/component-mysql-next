@@ -67,17 +67,22 @@ def get_currently_syncing(state, default=None):
 
 def update_schema_in_state(state: dict, table_schema_cache: dict):
 
-    last_state = state.get(KEY_LAST_TABLE_SCHEMAS, {})  # SAPI converts empty dicts to lists
-    if last_state == []:
-        last_state = {}
+    last_table_schemas = state.get(KEY_LAST_TABLE_SCHEMAS, {})  # SAPI converts empty dicts to lists
+    if last_table_schemas == []:
+        last_table_schemas = {}
 
-    state[KEY_LAST_TABLE_SCHEMAS] = {**last_state, **table_schema_cache}
+    state[KEY_LAST_TABLE_SCHEMAS] = {**last_table_schemas, **table_schema_cache}
     # store columns
     if not state.get(KEY_STORAGE_COLUMNS):
         state[KEY_STORAGE_COLUMNS] = {}
 
     for table in table_schema_cache:
-        columns = state.get(KEY_STORAGE_COLUMNS, {}).get(table, [])
+
+        last_storage_columns = state.get(KEY_STORAGE_COLUMNS, {})
+        if last_storage_columns == []:
+            last_storage_columns = {}
+
+        columns = last_storage_columns.get(table, [])
         # append non-existing
         for schema in table_schema_cache[table]:
             if schema['COLUMN_NAME'] not in columns:
