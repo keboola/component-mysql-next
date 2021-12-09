@@ -66,7 +66,12 @@ def get_currently_syncing(state, default=None):
 # ################ state parameters
 
 def update_schema_in_state(state: dict, table_schema_cache: dict):
-    state[KEY_LAST_TABLE_SCHEMAS] = {**state.get(KEY_LAST_TABLE_SCHEMAS, {}), **table_schema_cache}
+
+    last_state = state.get(KEY_LAST_TABLE_SCHEMAS, {})  # SAPI converts empty dicts to lists
+    if last_state == []:
+        last_state = {}
+
+    state[KEY_LAST_TABLE_SCHEMAS] = {**last_state, **table_schema_cache}
     # store columns
     if not state.get(KEY_STORAGE_COLUMNS):
         state[KEY_STORAGE_COLUMNS] = {}
