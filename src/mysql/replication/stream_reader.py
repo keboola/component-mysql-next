@@ -605,7 +605,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                 code, message = error.args
                 if code in MYSQL_EXPECTED_ERROR_CODES:
                     self._BinLogStreamReader__connected_ctl = False
-                    continue
+                    raise pymysql.OperationalError("Getting the initial schema failed, server unreachable!") from error
                 else:
                     raise error
 
