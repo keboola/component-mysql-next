@@ -4,17 +4,16 @@ KBC Environment Handler.
 import csv
 import json
 import logging
+import math
 import os
 import sys
 from _datetime import timedelta
 from collections import Counter
+from datetime import datetime
 
 import dateparser
-import math
 import pytz
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
-
 from keboola import docker
 from pygelf import GelfUdpHandler, GelfTcpHandler
 
@@ -350,13 +349,20 @@ class KBCEnvHandler:
         """
         logging.info('Loading state file...')
         state_file_path = os.path.join(self.data_path, 'in', 'state.json')
+
         if not os.path.isfile(state_file_path):
             logging.info('State file not found. First run?')
             return
         try:
             with open(state_file_path, 'r') \
                     as state_file:
-                return json.load(state_file)
+                state = json.load(state_file)
+                # TMP convert small keys to uppercase TODO: remove
+                cols = state.get('storage_columns', {})
+                for c in cols:
+                    cols[c] = [c.upper() for c in cols[c]]
+                return state
+
         except (OSError, IOError):
             raise ValueError(
                 "Unable to read state file state.json"
