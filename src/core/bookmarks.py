@@ -66,7 +66,6 @@ def get_currently_syncing(state, default=None):
 # ################ state parameters
 
 def update_schema_in_state(state: dict, table_schema_cache: dict):
-
     last_table_schemas = state.get(KEY_LAST_TABLE_SCHEMAS, {})  # SAPI converts empty dicts to lists
     if last_table_schemas == []:
         last_table_schemas = {}
@@ -85,11 +84,11 @@ def update_schema_in_state(state: dict, table_schema_cache: dict):
         columns = last_storage_columns.get(table, [])
         # append non-existing
         for schema in table_schema_cache[table]:
-            if schema['COLUMN_NAME'] not in columns:
+            if schema['COLUMN_NAME'].upper() not in columns:
                 logging.debug(f"Adding new column {schema['COLUMN_NAME']} to the column state "
                               f"for table {schema}.{table}. "
                               f"Current state: {columns}. Current table_schema_cache: {table_schema_cache} ")
-                columns.append(schema['COLUMN_NAME'])
+                columns.append(schema['COLUMN_NAME'].upper())
 
         # append system
         if common.KBC_SYNCED not in columns:
