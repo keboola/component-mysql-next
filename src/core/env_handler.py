@@ -357,10 +357,6 @@ class KBCEnvHandler:
             with open(state_file_path, 'r') \
                     as state_file:
                 state = json.load(state_file)
-                # TMP convert small keys to uppercase TODO: remove
-                cols = state.get('storage_columns', {})
-                for c in cols:
-                    cols[c] = [c.upper() for c in cols[c]]
                 return state
 
         except (OSError, IOError):
