@@ -418,8 +418,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         self.alter_parser = AlterStatementParser()
 
         # init just in case of redeploying new version
-        if not table_schema_cache:
-            self._init_column_schema_cache(only_schemas[0], only_tables)
+        self._init_column_schema_cache(only_schemas[0], only_tables)
 
     def _init_column_schema_cache(self, schema: str, tables: List[str]):
         """
@@ -429,6 +428,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         """
         for table in tables:
             # hacky way to call the parent secret method
+            if self.schema_cache.get_column_schema(schema, table):
+                continue
+            logging.warning(f"Schema for table {schema}-{table} is not initialized, using current schema")
             current_column_schema = self._get_table_information_from_db(schema, table)
             # update cache with current schema
             self.schema_cache.set_column_schema(schema, table, current_column_schema)
