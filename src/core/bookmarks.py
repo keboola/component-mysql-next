@@ -70,6 +70,9 @@ def update_schema_in_state(state: dict, table_schema_cache: dict):
     if last_table_schemas == []:
         last_table_schemas = {}
 
+    if table_schema_cache == []:
+        table_schema_cache = {}
+
     state[KEY_LAST_TABLE_SCHEMAS] = {**last_table_schemas, **table_schema_cache}
     # store columns
     if not state.get(KEY_STORAGE_COLUMNS):
