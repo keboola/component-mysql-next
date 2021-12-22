@@ -105,7 +105,7 @@ class AlterStatementParser:
 
     def _get_table_name(self, statement: Statement):
         schema = ''
-        table_name = statement.tokens[TABLE_NAME_INDEX].normalized
+        table_name = statement.tokens[TABLE_NAME_INDEX].value
         split = table_name.split('.')
         if len(split) > 1:
             table_name = split[1]
