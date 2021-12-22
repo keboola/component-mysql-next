@@ -272,6 +272,21 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1], table_changes)
 
+    def test_single_add_table_name_keeps_case(self):
+        add_single = """ALTER TABLE package ADD external_insurance_id VARCHAR(255) DEFAULT NULL, ALGORITHM=INPLACE, 
+        LOCK=NONE"""
+        normalized = self.normalize_sql(add_single)
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='package',
+                                    schema='cdc',
+                                    column_name='external_insurance_id',
+                                    data_type='VARCHAR(255)',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(add_single, 'cdc')
+
+        self.assertEqual([change1], table_changes)
+
     def test_single_add_with_idenitifier_quotes(self):
         add_single = """/* ApplicationName=DataGrip 2021.1.3 */ ALTER TABLE cdc.`customers_binary`
     ADD COLUMN `charset_col` VARCHAR(255) CHARACTER SET utf8 FIRST"""
