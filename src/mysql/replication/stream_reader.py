@@ -558,6 +558,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         """
         table_changes = self.alter_parser.get_table_changes(binlog_event.query, binlog_event.schema.decode())
         for table_change in table_changes:
+            # normalize table_name. We expect table names in lower case here.
+            table_change.table_name = table_change.table_name.lower()
+            table_change.schema = table_change.schema.lower()
             # only monitored tables
             logging.debug(
                 f'Table change detected: {table_change}, monitored tables: {self._BinLogStreamReader__only_tables}, '
