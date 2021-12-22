@@ -557,6 +557,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         Updates schema cache based on given ALTER events. Refreshes the table_map
         """
         table_changes = self.alter_parser.get_table_changes(binlog_event.query, binlog_event.schema.decode())
+        monitored_changes = []
         for table_change in table_changes:
             # normalize table_name. We expect table names in lower case here.
             table_change.table_name = table_change.table_name.lower()
@@ -570,12 +571,12 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
             # only monitored schemas
             if table_change.schema not in self._BinLogStreamReader__only_schemas:
                 continue
-
+            monitored_changes.append(table_change)
             self.schema_cache.update_cache(table_change)
 
             # invalidate table_map cache so it is rebuilt from schema cache next TABLE_MAP_EVENT
             self._invalidate_table_map(table_change.schema, table_change.table_name)
-        return table_changes
+        return monitored_changes
 
     def _invalidate_table_map(self, schema: str, table_name: str):
         indexes = self.schema_cache.get_table_ids(schema, table_name)
