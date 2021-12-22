@@ -559,6 +559,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         table_changes = self.alter_parser.get_table_changes(binlog_event.query, binlog_event.schema.decode())
         for table_change in table_changes:
             # only monitored tables
+            logging.debug(
+                f'Table change detected: {table_change}, monitored tables: {self._BinLogStreamReader__only_tables}, '
+                f'monitored schemas: {self._BinLogStreamReader__only_schemas}')
             if table_change.table_name not in self._BinLogStreamReader__only_tables:
                 continue
             # only monitored schemas
