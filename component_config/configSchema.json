@@ -78,13 +78,16 @@
     "inputMappingsJson": {
       "type": "string",
       "title": "Table Mappings JSON Specification",
-      "default": "",
-      "description": "The JSON config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
-      "format": "json",
-      "propertyOrder": 540,
+      "format": "editor",
+      "default": "{\n  \"SCHEMA_NAME\": {\n    \"tables\": [\n      {\n        \"TABLE_NAME\": {\n          \"selected\": true,\n          \"replication-method\": \"log_based\",\n          \"columns\": {}\n        }\n      }\n    ]\n  }\n}",
       "options": {
+        "editor": {
+          "placeholder": "{}"
+        },
         "input_height": "150px"
-      }
+      },
+      "description": "The JSON config for the tables, columns and corresponding replication methods to sync (see config documentation on how to do so)",
+      "propertyOrder": 540
     },
     "ssl": {
       "type": "boolean",
