@@ -281,7 +281,8 @@ class AlterStatementParser:
         return table_changes
 
     def get_table_changes(self, sql: str, schema: str) -> List[TableSchemaChange]:
-        normalized_statements = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True))
+        normalized_statements = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True,
+                                                               strip_whitespace=True).replace('\n', ' '))
         use_schema, normalized_statement = self._extract_alter_statement_and_schema(normalized_statements)
 
         # normalized / formatted by now, should be safe to use fixed index

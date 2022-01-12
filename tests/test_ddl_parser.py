@@ -14,7 +14,7 @@ from mysql.replication.ddl_parser import AlterStatementParser, TableSchemaChange
 class TestComponent(unittest.TestCase):
 
     def normalize_sql(self, sql):
-        normalized = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True))
+        normalized = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True).replace('\n', ' '))
         use_schema, normalized_statement = self.parser._extract_alter_statement_and_schema(normalized)
         return normalized_statement.normalized
 
@@ -364,6 +364,36 @@ class TestComponent(unittest.TestCase):
             table_changes.extend(self.parser.get_table_changes(q.normalized, ''))
 
         # TODO: validate parsed changes
+
+    def test_real_drop_statements_new_lines(self):
+        add_multi = """ALTER TABLE location DROP machine_number, DROP tray, DROP x, DROP y, ALGORITHM=INPLACE, LOCK=NONE
+                       """
+
+        normalized = self.normalize_sql(add_multi)
+
+        change1 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='location',
+                                    schema='',
+                                    column_name='machine_number',
+                                    query=normalized)
+        change2 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='location',
+                                    schema='',
+                                    column_name='tray',
+                                    query=normalized)
+        change3 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='location',
+                                    schema='',
+                                    column_name='x',
+                                    query=normalized)
+        change4 = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                    table_name='location',
+                                    schema='',
+                                    column_name='y',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(add_multi, '')
+
+        self.assertEqual([change1, change2, change3, change4], table_changes)
 
 
 if __name__ == "__main__":
