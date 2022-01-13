@@ -1,8 +1,10 @@
+import functools
 import logging
 import struct
 from enum import Enum
 from typing import List
 
+import backoff
 import pymysql
 from pymysql.util import byte2int
 from pymysqlreplication import BinLogStreamReader
@@ -604,6 +606,20 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
             self.schema_cache.update_current_schema_cache(schema, table, current_column_schema)
             return current_column_schema
 
+    def _table_info_backoff(func):
+        @functools.wraps(func)
+        @backoff.on_exception(backoff.expo,
+                              pymysql.OperationalError,
+                              max_tries=3)
+        def wrapper(self, *args, **kwargs):
+            if not self._BinLogStreamReader__connected_ctl:
+                logging.warning('Mysql unreachable, trying to reconnect')
+                self._BinLogStreamReader__connect_to_ctl()
+            return func(self, *args, **kwargs)
+
+        return wrapper
+
+    @_table_info_backoff
     def _get_table_information_from_db(self, schema, table):
         for i in range(1, 3):
             try:
