@@ -611,7 +611,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                     self._BinLogStreamReader__connect_to_ctl()
 
                 cur = self._ctl_connection.cursor()
-                cur.execute("""SELECT
+                query = cur.mogrify("""SELECT
                         COLUMN_NAME, COLLATION_NAME, CHARACTER_SET_NAME,
                         COLUMN_COMMENT, COLUMN_TYPE, COLUMN_KEY, ORDINAL_POSITION, defaults.DEFAULT_COLLATION_NAME,
                         defaults.DEFAULT_CHARSET
@@ -627,7 +627,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                         table_schema = %s AND table_name = %s
                     ORDER BY ORDINAL_POSITION;
                     """, (schema, schema, table))
-
+                logging.debug(query)
+                cur.execute(query)
                 return cur.fetchall()
             except pymysql.OperationalError as error:
                 code, message = error.args
