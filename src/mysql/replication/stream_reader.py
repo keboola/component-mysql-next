@@ -227,13 +227,14 @@ class TableColumnSchemaCache:
             elif after_col and col['COLUMN_NAME'].upper() == after_col.upper():
                 added_column['ORDINAL_POSITION'] = idx + 1
                 # mark and add both
-                new_schema[idx - 1] = col
-                new_schema[idx] = added_column
+                new_schema.append(col)
+                new_schema.append(added_column)
                 update_ordinal_position = True
 
             elif update_ordinal_position:
                 # shift ordinal position of others
                 col['ORDINAL_POSITION'] = idx + 1
+                new_schema.append(col)
             else:
                 # otherwise append unchanged
                 new_schema.append(col)
