@@ -304,6 +304,26 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1], table_changes)
 
+    def test_multi_add_with_idenitifier_bracket(self):
+        add_single = """ALTER TABLE receive ADD (receive_pallet_id INT DEFAULT NULL, type VARCHAR(255) DEFAULT NULL COMMENT '(DC2Type:receive_type)'), ALGORITHM=INPLACE, LOCK= NONE"""
+        normalized = self.normalize_sql(add_single)
+
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='receive',
+                                    schema='cdc',
+                                    column_name='receive_pallet_id',
+                                    data_type='INT',
+                                    query=normalized)
+        change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='receive',
+                                    schema='cdc',
+                                    column_name='TYPE',
+                                    data_type='VARCHAR(255)',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(add_single, 'cdc')
+
+        self.assertEqual([change1, change2], table_changes)
+
     def test_multi_add_statement_w_comments_quotes(self):
         add_multi = """ /* some commmennts
           aaa */ ALTER   TABLE      `cdc`.`TableName`
