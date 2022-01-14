@@ -4,7 +4,8 @@ from enum import Enum
 from typing import List, Optional, Tuple
 
 import sqlparse
-from sqlparse.sql import Identifier, Statement, Token, IdentifierList, TokenList
+from sqlparse.sql import Identifier, Statement, Token, IdentifierList, TokenList, Parenthesis
+from sqlparse.tokens import Whitespace
 
 TABLE_NAME_INDEX = 4
 
@@ -79,16 +80,35 @@ class AlterStatementParser:
         return isinstance(token, Identifier) or parent_is_name
 
     @staticmethod
-    def __ungroup_identifier_lists(statement: Statement):
+    def _split_parenthesis(statement, token, position):
+        ddl_type = statement.token_prev(position, skip_cm=True)
+        new_tokens = []
+        token_flat = []
+        for t in list(token)[1:-1]:
+            token_flat.extend(t.flatten()) if isinstance(t, IdentifierList) else token_flat.append(t)
+        for t in token_flat:
+
+            if t.ttype == sqlparse.tokens.Punctuation and t.normalized == ',':
+                new_tokens.append(t)
+                new_tokens.append(Token(Whitespace, ' '))
+                new_tokens.append(ddl_type[1])
+                new_tokens.append(Token(Whitespace, ' '))
+            else:
+                new_tokens.append(t)
+        return new_tokens
+
+    def __ungroup_identifier_lists(self, statement: Statement):
         """
         Dirty fix of a sqlparser bug that falsely groups statements like (FIRST, ADD) in
         ADD COLUMN email VARCHAR(100) NOT NULL FIRST, ADD
         """
         tokens = []
-        for t in statement:
+        for idx, t in enumerate(statement):
 
             if isinstance(t, IdentifierList):
                 tokens.extend(t.flatten())
+            elif isinstance(t, Parenthesis):
+                tokens.extend(self._split_parenthesis(statement, t, idx))
             else:
                 tokens.append(t)
         return TokenList(tokens)
