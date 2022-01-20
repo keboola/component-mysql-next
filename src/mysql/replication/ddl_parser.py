@@ -49,11 +49,19 @@ class AlterStatementParser:
     # minimal size of a query (ALTER TABLE xx XXX SOMETHING)
     MINIMAL_TOKEN_COUNT = 9
 
-    @staticmethod
-    def _is_matching_pattern(statement: Statement, pattern: str):
+    def _is_column_name(self, statement: Statement, idx: int):
+        next_idx, next_token = self._get_element_next_to_position(statement, idx)
+        if statement.tokens[idx].normalized.upper() == 'FOREIGN' and next_token.upper() == 'KEY':
+            return False
+
+        return True
+
+    def _is_matching_pattern(self, statement: Statement, pattern: str):
         match = True
         for idx, value in enumerate(re.split(r'(\s+)', pattern)):
             if value.startswith('{'):
+                if value == '{col_name}' and not self._is_column_name(statement, idx):
+                    match = False
                 continue
             if statement.tokens[idx].normalized != value:
                 match = False
@@ -134,7 +142,8 @@ class AlterStatementParser:
 
     def _get_element_next_to_position(self, statement: TokenList, position):
         index, value = statement.token_next(position, skip_cm=True)
-        return index, value.normalized
+        next_value = value.normalized if value else ''
+        return index, next_value
 
     def _process_drop_event(self, table_name, schema,
                             statement: Statement, original_statement_sql) -> List[TableSchemaChange]:

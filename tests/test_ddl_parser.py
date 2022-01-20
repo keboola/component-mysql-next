@@ -415,6 +415,13 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1, change2, change3, change4], table_changes)
 
+    def test_drop_foreign_key(self):
+        drop = """ALTER TABLE zpl_label DROP FOREIGN KEY FK_569FF7337BE036FC, ALGORITHM=INPLACE, LOCK= NONE"""
+
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
