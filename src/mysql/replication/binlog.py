@@ -213,6 +213,7 @@ def calculate_bookmark(mysql_conn, binlog_streams_map, state):
 
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
+            logging.debug('Executing SHOW BINARY LOGS')
             cur.execute("SHOW BINARY LOGS")
 
             binary_logs = cur.fetchall()
