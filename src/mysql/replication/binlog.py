@@ -77,24 +77,18 @@ def verify_binlog_config(mysql_conn):
                                 "'FULL': {}.".format(binlog_row_image))
 
 
-def verify_log_file_exists(mysql_conn, log_file, log_pos):
-    with connect_with_backoff(mysql_conn) as open_conn:
-        with open_conn.cursor() as cur:
-            logging.debug('Executing SHOW BINARY LOGS')
-            cur.execute("SHOW BINARY LOGS")
-            result = cur.fetchall()
+def verify_log_file_exists(binary_logs, log_file, log_pos):
+    existing_log_file = list(filter(lambda log: log[0] == log_file, binary_logs))
 
-            existing_log_file = list(filter(lambda log: log[0] == log_file, result))
+    if not existing_log_file:
+        raise Exception("Unable to replicate binlog stream because log file {} does not exist."
+                        .format(log_file))
 
-            if not existing_log_file:
-                raise Exception("Unable to replicate binlog stream because log file {} does not exist."
-                                .format(log_file))
+    current_log_pos = existing_log_file[0][1]
 
-            current_log_pos = existing_log_file[0][1]
-
-            if log_pos > current_log_pos:
-                raise Exception("Unable to replicate binlog stream because requested position ({}) for log file {} is "
-                                "greater than current position ({}).".format(log_pos, log_file, current_log_pos))
+    if log_pos > current_log_pos:
+        raise Exception("Unable to replicate binlog stream because requested position ({}) for log file {} is "
+                        "greater than current position ({}).".format(log_pos, log_file, current_log_pos))
 
 
 def fetch_current_log_file_and_pos(mysql_conn):
@@ -230,7 +224,7 @@ def calculate_bookmark(mysql_conn, binlog_streams_map, state):
 
                 for log_file in sorted(server_logs_set):
                     if min_log_pos_per_file.get(log_file):
-                        return log_file, min_log_pos_per_file[log_file]['log_pos']
+                        return log_file, min_log_pos_per_file[log_file]['log_pos'], binary_logs
 
             raise Exception("Unable to replicate binlog stream because no binary logs exist on the server.")
 
@@ -482,10 +476,9 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
     for tap_stream_id in binlog_streams_map.keys():
         common.whitelist_bookmark_keys(BOOKMARK_KEYS, tap_stream_id, state)
 
-    log_file, log_pos = calculate_bookmark(mysql_conn, binlog_streams_map, state)
+    log_file, log_pos, binary_logs = calculate_bookmark(mysql_conn, binlog_streams_map, state)
 
-    # TODO: is this needed? already checked in step before?
-    verify_log_file_exists(mysql_conn, log_file, log_pos)
+    verify_log_file_exists(binary_logs, log_file, log_pos)
 
     if config.get('server_id'):
         server_id = int(config.get('server_id'))
