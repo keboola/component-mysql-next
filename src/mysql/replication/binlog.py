@@ -80,6 +80,7 @@ def verify_binlog_config(mysql_conn):
 def verify_log_file_exists(mysql_conn, log_file, log_pos):
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
+            logging.debug('Executing SHOW BINARY LOGS')
             cur.execute("SHOW BINARY LOGS")
             result = cur.fetchall()
 
