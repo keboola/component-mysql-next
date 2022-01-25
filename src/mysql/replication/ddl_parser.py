@@ -55,6 +55,8 @@ class AlterStatementParser:
             return False
         if statement.tokens[idx].normalized.upper() == 'CONSTRAINT':
             return False
+        if statement.tokens[idx].normalized.upper() == 'UNIQUE':
+            return False
 
         return True
 

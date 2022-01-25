@@ -430,6 +430,15 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([], table_changes)
 
+    def test_add_unique_constraint(self):
+        drop = """ALTER TABLE shipping_method_warehouse_config 
+        ADD UNIQUE UNIQ_SHIPPING_METHOD__WAREHOUSE (shipping_method_id, warehouse_id),        
+        ALGORITHM=INPLACE,        LOCK=   NONE"""
+
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
