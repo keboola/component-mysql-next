@@ -53,6 +53,8 @@ class AlterStatementParser:
         next_idx, next_token = self._get_element_next_to_position(statement, idx)
         if statement.tokens[idx].normalized.upper() == 'FOREIGN' and next_token.upper() == 'KEY':
             return False
+        if statement.tokens[idx].normalized.upper() == 'CONSTRAINT':
+            return False
 
         return True
 

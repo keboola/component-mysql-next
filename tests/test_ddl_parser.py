@@ -422,6 +422,14 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([], table_changes)
 
+    def test_add_foreign_key(self):
+        drop = """ALTER TABLE shipment ADD CONSTRAINT FK_2CB20DC7B216700 FOREIGN KEY (zpl_label_id) 
+        REFERENCES zpl_label (id),        ALGORITHM=INPLACE,        LOCK=   NONE"""
+
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
