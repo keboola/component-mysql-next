@@ -63,7 +63,7 @@ class TableColumnSchemaCache:
                 internal cache of column schema that is actual at the time of execution
                 (possibly newer than table_schema_cache)
         """
-        self.table_schema_cache = table_schema_cache
+        self.table_schema_cache = table_schema_cache or {}
         self.__table_indexes = {}
 
         # internal cache of column schema that is actual at the time of execution
