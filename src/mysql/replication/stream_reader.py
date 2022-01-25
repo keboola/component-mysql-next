@@ -579,6 +579,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
 
             # invalidate table_map cache so it is rebuilt from schema cache next TABLE_MAP_EVENT
             self._invalidate_table_map(table_change.schema, table_change.table_name)
+        if not monitored_changes:
+            logging.debug(f"ALTER statements detected, but no table change recognised.")
         return monitored_changes
 
     def _invalidate_table_map(self, schema: str, table_name: str):
