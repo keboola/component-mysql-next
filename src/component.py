@@ -1284,6 +1284,8 @@ class Component(KBCEnvHandler):
         with connection_context as server:
             if server:  # True if set an SSH tunnel returns false if using the null context.
                 logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
+                self.mysql_config_params['host'] = server.local_bind_host
+                self.mysql_config_params['port'] = server.local_bind_port
             else:
                 logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
