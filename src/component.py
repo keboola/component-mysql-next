@@ -363,6 +363,7 @@ def discover_catalog(mysql_conn, config, append_mode):
                 rec = cur.fetchone()
 
             entries = []
+            logging.debug(f"Table info: {table_info}")
             for (k, cols) in itertools.groupby(columns, lambda c: (c.table_schema, c.table_name)):
                 cols = list(cols)
                 (table_schema, table_name) = k
