@@ -20,7 +20,6 @@ TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 """
 import ast
 import base64
-import binascii
 import copy
 import csv
 import itertools
@@ -32,6 +31,7 @@ from collections import namedtuple
 from contextlib import nullcontext
 from io import StringIO
 
+import binascii
 import pandas as pd
 import paramiko
 import pendulum
@@ -41,6 +41,8 @@ import yaml
 from sshtunnel import SSHTunnelForwarder
 
 from mysql.replication.stream_reader import TableColumnSchemaCache
+
+KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
 
 try:
     import core as core
@@ -674,7 +676,8 @@ class Component(KBCEnvHandler):
             "ssl": self.params.get(KEY_USE_SSL),
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
-            "connect_timeout": CONNECT_TIMEOUT
+            "connect_timeout": CONNECT_TIMEOUT,
+            "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
         }
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.

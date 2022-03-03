@@ -7,10 +7,12 @@ import datetime
 import json
 import logging
 import uuid
+from typing import Tuple, List
 
 import pymysql.connections
 import pymysql.err
 import pytz
+import requests
 from pymysqlreplication.constants import FIELD_TYPE
 from pymysqlreplication.event import RotateEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
@@ -203,30 +205,25 @@ def get_min_log_pos_per_log_file(binlog_streams_map, state):
     return min_log_pos_per_file
 
 
-def calculate_bookmark(mysql_conn, binlog_streams_map, state):
+def calculate_bookmark(show_binlog_method, binlog_streams_map, state):
     min_log_pos_per_file = get_min_log_pos_per_log_file(binlog_streams_map, state)
 
-    with connect_with_backoff(mysql_conn) as open_conn:
-        with open_conn.cursor() as cur:
-            logging.debug('Executing SHOW BINARY LOGS')
-            cur.execute("SHOW BINARY LOGS")
+    binary_logs = show_binlog_method()
 
-            binary_logs = cur.fetchall()
+    if binary_logs:
+        server_logs_set = {log[0] for log in binary_logs}
+        state_logs_set = set(min_log_pos_per_file.keys())
+        expired_logs = state_logs_set.difference(server_logs_set)
 
-            if binary_logs:
-                server_logs_set = {log[0] for log in binary_logs}
-                state_logs_set = set(min_log_pos_per_file.keys())
-                expired_logs = state_logs_set.difference(server_logs_set)
+        if expired_logs:
+            raise Exception("Unable to replicate binlog stream because the following binary log(s) no longer "
+                            "exist: {}".format(", ".join(expired_logs)))
 
-                if expired_logs:
-                    raise Exception("Unable to replicate binlog stream because the following binary log(s) no longer "
-                                    "exist: {}".format(", ".join(expired_logs)))
+        for log_file in sorted(server_logs_set):
+            if min_log_pos_per_file.get(log_file):
+                return log_file, min_log_pos_per_file[log_file]['log_pos'], binary_logs
 
-                for log_file in sorted(server_logs_set):
-                    if min_log_pos_per_file.get(log_file):
-                        return log_file, min_log_pos_per_file[log_file]['log_pos'], binary_logs
-
-            raise Exception("Unable to replicate binlog stream because no binary logs exist on the server.")
+    raise Exception("Unable to replicate binlog stream because no binary logs exist on the server.")
 
 
 def update_bookmarks(state, binlog_streams_map, log_file, log_pos):
@@ -468,6 +465,53 @@ def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog
             core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
 
+class ShowBinlogMethodFactory:
+    """
+    SHOW BINLOG may be slow, this supports other methods of binlog retrieval
+    """
+
+    def __init__(self, mysql_connection, method_configuration: dict):
+        self._mysql_conn = mysql_connection
+        self._configuration = method_configuration
+
+    def get_show_binlog_method(self):
+        method_config = self._configuration
+        if method_config.get('method', 'direct') == 'direct':
+            show_binlog_method = self._show_binlog_from_db
+        elif method_config.get('method') == 'endpoint':
+            show_binlog_method = self._show_binlog_from_endpoint
+        else:
+            raise ValueError(f'Provided show_binlog_method: {method_config} is invalid')
+        return show_binlog_method
+
+    def _show_binlog_from_db(self) -> dict:
+        with connect_with_backoff(self._mysql_conn) as open_conn:
+            with open_conn.cursor() as cur:
+                logging.debug('Executing SHOW BINARY LOGS')
+                cur.execute("SHOW BINARY LOGS")
+
+                binary_logs = cur.fetchall()
+                return binary_logs
+
+    def _show_binlog_from_endpoint(self) -> List[Tuple]:
+        """
+        Expects endpoint returning SHOW BINLOGS array in
+        {"logs":[{'log_name': 'mysql-bin-changelog.189135', 'file_size': '134221723'}]} response
+        Returns:
+
+        """
+        endpoint_url = self._configuration.get('endpoint_url')
+        if not endpoint_url:
+            raise ValueError(f'Show binlog method from endpoint requires "endpoint_url" parameters defined! '
+                             f'Provided configuration is invalid: {self._configuration}.')
+        logging.info(f"Getting SHOW Binary logs from {endpoint_url} endpoint")
+        response = requests.get(endpoint_url)
+        response.raise_for_status()
+        log_array = response.json()['logs']
+        binlogs = [(lg['log_name'], lg['file_size']) for lg in log_array]
+        return binlogs
+
+
 def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None,
                        schemas=[], tables=[], columns={}):
     last_table_schema_cache = state.get(bookmarks.KEY_LAST_TABLE_SCHEMAS, {})
@@ -476,7 +520,11 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
     for tap_stream_id in binlog_streams_map.keys():
         common.whitelist_bookmark_keys(BOOKMARK_KEYS, tap_stream_id, state)
 
-    log_file, log_pos, binary_logs = calculate_bookmark(mysql_conn, binlog_streams_map, state)
+    # build show binary log method
+    shbn_factory = ShowBinlogMethodFactory(mysql_conn, config.get('show_binary_log_config', {}))
+    show_binlog_method = shbn_factory.get_show_binlog_method()
+
+    log_file, log_pos, binary_logs = calculate_bookmark(show_binlog_method, binlog_streams_map, state)
 
     verify_log_file_exists(binary_logs, log_file, log_pos)
 
