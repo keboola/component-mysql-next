@@ -508,7 +508,7 @@ class ShowBinlogMethodFactory:
         response = requests.get(endpoint_url)
         response.raise_for_status()
         log_array = response.json()['logs']
-        binlogs = [(lg['log_name'], lg['file_size']) for lg in log_array]
+        binlogs = [(lg['log_name'], int(lg['file_size'])) for lg in log_array]
         return binlogs
 
 
