@@ -282,10 +282,10 @@ def discover_catalog(mysql_conn, config, append_mode):
 
     if filter_dbs_config:
         filter_dbs_clause = ",".join(["'{}'".format(db) for db in filter_dbs_config])
-        table_schema_clause = "WHERE table_schema IN ({})".format(filter_dbs_clause)
+        table_schema_clause = "WHERE t.table_schema IN ({})".format(filter_dbs_clause)
     else:
         table_schema_clause = """
-        WHERE table_schema NOT IN (
+        WHERE t.table_schema NOT IN (
         'information_schema',
         'performance_schema',
         'mysql',
@@ -294,12 +294,13 @@ def discover_catalog(mysql_conn, config, append_mode):
 
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
+            # TODO: allow views as well, or to choose
             cur.execute("""
             SELECT table_schema,
                    table_name,
                    table_type,
                    table_rows
-            FROM information_schema.tables
+            FROM information_schema.tables t
                 {}
             AND table_type != 'VIEW'
             """.format(table_schema_clause))
@@ -341,18 +342,20 @@ def discover_catalog(mysql_conn, config, append_mode):
                     table_info[db][table]['primary_keys'] = table_primary_keys
 
             cur.execute("""
-                SELECT table_schema,
-                       table_name,
-                       column_name,
-                       data_type,
-                       character_maximum_length,
-                       numeric_precision,
-                       numeric_scale,
-                       column_type,
-                       column_key,
-                       character_set_name
-                    FROM information_schema.columns
+                SELECT c.table_schema,
+                       c.table_name,
+                       c.column_name,
+                       c.data_type,
+                       c.character_maximum_length,
+                       c.numeric_precision,
+                       c.numeric_scale,
+                       c.column_type,
+                       c.column_key,
+                       c.character_set_name
+                    FROM information_schema.columns c JOIN
+                    information_schema.tables t ON c.table_schema = t.table_schema and c.table_name = t.table_name
                     {}
+                    AND t.table_type != 'VIEW'
                     ORDER BY table_schema, table_name
             """.format(table_schema_clause))
 
@@ -363,6 +366,7 @@ def discover_catalog(mysql_conn, config, append_mode):
                 rec = cur.fetchone()
 
             entries = []
+            logging.debug(f"Table info: {table_info}")
             for (k, cols) in itertools.groupby(columns, lambda c: (c.table_schema, c.table_name)):
                 cols = list(cols)
                 (table_schema, table_name) = k
@@ -1284,6 +1288,8 @@ class Component(KBCEnvHandler):
         with connection_context as server:
             if server:  # True if set an SSH tunnel returns false if using the null context.
                 logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
+                self.mysql_config_params['host'] = server.local_bind_host
+                self.mysql_config_params['port'] = server.local_bind_port
             else:
                 logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
