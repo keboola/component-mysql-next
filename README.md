@@ -1,105 +1,84 @@
-# KBC Component Python template
+# MySQL Next
+#### Summary
+The open source database enables delivering high-performance and scalable web-based and embedded database applications.
+This configuration works for MySQL databases hosted on AWS RDS, Aurora MySQL, and standard non-hosted MySQL. MySQL next
+allows for choice of replication style at the table level, supporting log-based incremental replication.
 
-Python template for KBC Component creation. Defines the default structure and all Bitbucket pipeline CI scripts for automatic deployment.
+#### Log-Based Replication for Change Data Capture
+Log-based replication is a type of change data capture (CDC) where incremental changes made to a database are detected
+by reading the binary logs (AKA binlogs in MySQL) to pick up only changes since the last execution of this pipeline.
+More specifically, all INSERT, UPDATE, and DELETE statements are appropriately recorded for database change capture.
+This replication style is actually the fastest method for identifying change (faster than key-based replication in
+almost every case) and has the ability to capture hard deletes (so long as they are run as a DELETE, not a TRUNCATE or 
+DROP statement), unlike key-based replication. Deleted records will be left with a "deletion marker", identified by a
+timestamp for the time the record was deleted in the special _KBC_DELETED_TIME column.
 
-Use as a starting point when creating a new component.
+Generally speaking, a full sync is run during the first execution with log-based replication. From there, markers are
+recorded to essentially keep track of the max of each table where the work was left off. From there, log-based
+replication truly kicks in. All row-based binary logs for append, update and deletion events are captured and written to
+Keboola storage. We record the place we last left off among those binary log files, and continue from there.
 
-Example uses [keboola-python-util-lib](https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/src/master/) library providing useful methods for KBC related tasks and boilerplate methods often needed by components, for more details see [documentation](https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/src/master/README.md)
+*Note*: A full table replication must be run if schema changes are necessary, i.e. adding a new column.
 
-
-## Recommended component architecture
-It is recommended to use the [keboola-python-util-lib library](https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/src/master/), 
-for each component. Major advantage is that it reduces the boilerplate code replication, the developer can focus on core component logic 
-and not on boilerplate tasks. If anything is missing in the library, please fork and create a pull request with additional changes, 
-so we can all benefit from it
-
-**Base components on [KBCEnvHandler](https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/src/master/docs/env_handler.md?at=master)**
-
-- No need to write configuration processing and validation code each time
-- No need to setup logging environment manually
-- No need to write code to store manifests, write statefile, retrieve dates based on relative period, and many more.
-- The main focus can be the core component logic, which increases the code readability for new comers.
-
-**Base Client on [HtttpClientBase](https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/src/master/docs/client_base.md?at=master)**
-
-- No need to write HTTP request handling over and over again
-- Covers basic authentication, retry strategy, headers, default parameters
-
-**Process results using [result.py](https://bitbucket.org/kds_consulting_team/keboola-python-util-lib/src/master/docs/result.md?at=master) package**
-
-- No need to use pandas
-- Enables basic json response flattening
-- Fixed headers, user values and more useful functionality
-
-
-### Example component
-This template contains functional example of an [extractor component](https://bitbucket.org/kds_consulting_team/kbc-python-template/src/master/src/component.py), 
-it can be run with [sample configuration](https://bitbucket.org/kds_consulting_team/kbc-python-template/src/master/data/) and it produces valid results. 
-It is advisable to use this structure as a base for new components. Especially the `component.py` module, which should only 
-contain the base logic necessary for communication with KBC interface, processing parameters, collecting results
- and calling targeted API service methods. 
-
-
-##Creating a new component
-Clone this repository into new folder and remove git history
-```bash
-git clone https://bitbucket.org:kds_consulting_team/kbc-python-template.git my-new-component
-cd my-new-component
-rm -rf .git
-git init
-git remote add origin PATH_TO_YOUR_BB_REPO
-git update-index --chmod=+x deploy.sh
-git update-index --chmod=+x scripts/update_dev_portal_properties.sh
-git add .
-git commit -m 'initial'
-git push -u origin master
+#### Setting Up the Database Connection
+In order to connect to MySQL, you will supply your host name or IP, port (usually 3306), username and password. The
+username and password you specify will essentially act as a Keboola service account. To create this user, you will need
+to run the following SQL command against your instance:
+```sql
+create user keboola@'%' identified by '{insert strong password here}';
+grant replication client, replication slave, select ON *.* TO keboola@'%';
 ```
+If you follow the above, you will use Username 'keboola' during configuration, and the password you set for Password.
 
+If you are authenticating without using an SSH tunnel, you will need to whitelist Keboola IPs (see [here](https://help.keboola.com/components/ip-addresses)).
+If you are connecting via an SSH tunnel, specify 'ssh_tunnel' as True and supply the necessary parameters for your SSH
+connection: SSH host IP, port (usually 22), SSH user and public key for accessing the SSH host.
 
-##Setting up the CI
- - Enable [pipelines](https://confluence.atlassian.com/bitbucket/get-started-with-bitbucket-pipelines-792298921.html) in the repository.
- - Set `KBC_DEVELOPERPORTAL_APP` env variable in Bitbucket (dev portal app id)
+#### Setting up Binary Logging
+In order for log-based replication to work, you must have enabled [row-based binary logging](https://dev.mysql.com/doc/refman/8.0/en/binary-log-setting.html)
+on your MySQL instance/cluster. If you are using Aurora MySQL you will need to use a
+[database cluster parameter group](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithParamGroups.html)
+with parameter 'binlog_format' set to 'ROW'.
+
+By default, MySQL removes these binary logs as soon as possible. However, in order to read them effectively for
+replication, we want to extend this retention period. You should set this to anywhere between 1 and 7 days. For example,
+if setting to a 3 day retention period, you would run the following:
+```sql
+call mysql.rds_set_configuration('binlog retention hours, 72);
+```
+The above only needs to be set up during initial setup for replication. You can also run
+`call mysql.rds_show_configuration;` to see your existing binlog retention hours value, if any.
+
+#### Setting Up the Configuration File
+Setup is relatively straightforward! For each table or view that you would like to replicate, you just need to add two
+options to the "metadata" section of that table or view. First, specify `"selected": true`. Next, choose the replication 
+method by setting `"replication-method": "INCREMENTAL"`. Allowed values are `FULL_TABLE`, `INCREMENTAL` and `LOG_BASED`.
+
+If you choose `INCREMENTAL`, you also must specify a replication key, the field that will be used to determine if a 
+given row in that table has changed. You specify this with an additional parameter, such as 
+`"replication-key": "updated_at"`. `LOG_BASED` is only allowed if the server is set up to support it, and the database 
+object is a table, not a view.
+
+For any replication method, once you have chosen "selected" to True at the table level for each table/view you want to 
+include, set `"selected": false` for any column(s) that you want to exclude from the replication (i.e. sensitive info),
+by default all columns are included for selected tables.
+
+By default all tables and views are excluded to protect potentially sensitive data.
+However, if you choose to include a table, all columns are included by default (for ease of adding new tables); any
+columns you would like to exclude must be explicitly set as such by including `selected: false` on that column.
+
+#### Pulling Existing Schema Definitions
+The extractor has the ability to pull existing schema definitions. If you set the parameter discover_schema to True, the
+extractor will pull databases(schemas), tables and fields. You can then choose which to include or exclude.
+
+#### Running Historical Syncs
+Upon your first execution, all tables must run an initial first full sync. However, you need to set the configuration
+file to do so, it will automatically. Full historical syncs on a particular table will be necessary in the future
+whenever you update the schema you are pulling from that table. A full database re-sync will ONLY be necessary if you do
+not run a sync for a long period of time, beyond your current 'binlog retention hours' setting.
  
- In case it is not set on the account level, set also other required dev portal env variables:
- - `KBC_DEVELOPERPORTAL_PASSWORD` - service account password
- - `KBC_DEVELOPERPORTAL_USERNAME` - service account username
- - `KBC_DEVELOPERPORTAL_VENDOR` - dev portal vendor
- - `APP_IMAGE` - arbitrary tag name of the docker image e.g. “keboola-component”
- - `KBC_STORAGE_TOKEN` - in case you wish to run KBC automated tests
-  
- 
- ![picture](docs/imgs/ci_variable.png)
- 
-The script execution is defined in three stages:
 
-### Default stage
-This script is executed on push to any branch except the master branch. It executes basic build and code quality steps. Following steps are performed:
-Build docker image
-Execute flake8 lint tests
-Execute python unittest
-(Optional) Push image with tag :test into the AWS repository for manual testing in KBC
-If any of the above steps results in non 0 status, the build will fail. It is impossible to merge branches that fail to build into the master branch.
 
-### Master stage
-This script is executed on any push or change in the master branch. It performs every step as the default stage. Additionally, 
-the `./scripts/update_dev_portal_properties.sh` script is executed. 
-This script propagates all changes in the Component configuration files (component_config folder) to the Developer portal.
-Currently these Dev Portal configuration parameters are supported:
- - `configuration_schema.json`
- - `short_description.md`
- - `long_description.md`    
-
-The choice to include this script directly in the master branch was made to simplify ad-hoc changes of the component configuration parameters. For instance if you wish to slightly modify the configuration schema without affecting the code itself, it is possible to simply push the changes directly into the master and these will be automatically propagated to the production without rebuilding the image itself. Solely Developer Portal configuration metadata is deployed at this stage.
-
-### Tagged commit stage
-Whenever a tagged commit is added, or tag created this script gets executed. This is a deployment phase, so a successful build results in new code being deployed in KBC production.
-At this stage all steps present in the default and master stage are executed. Additionally, 
-`deploy.sh` script that pushes the newly built image / tag into the ECR repository and KBC production is executed.
-The deploy script is executed only after all tests and proper build steps passed. 
-Moreover, the `deploy.sh` script will be executed **only in the master branch**. In other words if you create a tagged commit in another branch, the pipeline gets triggered but deployment script will fail, because it is not triggered within a master branch. This is to prevent accidental deployment from a feature branch.
-
- 
- 
 ## Development
  
 This example contains runnable container with simple unittest. For local testing it is useful to include `data` folder in the root
