@@ -156,7 +156,8 @@ Column = namedtuple('Column', [
     "numeric_scale",
     "column_type",
     "column_key",
-    "character_set_name"
+    "character_set_name",
+    "ordinal_position"
 ])
 
 
@@ -271,6 +272,10 @@ def create_column_metadata(cols):
                                ('properties', c.column_name),
                                'sql-datatype',
                                c.column_type.lower())
+        mdata = metadata.write(mdata,
+                               ('properties', c.column_name),
+                               'ordinal-position',
+                               c.ordinal_position)
 
     return metadata.to_list(mdata)
 
@@ -351,7 +356,8 @@ def discover_catalog(mysql_conn, config, append_mode):
                        c.numeric_scale,
                        c.column_type,
                        c.column_key,
-                       c.character_set_name
+                       c.character_set_name,
+                       c.ordinal_position
                     FROM information_schema.columns c JOIN
                     information_schema.tables t ON c.table_schema = t.table_schema and c.table_name = t.table_name
                     {}
@@ -786,12 +792,15 @@ class Component(KBCEnvHandler):
         for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
             col_name = column_metadata['breadcrumb'][1]
             col_type = column_metadata['metadata']['sql-datatype']
-            ordinal_position = idx
+            ordinal_position = column_metadata['metadata']['ordinal-position']
             is_pkey = col_name in primary_keys
             character_set = column_properties[col_name].characterSet
             schema = TableColumnSchemaCache.build_column_schema(col_name.upper(), ordinal_position, col_type, is_pkey,
                                                                 character_set_name=character_set)
             table_schema.append(schema)
+
+        # ensure sort by ordinal position to avoid later shift
+        table_schema = sorted(table_schema, key=lambda sch: sch['ORDINAL_POSITION'])
 
         return table_schema
 
