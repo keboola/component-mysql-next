@@ -751,6 +751,10 @@ class Component(KBCEnvHandler):
 
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
+        # Update state last_table_schema with current schema, and store KBC cols
+        table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
+        state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
+
         if log_file and log_pos and max_pk_values:
             logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
             full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
@@ -778,10 +782,6 @@ class Component(KBCEnvHandler):
                                              tables_destination=tables_destination, message_store=message_store)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
-
-            # Update state last_table_schema with current schema, and store KBC cols
-            table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
-            state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
 
     @staticmethod
     def _build_schema_cache_from_catalog_entry(catalog_entry):
