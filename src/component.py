@@ -156,7 +156,8 @@ Column = namedtuple('Column', [
     "numeric_scale",
     "column_type",
     "column_key",
-    "character_set_name"
+    "character_set_name",
+    "ordinal_position"
 ])
 
 
@@ -271,6 +272,10 @@ def create_column_metadata(cols):
                                ('properties', c.column_name),
                                'sql-datatype',
                                c.column_type.lower())
+        mdata = metadata.write(mdata,
+                               ('properties', c.column_name),
+                               'ordinal-position',
+                               c.ordinal_position)
 
     return metadata.to_list(mdata)
 
@@ -351,7 +356,8 @@ def discover_catalog(mysql_conn, config, append_mode):
                        c.numeric_scale,
                        c.column_type,
                        c.column_key,
-                       c.character_set_name
+                       c.character_set_name,
+                       c.ordinal_position
                     FROM information_schema.columns c JOIN
                     information_schema.tables t ON c.table_schema = t.table_schema and c.table_name = t.table_name
                     {}
@@ -745,6 +751,10 @@ class Component(KBCEnvHandler):
 
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
+        # Update state last_table_schema with current schema, and store KBC cols
+        table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
+        state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
+
         if log_file and log_pos and max_pk_values:
             logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
             full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
@@ -773,10 +783,6 @@ class Component(KBCEnvHandler):
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
-            # Update state last_table_schema with current schema, and store KBC cols
-            table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
-            state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
-
     @staticmethod
     def _build_schema_cache_from_catalog_entry(catalog_entry):
 
@@ -786,12 +792,15 @@ class Component(KBCEnvHandler):
         for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
             col_name = column_metadata['breadcrumb'][1]
             col_type = column_metadata['metadata']['sql-datatype']
-            ordinal_position = idx
+            ordinal_position = column_metadata['metadata']['ordinal-position']
             is_pkey = col_name in primary_keys
             character_set = column_properties[col_name].characterSet
             schema = TableColumnSchemaCache.build_column_schema(col_name.upper(), ordinal_position, col_type, is_pkey,
                                                                 character_set_name=character_set)
             table_schema.append(schema)
+
+        # ensure sort by ordinal position to avoid later shift
+        table_schema = sorted(table_schema, key=lambda sch: sch['ORDINAL_POSITION'])
 
         return table_schema
 
