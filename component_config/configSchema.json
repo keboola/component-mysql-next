@@ -204,6 +204,7 @@
           "type": "boolean",
           "title": "Enable Basic Authentication",
           "format": "checkbox",
+          "default": false,
           "options": {
             "dependencies": {
               "method": "endpoint"
