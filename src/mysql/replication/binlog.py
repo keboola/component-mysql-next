@@ -506,7 +506,7 @@ class ShowBinlogMethodFactory:
         """
 
         def get_session(max_retries: int = 3, backoff_factor: float = 0.3,
-                        status_forcelist: Tuple[int, ...] = (500, 502, 504)) -> requests.Session:
+                        status_forcelist: Tuple[int, ...] = (500, 502, 503, 504)) -> requests.Session:
             session = requests.Session()
             retry = Retry(
                 total=max_retries,
