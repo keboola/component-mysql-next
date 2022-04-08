@@ -16,6 +16,8 @@ import requests
 from pymysqlreplication.constants import FIELD_TYPE
 from pymysqlreplication.event import RotateEvent
 from pymysqlreplication.row_event import (DeleteRowsEvent, UpdateRowsEvent, WriteRowsEvent)
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 from core import bookmarks
 from mysql.replication.stream_reader import BinLogStreamReaderAlterTracking, SchemaOffsyncError, \
@@ -498,15 +500,37 @@ class ShowBinlogMethodFactory:
         """
         Expects endpoint returning SHOW BINLOGS array in
         {"logs":[{'log_name': 'mysql-bin-changelog.189135', 'file_size': '134221723'}]} response
+
         Returns:
 
         """
+
+        def get_session(max_retries: int = 3, backoff_factor: float = 0.3,
+                        status_forcelist: Tuple[int, ...] = (500, 502, 504)) -> requests.Session:
+            session = requests.Session()
+            retry = Retry(
+                total=max_retries,
+                read=max_retries,
+                connect=max_retries,
+                backoff_factor=backoff_factor,
+                status_forcelist=status_forcelist,
+                allowed_methods='GET'
+            )
+            adapter = HTTPAdapter(max_retries=retry)
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
+            return session
+
         endpoint_url = self._configuration.get('endpoint_url')
+        auth = None
+        if self._configuration.get('authentication'):
+            auth = (self._configuration['user'], self._configuration['#password'])
+
         if not endpoint_url:
             raise ValueError(f'Show binlog method from endpoint requires "endpoint_url" parameters defined! '
                              f'Provided configuration is invalid: {self._configuration}.')
         logging.info(f"Getting SHOW Binary logs from {endpoint_url} endpoint")
-        response = requests.get(endpoint_url)
+        response = get_session().get(endpoint_url, auth=auth)
         response.raise_for_status()
         log_array = response.json()['logs']
         binlogs = [(lg['log_name'], int(lg['file_size'])) for lg in log_array]

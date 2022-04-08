@@ -199,6 +199,38 @@
             }
           },
           "propertyOrder": 10
+        },
+        "authentication": {
+          "type": "boolean",
+          "title": "Enable Basic Authentication",
+          "format": "checkbox",
+          "default": false,
+          "options": {
+            "dependencies": {
+              "method": "endpoint"
+            }
+          },
+          "propertyOrder": 11
+        },
+        "user": {
+          "type": "string",
+          "title": "Username",
+          "options": {
+            "dependencies": {
+              "authentication": true
+            }
+          },
+          "propertyOrder": 13
+        },
+        "#password": {
+          "type": "string",
+          "title": "Password",
+          "options": {
+            "dependencies": {
+              "authentication": true
+            }
+          },
+          "propertyOrder": 15
         }
       }
     },
