@@ -530,7 +530,7 @@ class ShowBinlogMethodFactory:
             raise ValueError(f'Show binlog method from endpoint requires "endpoint_url" parameters defined! '
                              f'Provided configuration is invalid: {self._configuration}.')
         logging.info(f"Getting SHOW Binary logs from {endpoint_url} endpoint")
-        response = get_session().get(endpoint_url, auth=auth)
+        response = get_session().get(endpoint_url, auth=auth, timeout=300)
         response.raise_for_status()
         log_array = response.json()['logs']
         binlogs = [(lg['log_name'], int(lg['file_size'])) for lg in log_array]
