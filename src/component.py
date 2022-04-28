@@ -26,13 +26,15 @@ import itertools
 import json
 import logging
 import os
+import shutil
 import sys
+import tempfile
 from collections import namedtuple
 from contextlib import nullcontext
 from io import StringIO
+from typing import List
 
 import binascii
-import pandas as pd
 import paramiko
 import pendulum
 import pymysql
@@ -1123,7 +1125,47 @@ class Component(KBCEnvHandler):
             logging.info('Wrote manifest table {}'.format(file_name + '.manifest'))
 
     @staticmethod
-    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list = None,
+    def deduplicate_binlog_result(table_path: str, primary_keys: List[str]):
+        """
+        Reads table backwards and deduplicates based on  primary key.
+        Args:
+            table_path:
+            primary_keys:
+
+        Returns:
+
+        """
+        with open(table_path, 'r') as inp:
+            r = csv.reader(inp)
+            header = next(r)
+
+        pkey_indexes = []
+        for pk in primary_keys:
+            pkey_indexes.append(header.index(pk))
+
+        pkey_hashes = set()
+
+        def create_pkey_hash(row_record: list):
+            return '|'.join(row_record[idx] for idx in pkey_indexes)
+
+        fd, temp_result = tempfile.mkstemp()
+        with open(temp_result, 'w+', newline='') as out_file:
+            writer = csv.writer(out_file, lineterminator='\n')
+            writer.writerow(header)
+            for row in csv.reader(core.utils.reverse_readline(table_path)):
+                pkey_hash = create_pkey_hash(row)
+                if pkey_hash in pkey_hashes:
+                    continue
+
+                pkey_hashes.add(pkey_hash)
+
+                if row != header:
+                    writer.writerow(row)
+        os.remove(table_path)
+
+        shutil.move(temp_result, table_path)
+
+    def write_only_latest_result_binlogs(self, csv_table_path: str, primary_keys: list = None,
                                          append_mode: bool = False) -> None:
         """For given result CSV file path, remove non-latest binlog event by primary key.
 
@@ -1141,10 +1183,7 @@ class Component(KBCEnvHandler):
                 logging.info('Keeping only latest per primary key from binary row event results for {} '
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
-                df = pd.read_csv(csv_table_path, dtype='string')
-                df.drop_duplicates(subset=[pk.upper() for pk in primary_keys], keep='last', inplace=True)
-                df.columns = [col.upper() for col in df.columns]
-                df.to_csv(csv_table_path, index=False)
+                self.deduplicate_binlog_result(csv_table_path, [pk.upper() for pk in primary_keys])
 
             else:
 
@@ -1198,12 +1237,6 @@ class Component(KBCEnvHandler):
         else:
             logging.info('All directories at walked path: {}'.format(directories))
             logging.info('All files sent at walked path: {}'.format(files))
-
-    def _uppercase_table(self, table_path):
-
-        _df = pd.read_csv(table_path, dtype='str')
-        _df.columns = map(str.upper, _df.columns)
-        _df.to_csv(table_path, index=False)
 
     def parse_input_mapping(self, input_mapping, input_mapping_type='json'):
         """Parses provided input mappings and returns a list of selected tables and schemas."""

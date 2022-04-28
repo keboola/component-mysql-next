@@ -11,19 +11,11 @@ import time
 import pymysql
 import pytz
 
-
-try:
-    import core as core
-    import core.metrics as metrics
-    from core import metadata
-    from core import utils
-    from core.messages import handle_binary_data
-except ImportError:
-    import src.core as core
-    import src.core.metrics as metrics
-    from src.core import metadata
-    from src.core import utils
-    from src.core.messages import handle_binary_data
+import core as core
+import core.metrics as metrics
+from core import metadata
+from core import utils
+from core.messages import handle_binary_data
 
 CURRENT_PATH = os.path.dirname(__file__)
 
