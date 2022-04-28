@@ -23,7 +23,7 @@ except ImportError:
 @dataclass
 class WriterCacheRecord:
     writer: csv.DictWriter
-    out_stream: TextIO[str]
+    out_stream: TextIO
 
 
 class Message:
