@@ -13,13 +13,14 @@ RUN apt-get install -y \
     build-essential \
     curl \
     libssl-dev \
-    openssl \
-    openssl-devel
+    openssl
 
 # Get Rust
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 
 ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install flake8
 
 
 # requirements
