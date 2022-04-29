@@ -48,7 +48,6 @@ virtualenv/
 *.spec
 *.json
 !output_config.json
-*.csv
 *.txt
 *.xml
 process_mappings.py
