@@ -33,11 +33,16 @@ class TestComponent(unittest.TestCase):
         temp_directory = tempfile.TemporaryDirectory().name
         os.makedirs(temp_directory, exist_ok=True)
         temp_file = os.path.join(temp_directory, 'test.csv')
-        shutil.copy('./resources/test.csv', os.path.join(temp_directory, 'test.csv'))
+
+        source_test = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                   'resources', 'test.csv')
+        expected_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                     'resources', 'deduped.csv')
+        shutil.copy(source_test, os.path.join(temp_directory, 'test.csv'))
 
         Component.deduplicate_binlog_result(temp_file, ['Start_Date', 'End_Date', 'Campaign_Name'])
 
-        outcome = filecmp.cmp(temp_file, './resources/deduped.csv', shallow=False)
+        outcome = filecmp.cmp(temp_file, expected_path, shallow=False)
         self.assertTrue(outcome)
 
 
