@@ -20,6 +20,7 @@ TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 """
 import ast
 import base64
+import binascii
 import copy
 import csv
 import itertools
@@ -34,7 +35,6 @@ from contextlib import nullcontext
 from io import StringIO
 from typing import List
 
-import binascii
 import paramiko
 import pendulum
 import pymysql
@@ -1146,7 +1146,18 @@ class Component(KBCEnvHandler):
         pkey_hashes = set()
 
         def create_pkey_hash(row_record: list):
-            return '|'.join(row_record[idx] for idx in pkey_indexes)
+            try:
+                pkey_hash_str = '|'.join(row_record[idx] for idx in pkey_indexes)
+                return pkey_hash_str
+            except IndexError:
+                # TODO: remove temp debug statement
+                for idx in pkey_indexes:
+                    try:
+                        row_record[idx]
+                    except IndexError:
+                        logging.error(f"Pkey index {idx} not found in row: {row_record}")
+                        raise Exception(f"Pkey index {idx} not found in row: {row_record} "
+                                        f"for primary key: {primary_keys}")
 
         fd, temp_result = tempfile.mkstemp()
         with open(temp_result, 'w+', newline='') as out_file:
