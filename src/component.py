@@ -1164,6 +1164,9 @@ class Component(KBCEnvHandler):
             writer = csv.writer(out_file, lineterminator='\n')
             writer.writerow(header)
             for row in csv.reader(core.utils.reverse_readline(table_path)):
+                if not row:
+                    logging.warning("Empty row in result")
+                    continue
                 pkey_hash = create_pkey_hash(row)
                 if pkey_hash in pkey_hashes:
                     continue
