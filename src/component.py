@@ -1198,6 +1198,8 @@ class Component(KBCEnvHandler):
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
                 self.deduplicate_binlog_result(csv_table_path, [pk.upper() for pk in primary_keys])
+                # TODO: remove
+                shutil.move(csv_table_path, self.files_out_path + '/test.csv')
 
             else:
 
