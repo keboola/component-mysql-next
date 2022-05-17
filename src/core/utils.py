@@ -317,7 +317,51 @@ def should_sync_field(inclusion, selected, default=False):
     return default
 
 
-def reverse_readline(filename, buf_size=8192):
+def _reversed_blocks(file, blocksize=4096):
+    """
+    Generate blocks of file's contents in reverse order.
+    Args:
+        file:
+        blocksize:
+
+    Returns:
+
+    """
+    file.seek(0, os.SEEK_END)
+    here = file.tell()
+    while 0 < here:
+        delta = min(blocksize, here)
+        here -= delta
+        file.seek(here, os.SEEK_SET)
+        yield file.read(delta)
+
+
+def reverse_readline(file, buf_size=8192):
+    """
+    Generate the lines of file in reverse order.
+    Args:
+        file:
+        buf_size:
+
+    Returns:
+
+    """
+
+    part = ''
+    quoting = False
+    for block in _reversed_blocks(file, buf_size):
+        for c in reversed(block):
+            if c == '"':
+                quoting = not quoting
+            elif c == '\n' and part and not quoting:
+                yield part[::-1]
+                part = ''
+            part += c
+    if part:
+        yield part[::-1]
+
+
+def reverse_readline_old(filename, buf_size=8192):
     """A generator that returns the lines of a file in reverse order"""
     with open(filename) as fh:
         segment = None
@@ -348,4 +392,3 @@ def reverse_readline(filename, buf_size=8192):
         # Don't yield None if the file was empty
         if segment is not None:
             yield segment
-

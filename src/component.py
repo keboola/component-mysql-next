@@ -1160,10 +1160,10 @@ class Component(KBCEnvHandler):
                                         f"for primary key: {primary_keys}")
 
         fd, temp_result = tempfile.mkstemp()
-        with open(temp_result, 'w+', newline='') as out_file:
+        with open(temp_result, 'w+', newline='') as out_file, open(table_path, 'r') as inp:
             writer = csv.writer(out_file, lineterminator='\n')
             writer.writerow(header)
-            for row in csv.reader(core.utils.reverse_readline(table_path)):
+            for row in csv.reader(core.utils.reverse_readline(inp)):
                 if not row:
                     logging.warning("Empty row in result")
                     continue
@@ -1197,9 +1197,10 @@ class Component(KBCEnvHandler):
                 logging.info('Keeping only latest per primary key from binary row event results for {} '
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
-                self.deduplicate_binlog_result(csv_table_path, [pk.upper() for pk in primary_keys])
                 # TODO: remove
-                shutil.move(csv_table_path, self.files_out_path + '/test.csv')
+                shutil.copy(csv_table_path, self.files_out_path + '/test.csv')
+
+                self.deduplicate_binlog_result(csv_table_path, [pk.upper() for pk in primary_keys])
 
             else:
 
