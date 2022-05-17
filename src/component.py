@@ -18,11 +18,13 @@ TODO: Option to do "one-time" table resync, where just one table resyncs once
 TODO: Add testing framework
 TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 """
+import _csv
 import ast
 import base64
 import binascii
 import copy
 import csv
+import hashlib
 import itertools
 import json
 import logging
@@ -1136,8 +1138,7 @@ class Component(KBCEnvHandler):
 
         """
         with open(table_path, 'r') as inp:
-            r = csv.reader(inp)
-            header = next(r)
+            header = next(inp)
 
         pkey_indexes = []
         for pk in primary_keys:
@@ -1145,36 +1146,42 @@ class Component(KBCEnvHandler):
 
         pkey_hashes = set()
 
-        def create_pkey_hash(row_record: list):
-            try:
-                pkey_hash_str = '|'.join(row_record[idx] for idx in pkey_indexes)
-                return pkey_hash_str
-            except IndexError:
-                # TODO: remove temp debug statement
-                for idx in pkey_indexes:
-                    try:
-                        row_record[idx]
-                    except IndexError:
-                        logging.error(f"Pkey index {idx} not found in row: {row_record}")
-                        raise Exception(f"Pkey index {idx} not found in row: {row_record} "
-                                        f"for primary key: {primary_keys}")
+        # def create_pkey_hash(row_record: list):
+        #     try:
+        #         pkey_hash_str = '|'.join(row_record[idx] for idx in pkey_indexes)
+        #         return pkey_hash_str
+        #     except IndexError:
+        #         # TODO: remove temp debug statement
+        #         for idx in pkey_indexes:
+        #             try:
+        #                 row_record[idx]
+        #             except IndexError:
+        #                 logging.error(f"Pkey index {idx} not found in row: {row_record}")
+        #                 raise Exception(f"Pkey index {idx} not found in row: {row_record} "
+        #                                 f"for primary key: {primary_keys}")
+        def create_pkey_hash(row_record: str):
+
+            return hashlib.md5(row_record.encode('utf-8')).hexdigest()
 
         fd, temp_result = tempfile.mkstemp()
         with open(temp_result, 'w+', newline='') as out_file, open(table_path, 'r') as inp:
-            writer = csv.writer(out_file, lineterminator='\n')
-            writer.writerow(header)
-            for row in csv.reader(core.utils.reverse_readline(inp)):
-                if not row:
-                    logging.warning("Empty row in result")
-                    continue
-                pkey_hash = create_pkey_hash(row)
-                if pkey_hash in pkey_hashes:
-                    continue
 
-                pkey_hashes.add(pkey_hash)
+            out_file.write(header)
+            try:
+                for row in core.utils.reverse_readline(inp):
+                    if not row:
+                        logging.warning("Empty row in result")
+                        continue
+                    pkey_hash = create_pkey_hash(row)
+                    if pkey_hash in pkey_hashes:
+                        continue
 
-                if row != header:
-                    writer.writerow(row)
+                    pkey_hashes.add(pkey_hash)
+
+                    if row != header:
+                        out_file.write(row)
+            except _csv.Error:
+                print('')
         os.remove(table_path)
 
         shutil.move(temp_result, table_path)

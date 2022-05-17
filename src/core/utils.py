@@ -350,6 +350,7 @@ def reverse_readline(file, buf_size=8192):
     part = ''
     quoting = False
     for block in _reversed_blocks(file, buf_size):
+
         for c in reversed(block):
             if c == '"':
                 quoting = not quoting
