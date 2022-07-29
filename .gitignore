@@ -5,6 +5,8 @@ __pycache__/
 .project
 .pydevproject
 .pytest_cache/
+src/test.py
+
 
 # Distribution / packaging
 .Python

@@ -18,13 +18,11 @@ TODO: Option to do "one-time" table resync, where just one table resyncs once
 TODO: Add testing framework
 TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 """
-import _csv
 import ast
 import base64
 import binascii
 import copy
 import csv
-import hashlib
 import itertools
 import json
 import logging
@@ -1137,53 +1135,44 @@ class Component(KBCEnvHandler):
         Returns:
 
         """
+
         with open(table_path, 'r') as inp:
-            header = next(inp)
-
-        pkey_indexes = []
-        for pk in primary_keys:
-            pkey_indexes.append(header.index(pk))
-
+            header = csv.DictReader(inp).fieldnames
         pkey_hashes = set()
 
-        # def create_pkey_hash(row_record: list):
-        #     try:
-        #         pkey_hash_str = '|'.join(row_record[idx] for idx in pkey_indexes)
-        #         return pkey_hash_str
-        #     except IndexError:
-        #         # TODO: remove temp debug statement
-        #         for idx in pkey_indexes:
-        #             try:
-        #                 row_record[idx]
-        #             except IndexError:
-        #                 logging.error(f"Pkey index {idx} not found in row: {row_record}")
-        #                 raise Exception(f"Pkey index {idx} not found in row: {row_record} "
-        #                                 f"for primary key: {primary_keys}")
-        def create_pkey_hash(row_record: str):
-
-            return hashlib.md5(row_record.encode('utf-8')).hexdigest()
+        def create_pkey_hash(row_record: dict):
+            try:
+                pkey_hash_str = '|'.join(row_record[idx] for idx in primary_keys)
+                return pkey_hash_str
+            except IndexError:
+                # TODO: remove temp debug statement
+                for idx in primary_keys:
+                    try:
+                        row_record[idx]
+                    except IndexError:
+                        logging.error(f"Pkey index {idx} not found in row: {row_record}")
+                        raise Exception(f"Pkey index {idx} not found in row: {row_record} "
+                                        f"for primary key: {primary_keys}")
 
         fd, temp_result = tempfile.mkstemp()
-        with open(temp_result, 'w+', newline='') as out_file, open(table_path, 'r') as inp:
+        with open(temp_result, 'w+', newline='', encoding='utf-8') as out_file, open(table_path, 'rb') as inp:
+            writer = csv.DictWriter(out_file, fieldnames=header, lineterminator='\n')
+            reader = csv.DictReader(core.utils.reverse_readline(inp), fieldnames=header)
+            writer.writeheader()
+            for row in reader:
+                if not row:
+                    logging.warning("Empty row in result")
+                    continue
+                pkey_hash = create_pkey_hash(row)
+                if pkey_hash in pkey_hashes:
+                    continue
 
-            out_file.write(header)
-            try:
-                for row in core.utils.reverse_readline(inp):
-                    if not row:
-                        logging.warning("Empty row in result")
-                        continue
-                    pkey_hash = create_pkey_hash(row)
-                    if pkey_hash in pkey_hashes:
-                        continue
+                pkey_hashes.add(pkey_hash)
 
-                    pkey_hashes.add(pkey_hash)
+                if list(row.values()) != header:
+                    writer.writerow(row)
 
-                    if row != header:
-                        out_file.write(row)
-            except _csv.Error:
-                print('')
         os.remove(table_path)
-
         shutil.move(temp_result, table_path)
 
     def write_only_latest_result_binlogs(self, csv_table_path: str, primary_keys: list = None,

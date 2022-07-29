@@ -9,6 +9,7 @@ import functools
 import json
 import os
 import time
+from typing.io import IO
 from warnings import warn
 
 import backoff as backoff_module
@@ -317,6 +318,38 @@ def should_sync_field(inclusion, selected, default=False):
     return default
 
 
+def _read_next_block_of_lines(file: IO, position: int, block_size: int, is_end: bool = False, encoding='UTF-8'):
+    """
+    Read the smallest next block of bytes representing characters that ends with new line.
+    Retry if incomplete byte sequence is hit and adjust the position.
+    Args:
+        file:
+        position:
+        block_size:
+        is_end: mark if the block is the last one in the file
+        encoding:
+
+    Returns: block:str, position:int - new adjusted position
+
+    """
+
+    new_block_size = block_size
+    while True:
+        file.seek(position, os.SEEK_END)
+        block = file.read(new_block_size)
+        try:
+            decoded = block.decode(encoding)
+            if not decoded.startswith('\n') and not is_end:
+                new_block_size += 1
+                position -= 1
+                continue
+            return decoded, position
+        except UnicodeDecodeError as e:
+            # in case we hit partial character representation (not full byte sequence)
+            new_block_size += 1
+            position -= 1
+
+
 def _reversed_blocks(file, blocksize=4096):
     """
     Generate blocks of file's contents in reverse order.
@@ -328,12 +361,16 @@ def _reversed_blocks(file, blocksize=4096):
 
     """
     file.seek(0, os.SEEK_END)
-    here = file.tell()
-    while 0 < here:
-        delta = min(blocksize, here)
-        here -= delta
-        file.seek(here, os.SEEK_SET)
-        yield file.read(delta)
+    max_pos = file.tell()
+    position = 0
+    delta = blocksize
+    while abs(position) < max_pos:
+        delta = blocksize if delta <= (max_pos + position) else (max_pos + position)
+        position = (-delta) + position
+        is_end = max_pos + position == 0
+
+        decoded, position = _read_next_block_of_lines(file, position, delta, is_end)
+        yield decoded
 
 
 def reverse_readline(file, buf_size=8192):
@@ -360,36 +397,3 @@ def reverse_readline(file, buf_size=8192):
             part += c
     if part:
         yield part[::-1]
-
-
-def reverse_readline_old(filename, buf_size=8192):
-    """A generator that returns the lines of a file in reverse order"""
-    with open(filename) as fh:
-        segment = None
-        offset = 0
-        fh.seek(0, os.SEEK_END)
-        file_size = remaining_size = fh.tell()
-        while remaining_size > 0:
-            offset = min(file_size, offset + buf_size)
-            fh.seek(file_size - offset)
-            buffer = fh.read(min(remaining_size, buf_size))
-            remaining_size -= buf_size
-            lines = buffer.split('\n')
-            # The first line of the buffer is probably not a complete line so
-            # we'll save it and append it to the last line of the next buffer
-            # we read
-            if segment is not None:
-                # If the previous chunk starts right from the beginning of line
-                # do not concat the segment to the last line of new chunk.
-                # Instead, yield the segment first
-                if buffer[-1] != '\n':
-                    lines[-1] += segment
-                else:
-                    yield segment
-            segment = lines[0]
-            for index in range(len(lines) - 1, 0, -1):
-                if lines[index]:
-                    yield lines[index]
-        # Don't yield None if the file was empty
-        if segment is not None:
-            yield segment
