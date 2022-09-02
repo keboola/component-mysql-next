@@ -318,7 +318,7 @@ def should_sync_field(inclusion, selected, default=False):
     return default
 
 
-def _read_next_block_of_lines(file: IO, position: int, block_size: int, is_end: bool = False, encoding='UTF-8'):
+def _read_next_block_of_lines(file: IO, position: int, block_size: int, max_position: int, encoding='UTF-8'):
     """
     Read the smallest next block of bytes representing characters that ends with new line.
     Retry if incomplete byte sequence is hit and adjust the position.
@@ -326,7 +326,7 @@ def _read_next_block_of_lines(file: IO, position: int, block_size: int, is_end: 
         file:
         position:
         block_size:
-        is_end: mark if the block is the last one in the file
+        max_position: latest position in file
         encoding:
 
     Returns: block:str, position:int - new adjusted position
@@ -334,15 +334,20 @@ def _read_next_block_of_lines(file: IO, position: int, block_size: int, is_end: 
     """
 
     new_block_size = block_size
-    while True:
+    is_end = False
+    while not is_end:
         file.seek(position, os.SEEK_END)
         block = file.read(new_block_size)
         try:
             decoded = block.decode(encoding)
-            if not decoded.startswith('\n') and not is_end:
+            if not decoded.startswith('\n'):
                 new_block_size += 1
                 position -= 1
-                continue
+
+                if is_end := (abs(position) >= max_position):
+                    return decoded, position
+                else:
+                    continue
             return decoded, position
         except UnicodeDecodeError as e:
             # in case we hit partial character representation (not full byte sequence)
@@ -364,12 +369,12 @@ def _reversed_blocks(file, blocksize=4096):
     max_pos = file.tell()
     position = 0
     delta = blocksize
-    while abs(position) < max_pos:
-        delta = blocksize if delta <= (max_pos + position) else (max_pos + position)
+    while abs(position) <= max_pos:
+        positions_remaining = max_pos + position
+        delta = blocksize if delta <= positions_remaining else positions_remaining
         position = (-delta) + position
-        is_end = max_pos + position == 0
 
-        decoded, position = _read_next_block_of_lines(file, position, delta, is_end)
+        decoded, position = _read_next_block_of_lines(file, position, delta, max_pos)
         yield decoded
 
 
