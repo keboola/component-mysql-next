@@ -9,12 +9,12 @@ import functools
 import json
 import os
 import time
-from typing.io import IO
 from warnings import warn
 
 import backoff as backoff_module
 import dateutil.parser
 import pytz
+from typing.io import IO
 
 from .catalog import Catalog
 
@@ -344,7 +344,7 @@ def _read_next_block_of_lines(file: IO, position: int, block_size: int, max_posi
                 new_block_size += 1
                 position -= 1
 
-                if is_end := (abs(position) >= max_position):
+                if is_end := (abs(position) > max_position):
                     return decoded, position
                 else:
                     continue

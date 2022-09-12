@@ -40,7 +40,7 @@ class TestComponent(unittest.TestCase):
                                      'resources', 'deduped.csv')
         shutil.copy(source_test, os.path.join(temp_directory, 'test.csv'))
 
-        Component.deduplicate_binlog_result(temp_file, ['Start_Date', 'End_Date', 'Campaign_Name'])
+        Component.deduplicate_binlog_result(temp_file, ['Start_Date', 'End_Date', 'Campaign_Name'], buffer_size=10)
 
         outcome = filecmp.cmp(temp_file, expected_path, shallow=False)
         self.assertTrue(outcome)

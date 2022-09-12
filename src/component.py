@@ -1125,12 +1125,13 @@ class Component(KBCEnvHandler):
             logging.info('Wrote manifest table {}'.format(file_name + '.manifest'))
 
     @staticmethod
-    def deduplicate_binlog_result(table_path: str, primary_keys: List[str]):
+    def deduplicate_binlog_result(table_path: str, primary_keys: List[str], buffer_size=8192):
         """
         Reads table backwards and deduplicates based on  primary key.
         Args:
             table_path:
             primary_keys:
+            buffer_size
 
         Returns:
 
@@ -1157,7 +1158,7 @@ class Component(KBCEnvHandler):
         fd, temp_result = tempfile.mkstemp()
         with open(temp_result, 'w+', newline='', encoding='utf-8') as out_file, open(table_path, 'rb') as inp:
             writer = csv.DictWriter(out_file, fieldnames=header, lineterminator='\n')
-            reader = csv.DictReader(core.utils.reverse_readline(inp), fieldnames=header)
+            reader = csv.DictReader(core.utils.reverse_readline(inp, buf_size=buffer_size), fieldnames=header)
             writer.writeheader()
             for row in reader:
                 if not row:
