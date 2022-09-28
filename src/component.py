@@ -1156,6 +1156,9 @@ class Component(KBCEnvHandler):
                                         f"for primary key: {primary_keys}")
 
         fd, temp_result = tempfile.mkstemp()
+        # FIX line 1: field larger than field limit error
+        # as proposed here https://stackoverflow.com/questions/15063936/csv-error-field-larger-than-field-limit-131072
+        csv.field_size_limit(sys.maxsize)
         with open(temp_result, 'w+', newline='', encoding='utf-8') as out_file, open(table_path, 'rb') as inp:
             writer = csv.DictWriter(out_file, fieldnames=header, lineterminator='\n')
             reader = csv.DictReader(core.utils.reverse_readline(inp, buf_size=buffer_size), fieldnames=header)
