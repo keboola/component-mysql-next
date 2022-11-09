@@ -11,7 +11,7 @@ mysql-replication==0.21
 pandas==1.2.1
 paramiko==2.7.1
 pendulum==1.2.0
-pymysql==0.9.3
+pymysql==1.0.2
 pytz==2020.1
 simplejson==3.17.0
 sshtunnel==0.1.5
