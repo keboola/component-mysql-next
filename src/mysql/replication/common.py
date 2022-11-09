@@ -324,9 +324,9 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                     done = True
                 except Exception:
                     logging.warning(f"Try nr.{tries} failed. Will sleep for a while and retry.")
+                    time.sleep(10)
                 finally:
                     tries += 1
-                    time.sleep(10)
 
             if not done:
                 raise ConnectionError("Failed fetching data even with retries.")
