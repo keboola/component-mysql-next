@@ -316,7 +316,19 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
             chunk_start = utils.now()
             current_chunk += 1
 
-            query_output_rows = cursor.fetchmany(CSV_CHUNK_SIZE)
+            tries = 0
+            done = False
+            while (tries < 5) and (not done):
+                try:
+                    query_output_rows = cursor.fetchmany(CSV_CHUNK_SIZE)
+                    done = True
+                except Exception as e:
+                    logging.warning(f"Try nr.{tries} failed with error: {e}. Retrying.")
+                finally:
+                    tries += 1
+
+            if tries == 6:
+                raise ConnectionError("Failed fetching data even with retries.")
 
             if query_output_rows:
                 number_of_rows = len(query_output_rows)
