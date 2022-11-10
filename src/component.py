@@ -903,7 +903,7 @@ class Component(KBCEnvHandler):
                            @@session.wait_timeout as wait_timeout,
                            @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
                            @@session.max_allowed_packet as max_allowed_packet,
-                           @@session.interactive_timeout as interactive_timeout
+                           @@session.interactive_timeout as interactive_timeout,
                            @@session.max_execution_time as max_execution_time''')
                     row = cur.fetchone()
                     logging.info('Server Parameters: ' +
