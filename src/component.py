@@ -911,7 +911,7 @@ class Component(KBCEnvHandler):
                                  'wait_timeout: %s, ' +
                                  'innodb_lock_wait_timeout: %s, ' +
                                  'max_allowed_packet: %s, ' +
-                                 'interactive_timeout: %s' +
+                                 'interactive_timeout: %s ' +
                                  'max_execution_time: %s',
                                  *row)
                 with open_conn.cursor() as cur:
