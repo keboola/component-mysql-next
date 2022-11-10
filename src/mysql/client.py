@@ -27,7 +27,8 @@ def connect_with_backoff(connection):
 
 
 def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_timeout: int = 300,
-                           net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00'):
+                           net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00',
+                           max_execution_time=360000000):
     """Set MySQL session parameters to handle for data extraction appropriately.
 
     Args:
@@ -36,6 +37,7 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         net_read_timeout: (Optional) Seconds to wait for more data from connection before aborting the read, default 60.
         innodb_lock_wait_timeout: (Optional) Seconds a transaction waits for a row lock before giving up, default 300.
         time_zone: (Optional) String representing the session time zone, default is UTC: '+0:00').
+        max_execution_time: This is here as a workaround for server-caused timeouts
     Returns:
         None.
     """
@@ -52,12 +54,17 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         cursor.execute('SET @@session.time_zone="{}"'.format(time_zone))
     except pymysql.err.InternalError as internal_err:
         logged_warnings.append('Could not set session.time_zone. Error: ({}) {}'.format(*internal_err.args))
-
     try:
         cursor.execute('SET @@session.innodb_lock_wait_timeout={}'.format(innodb_lock_wait_timeout))
     except pymysql.err.InternalError as e:
         logged_warnings.append(
             'Could not set session.innodb_lock_wait_timeout. Error: ({}) {}'.format(*e.args)
+        )
+    try:
+        cursor.execute('SET @@session.max_execution_time={}'.format(max_execution_time))
+    except pymysql.err.InternalError as e:
+        logged_warnings.append(
+            'Could not set session.max_execution_time. Error: ({}) {}'.format(*e.args)
         )
 
     if logged_warnings:
