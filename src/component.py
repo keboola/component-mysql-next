@@ -117,7 +117,6 @@ KEY_SSH_USERNAME = 'sshUser'
 KEY_SSL_CA = 'sslCa'
 KEY_VERIFY_CERT = 'verifyCert'
 MAX_EXECUTION_TIME = 'max_execution_time'
-MAX_EXECUTION_TIME_DEFAULT = 360000000
 
 ENV_COMPONENT_ID = 'KBC_COMPONENTID'
 ENV_CONFIGURATION_ID = 'KBC_CONFIGID'
@@ -697,7 +696,12 @@ class Component(KBCEnvHandler):
             "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
         }
 
-        cfg_param["max_execution_time"] = self.params.get(MAX_EXECUTION_TIME) or MAX_EXECUTION_TIME_DEFAULT
+        max_execution_time = self.params.get(MAX_EXECUTION_TIME)
+        if max_execution_time:
+            cfg_param["max_execution_time"] = self.params.get(MAX_EXECUTION_TIME)
+            logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
+        else:
+            logging.info(f"Using default max_execution_time: {cfg_param['max_execution_time']}")
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
