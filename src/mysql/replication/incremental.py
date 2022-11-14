@@ -18,7 +18,8 @@ except ImportError:
 BOOKMARK_KEYS = {'replication_key', 'replication_key_value', 'version'}
 
 
-def sync_table(mysql_conn, catalog_entry, state, columns, limit=None, message_store: core.MessageStore = None, max_execution_time: int = 360000000):
+def sync_table(mysql_conn, catalog_entry, state, columns, limit=None, message_store: core.MessageStore = None,
+               max_execution_time: int = 360000000):
     logging.warning('Note: Syncing incrementally with key is not yet fully supported, results may be incomplete')
     common.whitelist_bookmark_keys(BOOKMARK_KEYS, catalog_entry.tap_stream_id, state)
 

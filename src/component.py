@@ -124,7 +124,6 @@ SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 1000000
 
-
 # Keep for debugging
 KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD,
@@ -728,11 +727,12 @@ class Component(KBCEnvHandler):
                                    message_store=message_store, max_execution_time=self.max_execustion_time)
         else:
             incremental.sync_table(mysql_conn, catalog_entry, state, columns, message_store=message_store,
-            max_execution_time=self.max_execution_time)
+                                   max_execution_time=self.max_execution_time)
 
         core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
-    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
+    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns,
+                                  tables_destination: str = None,
                                   message_store: core.MessageStore = None):
         binlog.verify_binlog_config(mysql_conn, self.max_execution_time)
 
@@ -762,7 +762,7 @@ class Component(KBCEnvHandler):
         if log_file and log_pos and max_pk_values:
             logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
             full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                         tables_destination=tables_destination, message_store=message_store, 
+                                         tables_destination=tables_destination, message_store=message_store,
                                          max_execution_time=self.max_execution_time)
 
         else:
@@ -771,7 +771,8 @@ class Component(KBCEnvHandler):
 
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
 
-            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn, self.max_execution_time)
+            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn,
+                                                                                      self.max_execution_time)
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
             if full_table.sync_is_resumable(mysql_conn, catalog_entry, max_execution_time=self.max_execution_time):
