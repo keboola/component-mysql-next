@@ -1309,7 +1309,7 @@ class Component(KBCEnvHandler):
             else:
                 logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
-            mysql_client = MySQLConnection(self.mysql_config_params)
+            mysql_client = MySQLConnection(self.mysql_config_params, self.max_execution_time)
             self.log_server_params(mysql_client)
 
             # elif file_input_path:
