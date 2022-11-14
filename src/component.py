@@ -700,8 +700,6 @@ class Component(KBCEnvHandler):
         if max_execution_time:
             cfg_param["maxExecutionTime"] = self.params.get(KEY_MAX_EXECUTION_TIME)
             logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
-        else:
-            logging.info(f"Using default max_execution_time: {cfg_param['maxExecutionTime']}")
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'

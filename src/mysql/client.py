@@ -10,13 +10,15 @@ import backoff
 import pymysql
 from pymysql.constants import CLIENT
 
+from typing import Union
+
 MAX_CONNECT_RETRIES = 5
 BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
 READ_TIMEOUT_SECONDS = 3000
 
 cfg_param = {
-    "maxExecutionTime": 360000000
+    "maxExecutionTime": False
 }
 
 
@@ -31,9 +33,10 @@ def connect_with_backoff(connection):
     return connection
 
 
-def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_timeout: int = 300,
-                           net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00',
-                           max_execution_time: int = 360000000):
+def set_session_parameters(cursor: pymysql.connections.Connection.cursor, max_execution_time: Union[int, bool],
+                           wait_timeout: int = 300,
+                           net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00'
+                           ):
     """Set MySQL session parameters to handle for data extraction appropriately.
 
     Args:
@@ -67,11 +70,13 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         logging.info(f"Setting session parameter innodb_lock_wait_timeout to {innodb_lock_wait_timeout}")
     except pymysql.err.InternalError as e:
         logged_warnings.append('Could not set session.innodb_lock_wait_timeout. Error: ({}) {}'.format(*e.args))
-    try:
-        cursor.execute('SET @@session.max_execution_time={}'.format(max_execution_time))
-        logging.info(f"Setting session parameter max_execution_time to {max_execution_time}")
-    except pymysql.err.InternalError as e:
-        logged_warnings.append('Could not set session.max_execution_time. Error: ({}) {}'.format(*e.args))
+
+    if max_execution_time:
+        try:
+            cursor.execute('SET @@session.max_execution_time={}'.format(max_execution_time))
+            logging.info(f"Setting session parameter max_execution_time to {max_execution_time}")
+        except pymysql.err.InternalError as e:
+            logged_warnings.append('Could not set session.max_execution_time. Error: ({}) {}'.format(*e.args))
 
     if logged_warnings:
         logging.info('Setting session parameters failed for at least one process, which may impact execution speed.')
