@@ -37,7 +37,7 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         net_read_timeout: (Optional) Seconds to wait for more data from connection before aborting the read, default 60.
         innodb_lock_wait_timeout: (Optional) Seconds a transaction waits for a row lock before giving up, default 300.
         time_zone: (Optional) String representing the session time zone, default is UTC: '+0:00').
-        max_execution_time: This is here as a workaround for server-caused timeouts
+        max_execution_time: (Optional) This is here as a workaround for server-caused timeouts, default 360000000.
     Returns:
         None.
     """
@@ -85,6 +85,7 @@ class MySQLConnection(pymysql.connections.Connection):
             "connect_timeout": CONNECTION_TIMEOUT_SECONDS,
             "read_timeout": READ_TIMEOUT_SECONDS,
             "charset": 'utf8',
+            "max_execution_time": config.get('max_execution_time', 360000000)
         }
 
         if config.get("database"):
