@@ -237,6 +237,13 @@
     "debug": {
       "type": "boolean",
       "propertyOrder": 1200
+    },
+    "max_execution_time": {
+      "type": "integer",
+      "title": "Max connection time",
+      "description": "Optional parameter which sets @@session.max_execution_time to desired integer value",
+      "default": 360000000,
+      "propertyOrder": 1210
     }
   }
 }

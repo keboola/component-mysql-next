@@ -112,6 +112,8 @@ KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 KEY_SSL_CA = 'sslCa'
 KEY_VERIFY_CERT = 'verifyCert'
+MAX_EXECUTION_TIME = 'max_execution_time'
+MAX_EXECUTION_TIME_DEFAULT = 360000000
 
 ENV_COMPONENT_ID = 'KBC_COMPONENTID'
 ENV_CONFIGURATION_ID = 'KBC_CONFIGID'
@@ -121,6 +123,7 @@ LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 1000000
+
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
@@ -687,6 +690,7 @@ class Component(KBCEnvHandler):
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT,
+            "max_execution_time": self.params.get(MAX_EXECUTION_TIME) or MAX_EXECUTION_TIME_DEFAULT,
             "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
         }
 
