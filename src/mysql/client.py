@@ -16,7 +16,7 @@ CONNECTION_TIMEOUT_SECONDS = 30
 READ_TIMEOUT_SECONDS = 3000
 
 cfg_param = {
-    "max_execution_time": 360000000
+    "maxExecutionTime": 360000000
 }
 
 
@@ -26,7 +26,7 @@ def connect_with_backoff(connection):
     connection.connect()
     with connection.cursor() as cursor:
         set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS,
-                               max_execution_time=cfg_param["max_execution_time"])
+                               max_execution_time=cfg_param["maxExecutionTime"])
 
     return connection
 
