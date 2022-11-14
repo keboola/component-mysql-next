@@ -15,6 +15,10 @@ BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
 READ_TIMEOUT_SECONDS = 3000
 
+cfg = {
+    "max_execution_time": 360000000
+}
+
 
 @backoff.on_exception(backoff.expo, pymysql.err.OperationalError, max_tries=MAX_CONNECT_RETRIES, factor=BACKOFF_FACTOR)
 def connect_with_backoff(connection, max_execution_time: int = 360000000):
