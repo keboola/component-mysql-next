@@ -690,10 +690,9 @@ class Component(KBCEnvHandler):
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT,
+            "max_execution_time": self.params.get(MAX_EXECUTION_TIME) or MAX_EXECUTION_TIME_DEFAULT,
             "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
         }
-
-        self.max_execution_time = self.params.get(MAX_EXECUTION_TIME) or MAX_EXECUTION_TIME_DEFAULT
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
@@ -1310,7 +1309,7 @@ class Component(KBCEnvHandler):
             else:
                 logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
 
-            mysql_client = MySQLConnection(self.mysql_config_params, self.max_execution_time)
+            mysql_client = MySQLConnection(self.mysql_config_params)
             self.log_server_params(mysql_client)
 
             # elif file_input_path:

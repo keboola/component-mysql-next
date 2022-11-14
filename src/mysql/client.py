@@ -21,7 +21,7 @@ cfg = {
 
 
 @backoff.on_exception(backoff.expo, pymysql.err.OperationalError, max_tries=MAX_CONNECT_RETRIES, factor=BACKOFF_FACTOR)
-def connect_with_backoff(connection, max_execution_time: int = 360000000):
+def connect_with_backoff(connection, max_execution_time):
     logging.debug('Connecting to MySQL server.')
     connection.connect()
     with connection.cursor() as cursor:
@@ -41,7 +41,7 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         net_read_timeout: (Optional) Seconds to wait for more data from connection before aborting the read, default 60.
         innodb_lock_wait_timeout: (Optional) Seconds a transaction waits for a row lock before giving up, default 300.
         time_zone: (Optional) String representing the session time zone, default is UTC: '+0:00').
-        max_execution_time: (Optional) This is here as a workaround for server-caused timeouts, default 360000000.
+        max_execution_time: This is here as a workaround for server-caused timeouts
     Returns:
         None.
     """
@@ -79,7 +79,7 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
 
 
 class MySQLConnection(pymysql.connections.Connection):
-    def __init__(self, config, max_execution_time: int = 360000000):
+    def __init__(self, config):
         args = {
             "user": config.get('user') or config.get('username'),
             "password": config.get('password') or config.get('#password'),
@@ -88,10 +88,9 @@ class MySQLConnection(pymysql.connections.Connection):
             "cursorclass": config.get('cursorclass') or pymysql.cursors.SSCursor,
             "connect_timeout": CONNECTION_TIMEOUT_SECONDS,
             "read_timeout": READ_TIMEOUT_SECONDS,
-            "charset": 'utf8'
+            "max_execution_time": config.get('max_execution_time'),
+            "charset": 'utf8',
         }
-
-        self.max_execution_time = max_execution_time
 
         if config.get("database"):
             args["database"] = config["database"]
@@ -131,10 +130,8 @@ def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
             config["cursorclass"] = kwargs.get('cursorclass')
-            max_execution_time = kwargs.get('max_execution_time')
-            logging.info(f"Will try to set max_execution time to {max_execution_time}")
-
             super().__init__(config)
+            max_execution_time = kwargs.get('max_execution_time')
             connect_with_backoff(self, max_execution_time=max_execution_time)
 
     return ConnectionWrapper
