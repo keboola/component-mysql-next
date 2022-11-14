@@ -75,7 +75,7 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
 
 
 class MySQLConnection(pymysql.connections.Connection):
-    def __init__(self, config):
+    def __init__(self, config, max_execution_time: int = 360000000):
         args = {
             "user": config.get('user') or config.get('username'),
             "password": config.get('password') or config.get('#password'),
@@ -84,9 +84,10 @@ class MySQLConnection(pymysql.connections.Connection):
             "cursorclass": config.get('cursorclass') or pymysql.cursors.SSCursor,
             "connect_timeout": CONNECTION_TIMEOUT_SECONDS,
             "read_timeout": READ_TIMEOUT_SECONDS,
-            "charset": 'utf8',
-            "max_execution_time": config.get('max_execution_time', 360000000)
+            "charset": 'utf8'
         }
+
+        self.max_execution_time = max_execution_time
 
         if config.get("database"):
             args["database"] = config["database"]
@@ -126,8 +127,13 @@ def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
             config["cursorclass"] = kwargs.get('cursorclass')
+
+            try:
+                max_execution_time = self.max_execution_time
+            except:
+                max_execution_time = 360000000
+
             super().__init__(config)
-            max_execution_time = kwargs.get('max_execution_time')
             connect_with_backoff(self, max_execution_time=max_execution_time)
 
     return ConnectionWrapper
