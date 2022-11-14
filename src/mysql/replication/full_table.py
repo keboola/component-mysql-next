@@ -37,7 +37,7 @@ def generate_bookmark_keys(catalog_entry):
     return bookmark_keys
 
 
-def sync_is_resumable(mysql_conn, catalog_entry, max_execution_time: int = 360000000):
+def sync_is_resumable(mysql_conn, catalog_entry):
     """In order to resume a full table sync, a table requires."""
     database_name = common.get_database_name(catalog_entry)
     key_properties = common.get_key_properties(catalog_entry)
@@ -52,7 +52,7 @@ def sync_is_resumable(mysql_conn, catalog_entry, max_execution_time: int = 36000
                 AND column_name = '{}'
     """
 
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             for pk in key_properties:
                 cur.execute(sql.format(database_name, catalog_entry.table, pk))
@@ -191,7 +191,7 @@ def update_incremental_full_table_state(catalog_entry, state, cursor):
     return state
 
 
-def sync_table(mysql_conn, catalog_entry, state, columns, stream_version, max_execution_time: int = 360000000):
+def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
     common.whitelist_bookmark_keys(generate_bookmark_keys(catalog_entry), catalog_entry.tap_stream_id, state)
 
     # bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
@@ -215,7 +215,7 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version, max_ex
 
     pk_clause = ""
 
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             select_sql = common.generate_select_sql(catalog_entry, columns)
 
@@ -239,7 +239,7 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version, max_ex
 
 
 def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version, tables_destination: str = None,
-                      message_store: core.MessageStore = None, max_execution_time: int = 360000000):
+                      message_store: core.MessageStore = None):
     common.whitelist_bookmark_keys(generate_bookmark_keys(catalog_entry), catalog_entry.tap_stream_id, state)
 
     # bookmark = state.get('bookmarks', {}).get(catalog_entry.tap_stream_id, {})
@@ -263,7 +263,7 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
 
     pk_clause = ""
 
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             select_sql = common.generate_select_sql(catalog_entry, columns)
 

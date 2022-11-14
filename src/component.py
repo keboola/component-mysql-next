@@ -42,6 +42,10 @@ from sshtunnel import SSHTunnelForwarder
 
 from mysql.replication.stream_reader import TableColumnSchemaCache
 
+
+from mysql.client import cfg_param
+
+
 KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
 
 try:
@@ -283,7 +287,7 @@ def create_column_metadata(cols):
     return metadata.to_list(mdata)
 
 
-def discover_catalog(mysql_conn, config, append_mode, max_execution_time: int = 360000000):
+def discover_catalog(mysql_conn, config, append_mode):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
     logging.debug('Filtering databases via config to: {}'.format(filter_dbs_config))
@@ -300,7 +304,7 @@ def discover_catalog(mysql_conn, config, append_mode, max_execution_time: int = 
         'sys'
         )"""
 
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             # TODO: allow views as well, or to choose
             cur.execute("""
@@ -418,7 +422,7 @@ def discover_catalog(mysql_conn, config, append_mode, max_execution_time: int = 
     return Catalog(entries)
 
 
-def do_discover(mysql_conn, config, append_mode, max_execution_time: int = 360000000):
+def do_discover(mysql_conn, config, append_mode):
     return discover_catalog(mysql_conn, config, append_mode=append_mode).dumps()
 
 
@@ -464,14 +468,14 @@ def desired_columns(selected, table_schema):
     return selected.intersection(available).union(automatic)
 
 
-def log_engine(mysql_conn, catalog_entry, max_execution_time: int = 360000000):
+def log_engine(mysql_conn, catalog_entry):
     is_view = common.get_is_view(catalog_entry)
     database_name = common.get_database_name(catalog_entry)
 
     if is_view:
         logging.info("Beginning sync for view %s.%s", database_name, catalog_entry.table)
     else:
-        with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+        with connect_with_backoff(mysql_conn) as open_conn:
             with open_conn.cursor() as cur:
                 cur.execute("""
                     SELECT engine
@@ -690,9 +694,10 @@ class Component(KBCEnvHandler):
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT,
-            "max_execution_time": self.params.get(MAX_EXECUTION_TIME) or MAX_EXECUTION_TIME_DEFAULT,
             "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
         }
+
+        cfg_param["max_execution_time"] = self.params.get(MAX_EXECUTION_TIME) or MAX_EXECUTION_TIME_DEFAULT
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
@@ -706,7 +711,8 @@ class Component(KBCEnvHandler):
             return file_input
 
     # Sync Methods
-    def do_sync_incremental(self, mysql_conn, catalog_entry, state, columns, optional_limit=None,
+    @staticmethod
+    def do_sync_incremental(mysql_conn, catalog_entry, state, columns, optional_limit=None,
                             message_store: core.MessageStore = None):
         logging.info("Stream %s is using incremental replication", catalog_entry.stream)
 
@@ -724,16 +730,16 @@ class Component(KBCEnvHandler):
             logging.info("Incremental Stream %s is using an optional limit clause of %d", catalog_entry.stream,
                          int(optional_limit))
             incremental.sync_table(mysql_conn, catalog_entry, state, columns, int(optional_limit),
-                                   message_store=message_store, max_execution_time=self.max_execustion_time)
+                                   message_store=message_store)
         else:
-            incremental.sync_table(mysql_conn, catalog_entry, state, columns, message_store=message_store,
-            max_execution_time=self.max_execution_time)
+            incremental.sync_table(mysql_conn, catalog_entry, state, columns, message_store=message_store)
 
         core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
-    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
+    @staticmethod
+    def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
                                   message_store: core.MessageStore = None):
-        binlog.verify_binlog_config(mysql_conn, self.max_execution_time)
+        binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)
         key_properties = common.get_key_properties(catalog_entry)  # noqa
@@ -761,8 +767,7 @@ class Component(KBCEnvHandler):
         if log_file and log_pos and max_pk_values:
             logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
             full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                         tables_destination=tables_destination, message_store=message_store, 
-                                         max_execution_time=self.max_execution_time)
+                                         tables_destination=tables_destination, message_store=message_store)
 
         else:
             logging.info("Performing initial full table sync for LOG_BASED table {}".format(
@@ -770,22 +775,20 @@ class Component(KBCEnvHandler):
 
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
 
-            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn, self.max_execution_time)
+            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
-            if full_table.sync_is_resumable(mysql_conn, catalog_entry, max_execution_time=self.max_execution_time):
+            if full_table.sync_is_resumable(mysql_conn, catalog_entry):
                 # We must save log_file and log_pos across FULL_TABLE syncs when performing
                 # a resumable full table sync
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
                 full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                             tables_destination=tables_destination, message_store=message_store,
-                                             max_execution_time=self.max_execution_time)
+                                             tables_destination=tables_destination, message_store=message_store)
             else:
                 full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                             tables_destination=tables_destination, message_store=message_store,
-                                             max_execution_time=self.max_execution_time)
+                                             tables_destination=tables_destination, message_store=message_store)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
@@ -810,7 +813,8 @@ class Component(KBCEnvHandler):
 
         return table_schema
 
-    def do_sync_full_table(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
+    @staticmethod
+    def do_sync_full_table(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
                            message_store: core.MessageStore = None):
         logging.info("Stream %s is using full table replication", catalog_entry.stream)
         key_properties = common.get_key_properties(catalog_entry)  # noqa
@@ -820,8 +824,7 @@ class Component(KBCEnvHandler):
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
         full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                     tables_destination=tables_destination, message_store=message_store,
-                                     max_execution_time=self.max_execution_time)
+                                     tables_destination=tables_destination, message_store=message_store)
 
         # Prefer initial_full_table_complete going forward
         core.clear_bookmark(state, catalog_entry.tap_stream_id, 'version')
@@ -857,7 +860,7 @@ class Component(KBCEnvHandler):
                 timer.tags['database'] = database_name
                 timer.tags['table'] = catalog_entry.table
 
-                log_engine(mysql_conn, catalog_entry, self.max_execution_time)
+                log_engine(mysql_conn, catalog_entry)
 
                 if replication_method.upper() == 'INCREMENTAL':
                     optional_limit = config.get('incremental_limit')
@@ -899,8 +902,9 @@ class Component(KBCEnvHandler):
         self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
                                  message_store=message_store, schemas=schemas, tables=tables, columns=columns)
 
-    def log_server_params(self, mysql_conn):
-        with connect_with_backoff(mysql_conn, self.max_excution_time) as open_conn:
+    @staticmethod
+    def log_server_params(mysql_conn):
+        with connect_with_backoff(mysql_conn) as open_conn:
             try:
                 with open_conn.cursor() as cur:
                     cur.execute('''

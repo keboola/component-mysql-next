@@ -57,8 +57,8 @@ def add_automatic_properties(catalog_entry, columns):
     return columns
 
 
-def verify_binlog_config(mysql_conn, max_execution_time: int = 360000000):
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+def verify_binlog_config(mysql_conn):
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             cur.execute("SELECT  @@binlog_format")
             binlog_format = cur.fetchone()[0]
@@ -95,8 +95,8 @@ def verify_log_file_exists(binary_logs, log_file, log_pos):
                         "greater than current position ({}).".format(log_pos, log_file, current_log_pos))
 
 
-def fetch_current_log_file_and_pos(mysql_conn, max_execution_time: int = 360000000):
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+def fetch_current_log_file_and_pos(mysql_conn):
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             cur.execute("SHOW MASTER STATUS")
             result = cur.fetchone()
@@ -108,8 +108,8 @@ def fetch_current_log_file_and_pos(mysql_conn, max_execution_time: int = 3600000
             return current_log_file, current_log_pos
 
 
-def fetch_server_id(mysql_conn, max_execution_time: int = 360000000):
-    with connect_with_backoff(mysql_conn, max_execution_time) as open_conn:
+def fetch_server_id(mysql_conn):
+    with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             cur.execute("SELECT @@server_id")
             server_id = cur.fetchone()[0]
@@ -487,8 +487,8 @@ class ShowBinlogMethodFactory:
             raise ValueError(f'Provided show_binlog_method: {method_config} is invalid')
         return show_binlog_method
 
-    def _show_binlog_from_db(self, max_execution_time: int = 360000000) -> dict:
-        with connect_with_backoff(self._mysql_conn, max_execution_time) as open_conn:
+    def _show_binlog_from_db(self) -> dict:
+        with connect_with_backoff(self._mysql_conn) as open_conn:
             with open_conn.cursor() as cur:
                 logging.debug('Executing SHOW BINARY LOGS')
                 cur.execute("SHOW BINARY LOGS")

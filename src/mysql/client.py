@@ -15,17 +15,18 @@ BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
 READ_TIMEOUT_SECONDS = 3000
 
-cfg = {
+cfg_param = {
     "max_execution_time": 360000000
 }
 
 
 @backoff.on_exception(backoff.expo, pymysql.err.OperationalError, max_tries=MAX_CONNECT_RETRIES, factor=BACKOFF_FACTOR)
-def connect_with_backoff(connection, max_execution_time):
+def connect_with_backoff(connection):
     logging.debug('Connecting to MySQL server.')
     connection.connect()
     with connection.cursor() as cursor:
-        set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS, max_execution_time=max_execution_time)
+        set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS,
+                               max_execution_time=cfg_param["max_execution_time"])
 
     return connection
 
@@ -88,7 +89,6 @@ class MySQLConnection(pymysql.connections.Connection):
             "cursorclass": config.get('cursorclass') or pymysql.cursors.SSCursor,
             "connect_timeout": CONNECTION_TIMEOUT_SECONDS,
             "read_timeout": READ_TIMEOUT_SECONDS,
-            "max_execution_time": config.get('max_execution_time'),
             "charset": 'utf8',
         }
 
@@ -131,7 +131,6 @@ def make_connection_wrapper(config):
         def __init__(self, *args, **kwargs):
             config["cursorclass"] = kwargs.get('cursorclass')
             super().__init__(config)
-            max_execution_time = kwargs.get('max_execution_time')
-            connect_with_backoff(self, max_execution_time=max_execution_time)
+            connect_with_backoff(self)
 
     return ConnectionWrapper
