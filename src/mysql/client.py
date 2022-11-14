@@ -17,7 +17,7 @@ READ_TIMEOUT_SECONDS = 3000
 
 
 @backoff.on_exception(backoff.expo, pymysql.err.OperationalError, max_tries=MAX_CONNECT_RETRIES, factor=BACKOFF_FACTOR)
-def connect_with_backoff(connection, max_execution_time):
+def connect_with_backoff(connection, max_execution_time: int = 360000000):
     logging.debug('Connecting to MySQL server.')
     connection.connect()
     with connection.cursor() as cursor:
