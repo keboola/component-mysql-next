@@ -683,7 +683,7 @@ class Component(KBCEnvHandler):
         except ValueError as err:
             logging.exception(err)
             exit(1)
-
+        # TODO: add max_exec time
         self.mysql_config_params = {
             "host": self.params[KEY_MYSQL_HOST],
             "port": self.params[KEY_MYSQL_PORT],
