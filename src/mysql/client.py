@@ -25,9 +25,6 @@ def connect_with_backoff(connection):
     with connection.cursor() as cursor:
         set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS,
                                max_execution_time=connection.connection_parameters["max_execution_time"])
-        # TODO: set from connection.connection_parameters[]
-        # max_execution_time=cfg_param["maxExecutionTime"])
-
     return connection
 
 
@@ -103,7 +100,6 @@ class MySQLConnection(pymysql.connections.Connection):
 
         # Attempt self-signed SSL, if config vars are present
         use_self_signed_ssl = config.get("ssl_ca")
-        # TODO: store config self.connection_parameters = config
         self.connection_parameters = config
         super().__init__(defer_connect=True, ssl=ssl_arg, **args)
 
@@ -135,6 +131,8 @@ def make_connection_wrapper(config):
         def __init__(self, *args, **kwargs):
             config["cursorclass"] = kwargs.get('cursorclass')
             # TODO: set max_execution time into self.connection_config
+            # TODO: Please check if this is ok. I do not think I got this right.
+            self.connection_parameters = config["max_execution_time"]
             super().__init__(config)
             connect_with_backoff(self)
 
