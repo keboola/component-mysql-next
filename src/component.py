@@ -43,9 +43,6 @@ from sshtunnel import SSHTunnelForwarder
 from mysql.replication.stream_reader import TableColumnSchemaCache
 
 
-from mysql.client import cfg_param
-
-
 KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
 
 try:
@@ -87,8 +84,6 @@ except ImportError:
 
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
-
-# sys.tracebacklimit = 0
 
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
@@ -683,7 +678,12 @@ class Component(KBCEnvHandler):
         except ValueError as err:
             logging.exception(err)
             exit(1)
-        # TODO: add max_exec time
+
+        max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
+        if max_execution_time:
+            max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
+            logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
+
         self.mysql_config_params = {
             "host": self.params[KEY_MYSQL_HOST],
             "port": self.params[KEY_MYSQL_PORT],
@@ -693,13 +693,9 @@ class Component(KBCEnvHandler):
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT,
-            "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
+            "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {}),
+            "max_execution_time": max_execution_time
         }
-
-        max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
-        if max_execution_time:
-            cfg_param["maxExecutionTime"] = self.params.get(KEY_MAX_EXECUTION_TIME)
-            logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'

@@ -17,10 +17,6 @@ BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
 READ_TIMEOUT_SECONDS = 3000
 
-cfg_param = {
-    "maxExecutionTime": False
-}
-
 
 @backoff.on_exception(backoff.expo, pymysql.err.OperationalError, max_tries=MAX_CONNECT_RETRIES, factor=BACKOFF_FACTOR)
 def connect_with_backoff(connection):
@@ -28,8 +24,9 @@ def connect_with_backoff(connection):
     connection.connect()
     with connection.cursor() as cursor:
         set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS,
-                               # TODO: set from connection.connection_parameters[]
-                               max_execution_time=cfg_param["maxExecutionTime"])
+                               max_execution_time=connection.connection_parameters["max_execution_time"])
+        # TODO: set from connection.connection_parameters[]
+        # max_execution_time=cfg_param["maxExecutionTime"])
 
     return connection
 
@@ -107,6 +104,7 @@ class MySQLConnection(pymysql.connections.Connection):
         # Attempt self-signed SSL, if config vars are present
         use_self_signed_ssl = config.get("ssl_ca")
         # TODO: store config self.connection_parameters = config
+        self.connection_parameters = config
         super().__init__(defer_connect=True, ssl=ssl_arg, **args)
 
         # Configure SSL w/o custom CA -- Manually create context, override default behavior of CERT_NONE w/o CA supplied
