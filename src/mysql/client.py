@@ -130,9 +130,6 @@ def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):
             config["cursorclass"] = kwargs.get('cursorclass')
-            # TODO: set max_execution time into self.connection_config
-            # TODO: Please check if this is ok. I do not think I got this right.
-            self.connection_parameters = config["max_execution_time"]
             super().__init__(config)
             connect_with_backoff(self)
 
