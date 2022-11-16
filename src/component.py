@@ -682,7 +682,7 @@ class Component(KBCEnvHandler):
         max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
         if max_execution_time:
             max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
-            if len(max_execution_time) > 0:
+            if len(str(max_execution_time)) > 0:
                 try:
                     max_execution_time = int(max_execution_time)
                     logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
