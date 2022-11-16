@@ -682,7 +682,12 @@ class Component(KBCEnvHandler):
         max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
         if max_execution_time:
             max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
-            logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
+            if len(max_execution_time) > 0:
+                try:
+                    max_execution_time = int(max_execution_time)
+                    logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
+                except ValueError as e:
+                    raise Exception(f"Cannot cast parameter {max_execution_time} to integer.") from e
 
         self.mysql_config_params = {
             "host": self.params[KEY_MYSQL_HOST],

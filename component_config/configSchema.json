@@ -239,7 +239,7 @@
       "propertyOrder": 1200
     },
     "maxExecutionTime": {
-      "type": "integer",
+      "type": "string",
       "title": "Max connection time",
       "description": "Optional parameter which sets @@session.max_execution_time to desired integer value",
       "propertyOrder": 1210
