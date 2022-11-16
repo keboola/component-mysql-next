@@ -42,6 +42,7 @@ from sshtunnel import SSHTunnelForwarder
 
 from mysql.replication.stream_reader import TableColumnSchemaCache
 
+
 KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
 
 try:
@@ -84,8 +85,6 @@ except ImportError:
 current_path = os.path.dirname(__file__)
 module_path = os.path.dirname(current_path)
 
-# sys.tracebacklimit = 0
-
 # Define mandatory parameter constants, matching Config Schema.
 KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
 KEY_TABLE_MAPPINGS_JSON = 'inputMappingsJson'
@@ -112,6 +111,7 @@ KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
 KEY_SSH_USERNAME = 'sshUser'
 KEY_SSL_CA = 'sslCa'
 KEY_VERIFY_CERT = 'verifyCert'
+KEY_MAX_EXECUTION_TIME = 'maxExecutionTime'
 
 ENV_COMPONENT_ID = 'KBC_COMPONENTID'
 ENV_CONFIGURATION_ID = 'KBC_CONFIGID'
@@ -121,6 +121,7 @@ LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 1000000
+
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
@@ -678,6 +679,11 @@ class Component(KBCEnvHandler):
             logging.exception(err)
             exit(1)
 
+        max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
+        if max_execution_time:
+            max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
+            logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
+
         self.mysql_config_params = {
             "host": self.params[KEY_MYSQL_HOST],
             "port": self.params[KEY_MYSQL_PORT],
@@ -687,7 +693,8 @@ class Component(KBCEnvHandler):
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT,
-            "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {})
+            "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {}),
+            "max_execution_time": max_execution_time
         }
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
@@ -903,14 +910,16 @@ class Component(KBCEnvHandler):
                            @@session.wait_timeout as wait_timeout,
                            @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
                            @@session.max_allowed_packet as max_allowed_packet,
-                           @@session.interactive_timeout as interactive_timeout''')
+                           @@session.interactive_timeout as interactive_timeout,
+                           @@session.max_execution_time as max_execution_time''')
                     row = cur.fetchone()
                     logging.info('Server Parameters: ' +
                                  'version: %s, ' +
                                  'wait_timeout: %s, ' +
                                  'innodb_lock_wait_timeout: %s, ' +
                                  'max_allowed_packet: %s, ' +
-                                 'interactive_timeout: %s',
+                                 'interactive_timeout: %s ' +
+                                 'max_execution_time: %s',
                                  *row)
                 with open_conn.cursor() as cur:
                     cur.execute('''

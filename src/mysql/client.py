@@ -10,6 +10,8 @@ import backoff
 import pymysql
 from pymysql.constants import CLIENT
 
+from typing import Union
+
 MAX_CONNECT_RETRIES = 5
 BACKOFF_FACTOR = 2
 CONNECTION_TIMEOUT_SECONDS = 30
@@ -21,13 +23,15 @@ def connect_with_backoff(connection):
     logging.debug('Connecting to MySQL server.')
     connection.connect()
     with connection.cursor() as cursor:
-        set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS)
-
+        set_session_parameters(cursor, net_read_timeout=READ_TIMEOUT_SECONDS,
+                               max_execution_time=connection.connection_parameters["max_execution_time"])
     return connection
 
 
-def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_timeout: int = 300,
-                           net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00'):
+def set_session_parameters(cursor: pymysql.connections.Connection.cursor, max_execution_time: Union[int, bool],
+                           wait_timeout: int = 300,
+                           net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00'
+                           ):
     """Set MySQL session parameters to handle for data extraction appropriately.
 
     Args:
@@ -36,29 +40,38 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, wait_t
         net_read_timeout: (Optional) Seconds to wait for more data from connection before aborting the read, default 60.
         innodb_lock_wait_timeout: (Optional) Seconds a transaction waits for a row lock before giving up, default 300.
         time_zone: (Optional) String representing the session time zone, default is UTC: '+0:00').
+        max_execution_time: This is here as a workaround for server-caused timeouts
     Returns:
         None.
     """
     logged_warnings = []
     try:
         cursor.execute('SET @@session.wait_timeout={}'.format(wait_timeout))
+        logging.info(f"Setting session parameter wait_timeout to {wait_timeout}")
     except pymysql.err.InternalError as internal_err:
         logged_warnings.append('Could not set session.wait_timeout. Error: ({}) {}'.format(*internal_err.args))
     try:
         cursor.execute("SET @@session.net_read_timeout={}".format(net_read_timeout))
+        logging.info(f"Setting session parameter net_read_timeout to {net_read_timeout}")
     except pymysql.err.InternalError as internal_err:
         logged_warnings.append('Could not set session.net_read_timeout. Error: ({}) {}'.format(*internal_err.args))
     try:
         cursor.execute('SET @@session.time_zone="{}"'.format(time_zone))
+        logging.info(f"Setting session parameter time_zone to {time_zone}")
     except pymysql.err.InternalError as internal_err:
         logged_warnings.append('Could not set session.time_zone. Error: ({}) {}'.format(*internal_err.args))
-
     try:
         cursor.execute('SET @@session.innodb_lock_wait_timeout={}'.format(innodb_lock_wait_timeout))
+        logging.info(f"Setting session parameter innodb_lock_wait_timeout to {innodb_lock_wait_timeout}")
     except pymysql.err.InternalError as e:
-        logged_warnings.append(
-            'Could not set session.innodb_lock_wait_timeout. Error: ({}) {}'.format(*e.args)
-        )
+        logged_warnings.append('Could not set session.innodb_lock_wait_timeout. Error: ({}) {}'.format(*e.args))
+
+    if max_execution_time:
+        try:
+            cursor.execute('SET @@session.max_execution_time={}'.format(max_execution_time))
+            logging.info(f"Setting session parameter max_execution_time to {max_execution_time}")
+        except pymysql.err.InternalError as e:
+            logged_warnings.append('Could not set session.max_execution_time. Error: ({}) {}'.format(*e.args))
 
     if logged_warnings:
         logging.info('Setting session parameters failed for at least one process, which may impact execution speed.')
@@ -87,7 +100,7 @@ class MySQLConnection(pymysql.connections.Connection):
 
         # Attempt self-signed SSL, if config vars are present
         use_self_signed_ssl = config.get("ssl_ca")
-
+        self.connection_parameters = config
         super().__init__(defer_connect=True, ssl=ssl_arg, **args)
 
         # Configure SSL w/o custom CA -- Manually create context, override default behavior of CERT_NONE w/o CA supplied
@@ -118,7 +131,6 @@ def make_connection_wrapper(config):
         def __init__(self, *args, **kwargs):
             config["cursorclass"] = kwargs.get('cursorclass')
             super().__init__(config)
-
             connect_with_backoff(self)
 
     return ConnectionWrapper
