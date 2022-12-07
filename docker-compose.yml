@@ -3,7 +3,6 @@ services:
   app: &app
     build: .
     environment:
-      exit
       MYSQL_DB_HOST: mysql
       MYSQL_DB_SSL_HOST: mysql-ssl
       MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
