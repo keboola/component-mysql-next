@@ -204,7 +204,9 @@ class TableColumnSchemaCache:
 
         if not update_ordinal_position:
             raise SchemaOffsyncError(f'Dropped column: "{drop_change.column_name}" '
-                                     f'is already missing in the provided starting schema => may lead to value shift!')
+                                     f'is already missing in the provided starting '
+                                     f'schema of table {drop_change.table_name} => may lead to value shift!'
+                                     f' The affected query is: {drop_change.query}')
 
         if not column_schema:
             # should not happen
