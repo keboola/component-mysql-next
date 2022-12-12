@@ -439,6 +439,13 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([], table_changes)
 
+    def test_drop_index(self):
+        drop = """ALTER TABLE `ttt`.`delivery_menus` DROP INDEX `dmb_id`"""
+
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
