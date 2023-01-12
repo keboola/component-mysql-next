@@ -148,9 +148,13 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
             else:
                 raise SchemaOffsyncError(f'Schema for {column_name} is not available!')
 
-        if isinstance(val, (datetime.datetime, datetime.date, datetime.timedelta)):
+        if isinstance(val, (datetime.datetime, datetime.date)):
             the_utc_date = common.to_utc_datetime_str(val)
             row_to_persist[column_name] = the_utc_date
+
+        # row_event.__read_time() returns timedelta in case it is a time
+        if isinstance(val, datetime.timedelta):
+            row_to_persist[column_name] = str(val)
 
         elif db_column_type == FIELD_TYPE.JSON:
             row_to_persist[column_name] = json.dumps(json_bytes_to_string(val))

@@ -147,10 +147,6 @@ def to_utc_datetime_str(val):
         # the_datetime = datetime.datetime.combine(val, datetime.datetime.min.time())
         return val.strftime('%Y-%m-%d')
 
-    elif isinstance(val, datetime.timedelta):
-        epoch = datetime.datetime.utcfromtimestamp(0)
-        the_datetime = epoch + val
-
     else:
         raise ValueError("{!r} is not a valid date or time type".format(val))
 
