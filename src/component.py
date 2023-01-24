@@ -449,7 +449,7 @@ def desired_columns(selected, table_schema, table_name: str = ''):
 
     selected_but_unsupported = selected.intersection(list(unsupported.keys()))
     if selected_but_unsupported:
-        raise Exception(f'Columns in table {table_name} were selected but are not supported. '
+        logging.warning(f'Columns in table {table_name} were selected but are not supported, skipping. '
                         f'Invalid columns:  {[f"{c}:{unsupported[c]}" for c in selected_but_unsupported]}')
 
     selected_but_nonexistent = selected.difference(all_columns)
@@ -539,7 +539,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
         binary_columns = []
 
         for column, column_vals in discovered_table.schema.properties.items():
-            if 'binary' in column_vals.type:
+            if column_vals.type and 'binary' in column_vals.type:
                 binary_columns += [column]
 
         result.streams.append(CatalogEntry(
