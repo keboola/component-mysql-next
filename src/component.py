@@ -30,12 +30,17 @@ import os
 import shutil
 import sys
 import tempfile
+import warnings
 from collections import namedtuple
 from contextlib import nullcontext
 from io import StringIO
 from typing import List
 
-import paramiko
+from cryptography.utils import CryptographyDeprecationWarning
+
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
+    import paramiko
 import pendulum
 import pymysql
 import pymysqlreplication
@@ -1600,5 +1605,6 @@ if __name__ == "__main__":
         logging.info('Extraction completed successfully in {} seconds'.format(component_duration))
 
     except Exception as generic_err:
+        print(generic_err)
         logging.exception(generic_err)
         exit(1)
