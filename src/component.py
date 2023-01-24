@@ -425,7 +425,7 @@ def do_discover(mysql_conn, config, append_mode):
     return discover_catalog(mysql_conn, config, append_mode=append_mode).dumps()
 
 
-def desired_columns(selected, table_schema):
+def desired_columns(selected, table_schema, table_name: str = ''):
     """Return the set of column names we need to include in the SELECT.
     selected - set of column names marked as selected in the input catalog
     table_schema - the most recently discovered Schema for the table
@@ -449,8 +449,8 @@ def desired_columns(selected, table_schema):
 
     selected_but_unsupported = selected.intersection(list(unsupported.keys()))
     if selected_but_unsupported:
-        raise Exception(f'Columns were selected but are not supported. '
-                        f'Invalid columns: {[unsupported[c] for c in selected_but_unsupported]}')
+        raise Exception(f'Columns in table {table_name} were selected but are not supported. '
+                        f'Invalid columns:  {[f"{c}:{unsupported[c]}" for c in selected_but_unsupported]}')
 
     selected_but_nonexistent = selected.difference(all_columns)
     if selected_but_nonexistent:
@@ -535,7 +535,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                     if common.property_is_selected(catalog_entry, k) or k == replication_key}
 
         # These are the columns we need to select
-        columns = desired_columns(selected, discovered_table.schema)
+        columns = desired_columns(selected, discovered_table.schema, discovered_table.table)
         binary_columns = []
 
         for column, column_vals in discovered_table.schema.properties.items():
