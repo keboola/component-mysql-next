@@ -44,7 +44,6 @@ from sshtunnel import SSHTunnelForwarder
 
 from mysql.replication.stream_reader import TableColumnSchemaCache
 
-
 KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
 
 try:
@@ -123,7 +122,6 @@ LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 1000000
-
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
@@ -430,7 +428,7 @@ def desired_columns(selected, table_schema):
     all_columns = set()
     available = set()
     automatic = set()
-    unsupported = set()
+    unsupported = dict()
 
     for column, column_schema in table_schema.properties.items():
         all_columns.add(column)
@@ -440,14 +438,14 @@ def desired_columns(selected, table_schema):
         elif inclusion == 'available':
             available.add(column)
         elif inclusion == 'unsupported':
-            unsupported.add(column)
+            unsupported[column] = column_schema
         else:
             raise Exception('Unknown inclusion ' + inclusion)
 
-    selected_but_unsupported = selected.intersection(unsupported)
+    selected_but_unsupported = selected.intersection(list(unsupported.keys()))
     if selected_but_unsupported:
-        logging.warning('Columns %s were selected but are not supported. ping them: {}'.format(
-            selected_but_unsupported))
+        raise Exception(f'Columns were selected but are not supported. '
+                        f'Invalid columns: {[unsupported[c] for c in selected_but_unsupported]}')
 
     selected_but_nonexistent = selected.difference(all_columns)
     if selected_but_nonexistent:
