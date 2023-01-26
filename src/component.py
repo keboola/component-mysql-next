@@ -1615,6 +1615,5 @@ if __name__ == "__main__":
         logging.info('Extraction completed successfully in {} seconds'.format(component_duration))
 
     except Exception as generic_err:
-        print(generic_err)
         logging.exception(generic_err)
         exit(1)
