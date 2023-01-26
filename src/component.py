@@ -455,7 +455,7 @@ def desired_columns(selected, table_schema, table_name: str = ''):
 
     selected_but_unsupported = selected.intersection(list(unsupported.keys()))
     if selected_but_unsupported:
-        raise Exception(f'Columns in table {table_name} were selected but are not supported, skipping. '
+        logging.warning(f'Columns in table {table_name} were selected but are not supported, skipping. '
                         f'Invalid columns:  {[f"{c}:{unsupported[c]}" for c in selected_but_unsupported]}')
 
     selected_but_nonexistent = selected.difference(all_columns)
@@ -814,6 +814,10 @@ class Component(KBCEnvHandler):
         column_properties = catalog_entry.schema.properties
         for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
             col_name = column_metadata['breadcrumb'][1]
+
+            if col_name not in column_properties:
+                logging.debug(f"Skipping columns: {col_name}")
+                continue
             col_type = column_metadata['metadata']['sql-datatype']
             ordinal_position = column_metadata['metadata']['ordinal-position']
             is_pkey = col_name in primary_keys
