@@ -140,6 +140,7 @@ pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_da
 
 # Bin database sub-types by type.
 STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'varchar'}
+BLOB_TYPES = {"tinyblob", "blob", "mediumblob", "longblob"}
 FLOAT_TYPES = {'double', 'float'}
 DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
 SET_TYPE = 'set'
@@ -245,6 +246,11 @@ def schema_for_column(c):
         return result
 
     elif data_type in STRING_TYPES:
+        result.type = ['null', 'string']
+        result.maxLength = c.character_maximum_length
+        result.characterSet = c.character_set_name
+
+    elif data_type in BLOB_TYPES:
         result.type = ['null', 'string']
         result.maxLength = c.character_maximum_length
         result.characterSet = c.character_set_name
