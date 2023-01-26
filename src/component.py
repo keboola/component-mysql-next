@@ -455,7 +455,7 @@ def desired_columns(selected, table_schema, table_name: str = ''):
 
     selected_but_unsupported = selected.intersection(list(unsupported.keys()))
     if selected_but_unsupported:
-        logging.warning(f'Columns in table {table_name} were selected but are not supported, skipping. '
+        raise Exception(f'Columns in table {table_name} were selected but are not supported, skipping. '
                         f'Invalid columns:  {[f"{c}:{unsupported[c]}" for c in selected_but_unsupported]}')
 
     selected_but_nonexistent = selected.difference(all_columns)
