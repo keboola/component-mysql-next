@@ -139,10 +139,10 @@ APP_VERSION = '0.9.4'
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
 # Bin database sub-types by type.
-STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'varchar'}
-BLOB_TYPES = {"tinyblob", "blob", "mediumblob", "longblob"}
-FLOAT_TYPES = {'double', 'float'}
-DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
+SUPPORTED_STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'varchar'}
+SUPPORTED_BLOB_TYPES = {"tinyblob", "blob", "mediumblob"}
+SUPPORTED_FLOAT_TYPES = {'double', 'float'}
+SUPPORTED_DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
 SET_TYPE = 'set'
 BYTES_FOR_INTEGER_TYPE = {
     'tinyint': 1,
@@ -234,7 +234,7 @@ def schema_for_column(c):
             result.minimum = 0 - 2 ** (bits - 1)
             result.maximum = 2 ** (bits - 1) - 1
 
-    elif data_type in FLOAT_TYPES:
+    elif data_type in SUPPORTED_FLOAT_TYPES:
         result.type = ['null', 'number']
 
     elif data_type == 'json':
@@ -245,17 +245,17 @@ def schema_for_column(c):
         result.multipleOf = 10 ** (0 - c.numeric_scale)
         return result
 
-    elif data_type in STRING_TYPES:
+    elif data_type in SUPPORTED_STRING_TYPES:
         result.type = ['null', 'string']
         result.maxLength = c.character_maximum_length
         result.characterSet = c.character_set_name
 
-    elif data_type in BLOB_TYPES:
+    elif data_type in SUPPORTED_BLOB_TYPES:
         result.type = ['null', 'string']
         result.maxLength = c.character_maximum_length
         result.characterSet = c.character_set_name
 
-    elif data_type in DATETIME_TYPES:
+    elif data_type in SUPPORTED_DATETIME_TYPES:
         result.type = ['null', 'string']
         result.format = 'date-time'
 
