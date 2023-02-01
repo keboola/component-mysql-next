@@ -11,9 +11,10 @@ import os
 import time
 from warnings import warn
 
+import backoff as backoff_module
 import dateutil.parser
 import pytz
-import backoff as backoff_module
+from typing.io import IO
 
 from .catalog import Catalog
 
@@ -229,6 +230,7 @@ def exception_is_4xx(exception):
 def handle_top_exception(logger):
     """A decorator that will catch exceptions and log the exception's message
     as a CRITICAL log."""
+
     def decorator(fnc):
         @functools.wraps(fnc)
         def wrapped(*args, **kwargs):
@@ -237,7 +239,9 @@ def handle_top_exception(logger):
             except Exception as exc:
                 logger.critical(exc)
                 raise
+
         return wrapped
+
     return decorator
 
 
@@ -312,3 +316,89 @@ def should_sync_field(inclusion, selected, default=False):
 
     # if there was no selected value, use the default
     return default
+
+
+def _read_next_block_of_lines(file: IO, position: int, block_size: int, max_position: int, encoding='UTF-8'):
+    """
+    Read the smallest next block of bytes representing characters that ends with new line.
+    Retry if incomplete byte sequence is hit and adjust the position.
+    Args:
+        file:
+        position:
+        block_size:
+        max_position: latest position in file
+        encoding:
+
+    Returns: block:str, position:int - new adjusted position
+
+    """
+
+    new_block_size = block_size
+    is_end = False
+    while not is_end:
+        file.seek(position, os.SEEK_END)
+        block = file.read(new_block_size)
+        try:
+            decoded = block.decode(encoding)
+            if not decoded.startswith('\n'):
+                new_block_size += 1
+                position -= 1
+
+                if is_end := (abs(position) > max_position):
+                    return decoded, position
+                else:
+                    continue
+            return decoded, position
+        except UnicodeDecodeError as e:
+            # in case we hit partial character representation (not full byte sequence)
+            new_block_size += 1
+            position -= 1
+
+
+def _reversed_blocks(file, blocksize=4096):
+    """
+    Generate blocks of file's contents in reverse order.
+    Args:
+        file:
+        blocksize:
+
+    Returns:
+
+    """
+    file.seek(0, os.SEEK_END)
+    max_pos = file.tell()
+    position = 0
+    delta = blocksize
+    while abs(position) <= max_pos:
+        positions_remaining = max_pos + position
+        delta = blocksize if delta <= positions_remaining else positions_remaining
+        position = (-delta) + position
+
+        decoded, position = _read_next_block_of_lines(file, position, delta, max_pos)
+        yield decoded
+
+
+def reverse_readline(file, buf_size=8192):
+    """
+    Generate the lines of file in reverse order.
+    Args:
+        file:
+        buf_size:
+
+    Returns:
+
+    """
+
+    part = ''
+    quoting = False
+    for block in _reversed_blocks(file, buf_size):
+
+        for c in reversed(block):
+            if c == '"':
+                quoting = not quoting
+            elif c == '\n' and part and not quoting:
+                yield part[::-1]
+                part = ''
+            part += c
+    if part:
+        yield part[::-1]

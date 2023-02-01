@@ -5,6 +5,9 @@ __pycache__/
 .project
 .pydevproject
 .pytest_cache/
+src/test.py
+
+table_headers.csv
 
 # Distribution / packaging
 .Python
@@ -48,7 +51,6 @@ virtualenv/
 *.spec
 *.json
 !output_config.json
-*.csv
 *.txt
 *.xml
 process_mappings.py

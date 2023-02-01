@@ -57,6 +57,8 @@ class AlterStatementParser:
             return False
         if statement.tokens[idx].normalized.upper() == 'UNIQUE':
             return False
+        if statement.tokens[idx].normalized == 'INDEX':
+            return False
 
         return True
 

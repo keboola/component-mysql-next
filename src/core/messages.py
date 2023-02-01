@@ -2,13 +2,12 @@ import base64
 import csv
 import logging
 import os
-import tempfile
-from typing import Dict, List
+from dataclasses import dataclass
+from typing import Dict, List, TextIO
 
 import ciso8601
 import pytz
 import simplejson as json
-from kbc.csv_tools import CachedOrthogonalDictWriter
 
 from core.bookmarks import KEY_STORAGE_COLUMNS
 from mysql.replication import common
@@ -19,6 +18,12 @@ try:
     import core.utils as u
 except ImportError:
     import src.core.utils as u
+
+
+@dataclass
+class WriterCacheRecord:
+    writer: csv.DictWriter
+    out_stream: TextIO
 
 
 class Message:
@@ -252,7 +257,7 @@ class MessageStore(dict):
         self.binary_data_handler = binary_handler
 
         # cache of dict writers
-        self._writer_cache: Dict[str, CachedOrthogonalDictWriter] = {}
+        self._writer_cache: Dict[str, WriterCacheRecord] = {}
         self._schema_change_writer = None
 
         self._data_store = {}
@@ -370,13 +375,12 @@ class MessageStore(dict):
             # init writer
             # get columns of all collected columns so far -> the rest will handle the writer
             columns = schema
-            temp_directory = tempfile.TemporaryDirectory().name
-            writer = CachedOrthogonalDictWriter(full_path, columns, quoting=csv.QUOTE_ALL,
-                                                temp_directory=temp_directory)
+            out_stream = open(full_path, 'w+')
+            writer = csv.DictWriter(out_stream, columns, quoting=csv.QUOTE_ALL)
             writer.writeheader()
-            self._writer_cache[full_path] = writer
+            self._writer_cache[full_path] = WriterCacheRecord(writer, out_stream)
         else:
-            writer = self._writer_cache.get(full_path)
+            writer = self._writer_cache.get(full_path).writer
 
         for record in data_records:
             if binary_columns is not None:
@@ -456,7 +460,7 @@ class MessageStore(dict):
     def _close_writer_cache(self):
         for table, wr in self._writer_cache.items():
             logging.info(f"Closing out stream for {table}")
-            wr.close()
+            wr.out_stream.close()
 
 
 def format_message(message):

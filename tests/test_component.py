@@ -3,9 +3,13 @@ Created on 12. 11. 2018
 
 @author: esner
 """
-import unittest
-import mock
+import filecmp
 import os
+import shutil
+import tempfile
+import unittest
+
+import mock
 from freezegun import freeze_time
 
 try:
@@ -24,6 +28,22 @@ class TestComponent(unittest.TestCase):
         with self.assertRaises(ValueError):
             comp = Component()
             comp.run()
+
+    def test_dedupe_binlog_result(self):
+        temp_directory = tempfile.TemporaryDirectory().name
+        os.makedirs(temp_directory, exist_ok=True)
+        temp_file = os.path.join(temp_directory, 'test.csv')
+
+        source_test = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                   'resources', 'test.csv')
+        expected_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                     'resources', 'deduped.csv')
+        shutil.copy(source_test, os.path.join(temp_directory, 'test.csv'))
+
+        Component.deduplicate_binlog_result(temp_file, ['Start_Date', 'End_Date', 'Campaign_Name'], buffer_size=10)
+
+        outcome = filecmp.cmp(temp_file, expected_path, shallow=False)
+        self.assertTrue(outcome)
 
 
 if __name__ == "__main__":

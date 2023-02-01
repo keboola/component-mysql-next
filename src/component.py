@@ -20,20 +20,27 @@ TODO: Support Ticket for UI for this component (maybe they handle SSL?)
 """
 import ast
 import base64
+import binascii
 import copy
 import csv
 import itertools
 import json
 import logging
 import os
+import shutil
 import sys
+import tempfile
+import warnings
 from collections import namedtuple
 from contextlib import nullcontext
 from io import StringIO
+from typing import List
 
-import binascii
-import pandas as pd
-import paramiko
+from cryptography.utils import CryptographyDeprecationWarning
+
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
+    import paramiko
 import pendulum
 import pymysql
 import pymysqlreplication
@@ -41,7 +48,6 @@ import yaml
 from sshtunnel import SSHTunnelForwarder
 
 from mysql.replication.stream_reader import TableColumnSchemaCache
-
 
 KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
 
@@ -122,7 +128,6 @@ SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 1000000
 
-
 # Keep for debugging
 KEY_DEBUG = 'debug'
 MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD,
@@ -134,9 +139,10 @@ APP_VERSION = '0.9.4'
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
 # Bin database sub-types by type.
-STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'varchar'}
-FLOAT_TYPES = {'double', 'float'}
-DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
+SUPPORTED_STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'varchar'}
+SUPPORTED_BLOB_TYPES = {"tinyblob", "blob", "mediumblob"}
+SUPPORTED_FLOAT_TYPES = {'double', 'float'}
+SUPPORTED_DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
 SET_TYPE = 'set'
 BYTES_FOR_INTEGER_TYPE = {
     'tinyint': 1,
@@ -228,7 +234,7 @@ def schema_for_column(c):
             result.minimum = 0 - 2 ** (bits - 1)
             result.maximum = 2 ** (bits - 1) - 1
 
-    elif data_type in FLOAT_TYPES:
+    elif data_type in SUPPORTED_FLOAT_TYPES:
         result.type = ['null', 'number']
 
     elif data_type == 'json':
@@ -239,12 +245,17 @@ def schema_for_column(c):
         result.multipleOf = 10 ** (0 - c.numeric_scale)
         return result
 
-    elif data_type in STRING_TYPES:
+    elif data_type in SUPPORTED_STRING_TYPES:
         result.type = ['null', 'string']
         result.maxLength = c.character_maximum_length
         result.characterSet = c.character_set_name
 
-    elif data_type in DATETIME_TYPES:
+    elif data_type in SUPPORTED_BLOB_TYPES:
+        result.type = ['null', 'string']
+        result.maxLength = c.character_maximum_length
+        result.characterSet = c.character_set_name
+
+    elif data_type in SUPPORTED_DATETIME_TYPES:
         result.type = ['null', 'string']
         result.format = 'date-time'
 
@@ -420,7 +431,7 @@ def do_discover(mysql_conn, config, append_mode):
     return discover_catalog(mysql_conn, config, append_mode=append_mode).dumps()
 
 
-def desired_columns(selected, table_schema):
+def desired_columns(selected, table_schema, table_name: str = ''):
     """Return the set of column names we need to include in the SELECT.
     selected - set of column names marked as selected in the input catalog
     table_schema - the most recently discovered Schema for the table
@@ -428,7 +439,7 @@ def desired_columns(selected, table_schema):
     all_columns = set()
     available = set()
     automatic = set()
-    unsupported = set()
+    unsupported = dict()
 
     for column, column_schema in table_schema.properties.items():
         all_columns.add(column)
@@ -438,14 +449,14 @@ def desired_columns(selected, table_schema):
         elif inclusion == 'available':
             available.add(column)
         elif inclusion == 'unsupported':
-            unsupported.add(column)
+            unsupported[column] = column_schema
         else:
             raise Exception('Unknown inclusion ' + inclusion)
 
-    selected_but_unsupported = selected.intersection(unsupported)
+    selected_but_unsupported = selected.intersection(list(unsupported.keys()))
     if selected_but_unsupported:
-        logging.warning('Columns %s were selected but are not supported. ping them: {}'.format(
-            selected_but_unsupported))
+        logging.warning(f'Columns in table {table_name} were selected but are not supported, skipping. '
+                        f'Invalid columns:  {[f"{c}:{unsupported[c]}" for c in selected_but_unsupported]}')
 
     selected_but_nonexistent = selected.difference(all_columns)
     if selected_but_nonexistent:
@@ -530,11 +541,11 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                     if common.property_is_selected(catalog_entry, k) or k == replication_key}
 
         # These are the columns we need to select
-        columns = desired_columns(selected, discovered_table.schema)
+        columns = desired_columns(selected, discovered_table.schema, discovered_table.table)
         binary_columns = []
 
         for column, column_vals in discovered_table.schema.properties.items():
-            if 'binary' in column_vals.type:
+            if column_vals.type and 'binary' in column_vals.type:
                 binary_columns += [column]
 
         result.streams.append(CatalogEntry(
@@ -803,6 +814,10 @@ class Component(KBCEnvHandler):
         column_properties = catalog_entry.schema.properties
         for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
             col_name = column_metadata['breadcrumb'][1]
+
+            if col_name not in column_properties:
+                logging.debug(f"Skipping columns: {col_name}")
+                continue
             col_type = column_metadata['metadata']['sql-datatype']
             ordinal_position = column_metadata['metadata']['ordinal-position']
             is_pkey = col_name in primary_keys
@@ -1123,7 +1138,61 @@ class Component(KBCEnvHandler):
             logging.info('Wrote manifest table {}'.format(file_name + '.manifest'))
 
     @staticmethod
-    def write_only_latest_result_binlogs(csv_table_path: str, primary_keys: list = None,
+    def deduplicate_binlog_result(table_path: str, primary_keys: List[str], buffer_size=8192):
+        """
+        Reads table backwards and deduplicates based on  primary key.
+        Args:
+            table_path:
+            primary_keys:
+            buffer_size
+
+        Returns:
+
+        """
+
+        with open(table_path, 'r') as inp:
+            header = csv.DictReader(inp).fieldnames
+        pkey_hashes = set()
+
+        def create_pkey_hash(row_record: dict):
+            try:
+                pkey_hash_str = '|'.join(row_record[idx] for idx in primary_keys)
+                return pkey_hash_str
+            except IndexError:
+                # TODO: remove temp debug statement
+                for idx in primary_keys:
+                    try:
+                        row_record[idx]
+                    except IndexError:
+                        logging.error(f"Pkey index {idx} not found in row: {row_record}")
+                        raise Exception(f"Pkey index {idx} not found in row: {row_record} "
+                                        f"for primary key: {primary_keys}")
+
+        fd, temp_result = tempfile.mkstemp()
+        # FIX line 1: field larger than field limit error
+        # as proposed here https://stackoverflow.com/questions/15063936/csv-error-field-larger-than-field-limit-131072
+        csv.field_size_limit(sys.maxsize)
+        with open(temp_result, 'w+', newline='', encoding='utf-8') as out_file, open(table_path, 'rb') as inp:
+            writer = csv.DictWriter(out_file, fieldnames=header, lineterminator='\n')
+            reader = csv.DictReader(core.utils.reverse_readline(inp, buf_size=buffer_size), fieldnames=header)
+            writer.writeheader()
+            for row in reader:
+                if not row:
+                    logging.warning("Empty row in result")
+                    continue
+                pkey_hash = create_pkey_hash(row)
+                if pkey_hash in pkey_hashes:
+                    continue
+
+                pkey_hashes.add(pkey_hash)
+
+                if list(row.values()) != header:
+                    writer.writerow(row)
+
+        os.remove(table_path)
+        shutil.move(temp_result, table_path)
+
+    def write_only_latest_result_binlogs(self, csv_table_path: str, primary_keys: list = None,
                                          append_mode: bool = False) -> None:
         """For given result CSV file path, remove non-latest binlog event by primary key.
 
@@ -1141,10 +1210,10 @@ class Component(KBCEnvHandler):
                 logging.info('Keeping only latest per primary key from binary row event results for {} '
                              'based on table primary keys: {}'.format(csv_table_path, primary_keys))
 
-                df = pd.read_csv(csv_table_path, dtype='string')
-                df.drop_duplicates(subset=[pk.upper() for pk in primary_keys], keep='last', inplace=True)
-                df.columns = [col.upper() for col in df.columns]
-                df.to_csv(csv_table_path, index=False)
+                # TODO: remove
+                shutil.copy(csv_table_path, self.files_out_path + '/test.csv')
+
+                self.deduplicate_binlog_result(csv_table_path, [pk.upper() for pk in primary_keys])
 
             else:
 
@@ -1198,12 +1267,6 @@ class Component(KBCEnvHandler):
         else:
             logging.info('All directories at walked path: {}'.format(directories))
             logging.info('All files sent at walked path: {}'.format(files))
-
-    def _uppercase_table(self, table_path):
-
-        _df = pd.read_csv(table_path, dtype='str')
-        _df.columns = map(str.upper, _df.columns)
-        _df.to_csv(table_path, index=False)
 
     def parse_input_mapping(self, input_mapping, input_mapping_type='json'):
         """Parses provided input mappings and returns a list of selected tables and schemas."""

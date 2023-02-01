@@ -1,0 +1,8 @@
+#!/Users/esner/Documents/Prace/KBC/kds-team.ex-mysql-next/resource/pypy3.8-v7.3.9-osx64/bin/pypy
+# -*- coding: utf-8 -*-
+import re
+import sys
+from wheel.cli import main
+if __name__ == '__main__':
+    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
+    sys.exit(main())
