@@ -131,6 +131,9 @@ def json_bytes_to_string(data):
 
 def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracted):
     row_to_persist = {}
+    # This is to get columns that do not contain skipped ones (e.g. if unselected or unsupported type)
+    # In such case the value will be empty
+    supported_cols = [c.upper() for c in list(catalog_entry.schema.properties.keys())]
 
     for column_name, val in row.items():
         db_column_type = None
@@ -173,7 +176,10 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
                 boolean_representation = 1
                 # boolean_representation = True
             row_to_persist[column_name] = boolean_representation
-
+        # This is to get columns that do not contain skipped ones (e.g. if unselected or unsupported type)
+        # In such case the value will be empty
+        elif column_name not in supported_cols:
+            row_to_persist[column_name] = ''
         else:
             row_to_persist[column_name] = val
 
