@@ -470,7 +470,7 @@ def desired_columns(selected, table_schema, table_name: str = ''):
             'Columns %s are primary keys but were not selected. Adding them.',
             not_selected_but_automatic)
 
-    return selected.intersection(available).union(automatic)
+    return selected.intersection(available).union(automatic), all_columns
 
 
 def log_engine(mysql_conn, catalog_entry):
@@ -541,7 +541,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                     if common.property_is_selected(catalog_entry, k) or k == replication_key}
 
         # These are the columns we need to select
-        columns = desired_columns(selected, discovered_table.schema, discovered_table.table)
+        columns, all_columns = desired_columns(selected, discovered_table.schema, discovered_table.table)
         binary_columns = []
 
         for column, column_vals in discovered_table.schema.properties.items():
@@ -558,6 +558,11 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                 type='object',
                 properties={col: discovered_table.schema.properties[col]
                             for col in columns}
+            ),
+            full_schema=Schema(
+                type='object',
+                properties={col: discovered_table.schema.properties[col]
+                            for col in all_columns}
             ),
             binary_columns=binary_columns
         ))
@@ -775,7 +780,7 @@ class Component(KBCEnvHandler):
         stream_version = common.get_stream_version(catalog_entry.tap_stream_id, state)
 
         # Update state last_table_schema with current schema, and store KBC cols
-        table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry)
+        table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry, full=True)
         state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
 
         if log_file and log_pos and max_pk_values:
@@ -807,11 +812,15 @@ class Component(KBCEnvHandler):
                 state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
     @staticmethod
-    def _build_schema_cache_from_catalog_entry(catalog_entry):
+    def _build_schema_cache_from_catalog_entry(catalog_entry, full=False):
 
         table_schema = []
         primary_keys = common.get_key_properties(catalog_entry)
-        column_properties = catalog_entry.schema.properties
+        if full:
+            column_properties = catalog_entry.full_schema.properties
+        else:
+            column_properties = catalog_entry.schema.properties
+
         for idx, column_metadata in enumerate(catalog_entry.metadata[1:], start=1):
             col_name = column_metadata['breadcrumb'][1]
 
@@ -857,7 +866,8 @@ class Component(KBCEnvHandler):
             logging.info('No table destination specified, so will not work on new CSV write implementation')
 
         for catalog_entry in non_binlog_catalog.streams:
-            columns = list(catalog_entry.schema.properties.keys())
+            # only selected
+            columns = [k for k, v in catalog_entry.schema.properties.items()]
 
             if not columns:
                 logging.warning('There are no columns selected for stream %s, skipping it.', catalog_entry.stream)
