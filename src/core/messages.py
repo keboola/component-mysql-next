@@ -242,7 +242,8 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
                     logging.error(f"Unknown binary data handler format: {binary_data_handler}.")
                     exit(1)
             except Exception as e:
-                logging.error(f'Failed to process column {column}, invalid type in value "{row[column]}"')
+                logging.error(f'Failed to process binary column {column}, failed to convert value "{row[column]}". '
+                              'Try to choose another binary handler strategy.')
                 raise e
 
     return row
