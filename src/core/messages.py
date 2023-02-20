@@ -226,21 +226,24 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
             pass
 
         else:
+            try:
+                value_to_convert = row[column]
 
-            value_to_convert = row[column]
+                if replace_nulls is True:
+                    value_to_convert = value_to_convert.strip(b'\x00')
 
-            if replace_nulls is True:
-                value_to_convert = value_to_convert.strip(b'\x00')
-
-            if binary_data_handler == 'plain':
-                row[column] = value_to_convert.decode()
-            elif binary_data_handler == 'hex':
-                row[column] = value_to_convert.hex().upper()
-            elif binary_data_handler == 'base64':
-                row[column] = base64.b64encode(value_to_convert).decode()
-            else:
-                logging.error(f"Unknown binary data handler format: {binary_data_handler}.")
-                exit(1)
+                if binary_data_handler == 'plain':
+                    row[column] = value_to_convert.decode()
+                elif binary_data_handler == 'hex':
+                    row[column] = value_to_convert.hex().upper()
+                elif binary_data_handler == 'base64':
+                    row[column] = base64.b64encode(value_to_convert).decode()
+                else:
+                    logging.error(f"Unknown binary data handler format: {binary_data_handler}.")
+                    exit(1)
+            except Exception as e:
+                logging.error(f'Failed to process column {column}, invalid type in value "{row[column]}"')
+                raise e
 
     return row
 
