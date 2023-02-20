@@ -151,7 +151,7 @@ BYTES_FOR_INTEGER_TYPE = {
     'int': 4,
     'bigint': 8
 }
-BINARY_TYPES = {'binary'}
+BINARY_TYPES = {'binary', 'varbinary'}
 
 Column = namedtuple('Column', [
     "table_schema",
