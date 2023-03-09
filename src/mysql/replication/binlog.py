@@ -404,78 +404,85 @@ def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog
     parsing_log_pos = current_log_pos
 
     for binlog_event in reader:
+        try:
 
-        if parsing_log_file != reader.log_file:
-            parsing_log_file = reader.log_file
-            parsing_log_pos = reader.log_pos
-            logging.info("Parsing first 50M records in binary logs file.")
+            if parsing_log_file != reader.log_file:
+                parsing_log_file = reader.log_file
+                parsing_log_pos = reader.log_pos
+                logging.info("Parsing first 50M records in binary logs file.")
 
-        if reader.log_pos - parsing_log_pos > 50000000:
-            parsing_log_pos = reader.log_pos
-            logging.info(f"Parsing binary another 50M records in logs file {parsing_log_file}, "
-                         f"starting position {parsing_log_pos}.")
+            if reader.log_pos - parsing_log_pos > 50000000:
+                parsing_log_pos = reader.log_pos
+                logging.info(f"Parsing binary another 50M records in logs file {parsing_log_file}, "
+                             f"starting position {parsing_log_pos}.")
 
-        if isinstance(binlog_event, RotateEvent):
-            state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
+            if isinstance(binlog_event, RotateEvent):
+                state = update_bookmarks(state, binlog_streams_map, binlog_event.next_binlog, binlog_event.position)
 
-        elif isinstance(binlog_event, QueryEventWithSchemaChanges):
-            handle_schema_change_event(binlog_event, message_store)
+            elif isinstance(binlog_event, QueryEventWithSchemaChanges):
+                handle_schema_change_event(binlog_event, message_store)
 
-        else:
-            tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
-            streams_map_entry = binlog_streams_map.get(tap_stream_id, {})
-            catalog_entry = streams_map_entry.get('catalog_entry')
+            else:
+                tap_stream_id = common.generate_tap_stream_id(binlog_event.schema, binlog_event.table)
+                streams_map_entry = binlog_streams_map.get(tap_stream_id, {})
+                catalog_entry = streams_map_entry.get('catalog_entry')
 
-            desired_columns = columns[tap_stream_id].get('desired', [])
-            ignored_columns = columns[tap_stream_id].get('ignore', [])
-            watched_columns = columns[tap_stream_id].get('watch', [])
+                desired_columns = columns[tap_stream_id].get('desired', [])
+                ignored_columns = columns[tap_stream_id].get('ignore', [])
+                watched_columns = columns[tap_stream_id].get('watch', [])
 
-            if not catalog_entry:
-                logging.debug('No catalog entry, skip events number: {}'.format(events_skipped))
-                events_skipped = events_skipped + 1
+                if not catalog_entry:
+                    logging.debug('No catalog entry, skip events number: {}'.format(events_skipped))
+                    events_skipped = events_skipped + 1
 
-                if events_skipped % UPDATE_BOOKMARK_PERIOD == 0:
-                    logging.info("Skipped %s events so far as they were not for selected tables; %s rows extracted",
-                                 events_skipped, rows_saved)
+                    if events_skipped % UPDATE_BOOKMARK_PERIOD == 0:
+                        logging.info("Skipped %s events so far as they were not for selected tables; %s rows extracted",
+                                     events_skipped, rows_saved)
 
-            elif catalog_entry:
-                # ugly injection of current schema
-                current_column_schema = reader.schema_cache.get_column_schema(binlog_event.schema, binlog_event.table)
-                catalog_entry.current_column_cache = current_column_schema
+                elif catalog_entry:
+                    # ugly injection of current schema
+                    current_column_schema = reader.schema_cache.get_column_schema(binlog_event.schema,
+                                                                                  binlog_event.table)
+                    catalog_entry.current_column_cache = current_column_schema
 
-                if isinstance(binlog_event, WriteRowsEvent):
-                    rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                         rows_saved, time_extracted, message_store=message_store)
+                    if isinstance(binlog_event, WriteRowsEvent):
+                        rows_saved = handle_write_rows_event(binlog_event, catalog_entry, state, desired_columns,
+                                                             rows_saved, time_extracted, message_store=message_store)
 
-                elif isinstance(binlog_event, UpdateRowsEvent):
-                    rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                          rows_saved, time_extracted,
-                                                          watch_columns=watched_columns, ignore_columns=ignored_columns,
-                                                          message_store=message_store)
+                    elif isinstance(binlog_event, UpdateRowsEvent):
+                        rows_saved = handle_update_rows_event(binlog_event, catalog_entry, state, desired_columns,
+                                                              rows_saved, time_extracted,
+                                                              watch_columns=watched_columns,
+                                                              ignore_columns=ignored_columns,
+                                                              message_store=message_store)
 
-                elif isinstance(binlog_event, DeleteRowsEvent):
-                    rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
-                                                          rows_saved, time_extracted, message_store=message_store)
-                else:
-                    logging.info("Skipping event for table %s.%s as it is not an INSERT, UPDATE, or DELETE",
-                                 binlog_event.schema,
-                                 binlog_event.table)
+                    elif isinstance(binlog_event, DeleteRowsEvent):
+                        rows_saved = handle_delete_rows_event(binlog_event, catalog_entry, state, desired_columns,
+                                                              rows_saved, time_extracted, message_store=message_store)
+                    else:
+                        logging.info("Skipping event for table %s.%s as it is not an INSERT, UPDATE, or DELETE",
+                                     binlog_event.schema,
+                                     binlog_event.table)
 
-        state = update_bookmarks(state, binlog_streams_map, reader.log_file, reader.log_pos)
-        # Store last schema cache
-        state = bookmarks.update_schema_in_state(state, reader.schema_cache.table_schema_cache)
+            state = update_bookmarks(state, binlog_streams_map, reader.log_file, reader.log_pos)
+            # Store last schema cache
+            state = bookmarks.update_schema_in_state(state, reader.schema_cache.table_schema_cache)
 
-        # The iterator across python-mysql-replication's fetchone method should ultimately terminate
-        # upon receiving an EOF packet. There seem to be some cases when a MySQL server will not send
-        # one causing binlog replication to hang.
+            # The iterator across python-mysql-replication's fetchone method should ultimately terminate
+            # upon receiving an EOF packet. There seem to be some cases when a MySQL server will not send
+            # one causing binlog replication to hang.
 
-        # TODO: Consider moving log pos back slightly to avoid hanging process (maybe 200 or so)
-        if current_log_file == reader.log_file and reader.log_pos >= current_log_pos:
-            break
+            # TODO: Consider moving log pos back slightly to avoid hanging process (maybe 200 or so)
+            if current_log_file == reader.log_file and reader.log_pos >= current_log_pos:
+                break
 
-        if ((rows_saved and rows_saved % UPDATE_BOOKMARK_PERIOD == 0) or
-                (events_skipped and events_skipped % UPDATE_BOOKMARK_PERIOD == 0)):
-            core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
+            if ((rows_saved and rows_saved % UPDATE_BOOKMARK_PERIOD == 0) or
+                    (events_skipped and events_skipped % UPDATE_BOOKMARK_PERIOD == 0)):
+                core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
+
+        except Exception as e:
+            raise Exception(f'Failed to process event {binlog_event} {binlog_event.columns_present_bitmap2}. '
+                            f'Columns: {binlog_event.columns}') from e
 
 
 class ShowBinlogMethodFactory:
