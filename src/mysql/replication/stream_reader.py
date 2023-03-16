@@ -1,6 +1,7 @@
 import functools
 import logging
 import struct
+from distutils.version import LooseVersion
 from enum import Enum
 from typing import List
 
@@ -451,7 +452,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                 self._BinLogStreamReader__connect_to_ctl()
 
             try:
-                if pymysql.__version__ < "0.6":
+                if pymysql.__version__ < LooseVersion("0.6"):
                     pkt = self._stream_connection.read_packet()
                 else:
                     pkt = self._stream_connection._read_packet()

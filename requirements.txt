@@ -7,10 +7,10 @@ freezegun==0.3.15
 logging-gelf==0.0.26
 pygelf==0.3.6
 mock==4.0.2
-mysql-replication==0.21
+mysql-replication==0.30
 paramiko==2.7.2
 pendulum==1.2.0
-pymysql==0.9.3
+pymysql==0.10.1
 pytz==2020.1
 simplejson==3.17.0
 sshtunnel==0.4.0
