@@ -481,7 +481,7 @@ def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog
                 core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
         except Exception as e:
-            raise Exception(f'Failed to process event {binlog_event} {binlog_event.columns_present_bitmap2}. '
+            raise Exception(f'Failed to process event. Table: {binlog_event.table}. '
                             f'Columns: {binlog_event.columns}') from e
 
 
