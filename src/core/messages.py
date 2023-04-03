@@ -229,7 +229,7 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
             try:
                 value_to_convert = row[column]
 
-                if replace_nulls is True:
+                if value_to_convert and replace_nulls is True:
                     value_to_convert = value_to_convert.strip(b'\x00')
 
                 if binary_data_handler == 'plain':
