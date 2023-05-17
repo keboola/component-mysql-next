@@ -228,7 +228,8 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
         else:
             try:
                 value_to_convert = row[column]
-
+                if value_to_convert is None:
+                    value_to_convert = b'\x00'
                 if replace_nulls is True:
                     value_to_convert = value_to_convert.strip(b'\x00')
 
