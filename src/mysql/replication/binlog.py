@@ -482,7 +482,7 @@ def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog
 
         except Exception as e:
             raise Exception(f'Failed to process event. Table: {binlog_event.table}. '
-                            f'Columns: {binlog_event.columns}') from e
+                            f'Columns: {[c.data for c in binlog_event.columns]}') from e
 
 
 class ShowBinlogMethodFactory:

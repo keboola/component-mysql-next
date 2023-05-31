@@ -43,7 +43,6 @@ with warnings.catch_warnings():
     import paramiko
 import pendulum
 import pymysql
-import pymysqlreplication
 import yaml
 from sshtunnel import SSHTunnelForwarder
 
@@ -166,47 +165,6 @@ Column = namedtuple('Column', [
     "character_set_name",
     "ordinal_position"
 ])
-
-
-def new_read_binary_json_type_inlined(self, t, large):
-    if t == pymysqlreplication.packet.JSONB_TYPE_LITERAL:
-        value = self.read_uint32() if large else self.read_uint16()
-        if value == pymysqlreplication.packet.JSONB_LITERAL_NULL:
-            return None
-        if value == pymysqlreplication.packet.JSONB_LITERAL_TRUE:
-            return True
-        if value == pymysqlreplication.packet.JSONB_LITERAL_FALSE:
-            return False
-    if t == pymysqlreplication.packet.JSONB_TYPE_INT16:
-        return self.read_int16()
-    if t == pymysqlreplication.packet.JSONB_TYPE_UINT16:
-        return self.read_uint16()
-    if t == pymysqlreplication.packet.JSONB_TYPE_INT32:
-        return self.read_int32()
-    if t == pymysqlreplication.packet.JSONB_TYPE_UINT32:
-        return self.read_uint32()
-    raise ValueError('Json type %d is not handled' % t)
-
-
-pymysqlreplication.packet.BinLogPacketWrapper.read_binary_json_type_inlined = new_read_binary_json_type_inlined
-
-
-def new_read_offset_or_inline(packet, large):
-    t = packet.read_uint8()
-
-    if t in (pymysqlreplication.packet.JSONB_TYPE_LITERAL,
-             pymysqlreplication.packet.JSONB_TYPE_INT16,
-             pymysqlreplication.packet.JSONB_TYPE_UINT16):
-        return (t, None, packet.read_binary_json_type_inlined(t, large))
-    if large and t in (pymysqlreplication.packet.JSONB_TYPE_INT32,
-                       pymysqlreplication.packet.JSONB_TYPE_UINT32):
-        return (t, None, packet.read_binary_json_type_inlined(t, large))
-    if large:
-        return (t, packet.read_uint32(), None)
-    return (t, packet.read_uint16(), None)
-
-
-pymysqlreplication.packet.read_offset_or_inline = new_read_offset_or_inline
 
 
 def schema_for_column(c):
