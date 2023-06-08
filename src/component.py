@@ -560,6 +560,8 @@ def get_non_binlog_streams(mysql_conn, catalog, config, state, append_mode):
 
         if not stream_state:
             if replication_method.upper() == 'LOG_BASED':
+                logging.warning(f"{stream.tap_stream_id} not found in {state.get('bookmarks')}")
+                logging.warning(state)
                 logging.info("LOG_BASED stream %s requires full historical sync", stream.tap_stream_id)
 
             streams_without_state.append(stream)
