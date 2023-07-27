@@ -14,8 +14,7 @@
         "#password",
         "host",
         "port",
-        "user",
-        "database"
+        "user"
       ],
       "properties": {
         "host": {
@@ -48,14 +47,6 @@
           "title": "Password",
           "format": "password",
           "propertyOrder": 40,
-          "options": {
-            "grid_columns": 12
-          }
-        },
-        "database": {
-          "type": "string",
-          "title": "Database",
-          "propertyOrder": 50,
           "options": {
             "grid_columns": 12
           }
@@ -145,6 +136,68 @@
           "title": "Max connection time",
           "description": "Optional parameter which sets @@session.max_execution_time to desired integer value",
           "propertyOrder": 1
+        },
+        "show_binary_log_config": {
+          "type": "object",
+          "title": "Show Binary Log Method",
+          "required": [
+            "method"
+          ],
+          "propertyOrder": 1300,
+          "properties": {
+            "method": {
+              "type": "string",
+              "title": "Method",
+              "default": "direct",
+              "enum": [
+                "direct",
+                "endpoint"
+              ],
+              "propertyOrder": 1
+            },
+            "endpoint_url": {
+              "type": "string",
+              "title": "Endpoint Url",
+              "options": {
+                "dependencies": {
+                  "method": "endpoint"
+                }
+              },
+              "propertyOrder": 10
+            },
+            "authentication": {
+              "type": "boolean",
+              "title": "Enable Basic Authentication",
+              "format": "checkbox",
+              "default": false,
+              "options": {
+                "dependencies": {
+                  "method": "endpoint"
+                }
+              },
+              "propertyOrder": 11
+            },
+            "user": {
+              "type": "string",
+              "title": "Username",
+              "options": {
+                "dependencies": {
+                  "authentication": true
+                }
+              },
+              "propertyOrder": 13
+            },
+            "#password": {
+              "type": "string",
+              "title": "Password",
+              "options": {
+                "dependencies": {
+                  "authentication": true
+                }
+              },
+              "propertyOrder": 15
+            }
+          }
         }
       }
     },
@@ -223,68 +276,6 @@
           ],
           "description": "Marks how to handle binary data:<ul><li><strong>plain</strong> - data in decoded from binary to string using Python's <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.decode' target='_blank'>bytes.decode()</a></i> method,</li><li><strong>hex</strong> - data is converted to hex representation of binary string using <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.hex' target='_blank'>bytes.hex()</a></i> method,</li><li><strong>base64</strong> - data is converted to a base64 string, using <i><a href='https://docs.python.org/3/library/base64.html#base64.b64encode' target='_blank'>base64.b64encode()</a></i> method.</li></ul>All trailing or leading null bytes are replaced.",
           "propertyOrder": 1100
-        },
-        "show_binary_log_config": {
-          "type": "object",
-          "title": "Show Binary Log Method",
-          "required": [
-            "method"
-          ],
-          "propertyOrder": 1300,
-          "properties": {
-            "method": {
-              "type": "string",
-              "title": "Method",
-              "default": "direct",
-              "enum": [
-                "direct",
-                "endpoint"
-              ],
-              "propertyOrder": 1
-            },
-            "endpoint_url": {
-              "type": "string",
-              "title": "Endpoint Url",
-              "options": {
-                "dependencies": {
-                  "method": "endpoint"
-                }
-              },
-              "propertyOrder": 10
-            },
-            "authentication": {
-              "type": "boolean",
-              "title": "Enable Basic Authentication",
-              "format": "checkbox",
-              "default": false,
-              "options": {
-                "dependencies": {
-                  "method": "endpoint"
-                }
-              },
-              "propertyOrder": 11
-            },
-            "user": {
-              "type": "string",
-              "title": "Username",
-              "options": {
-                "dependencies": {
-                  "authentication": true
-                }
-              },
-              "propertyOrder": 13
-            },
-            "#password": {
-              "type": "string",
-              "title": "Password",
-              "options": {
-                "dependencies": {
-                  "authentication": true
-                }
-              },
-              "propertyOrder": 15
-            }
-          }
         }
       }
     },

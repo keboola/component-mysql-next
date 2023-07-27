@@ -40,9 +40,7 @@ pipelines:
             - eval $(docker run --rm -e KBC_DEVELOPERPORTAL_USERNAME -e KBC_DEVELOPERPORTAL_PASSWORD -e KBC_DEVELOPERPORTAL_URL quay.io/keboola/developer-portal-cli-v2:latest ecr:get-login $KBC_DEVELOPERPORTAL_VENDOR $KBC_DEVELOPERPORTAL_APP_SNFL)
             - docker push $REPOSITORY:$TAG
             - chmod +x ./scripts/update_dev_portal_properties_snfl.sh
-            - chmod +x ./deploy-snfl.sh
             - ./scripts/update_dev_portal_properties_snfl.sh
-            - ./deploy-snfl.sh
     master:
       - step:
           script:

@@ -67,8 +67,18 @@ class SSLConfiguration(ConfigurationBase):
 
 
 @dataclass
+class ShowLogConfig(ConfigurationBase):
+    method: str = 'direct'
+    endpoint_url: str = ''
+    authentication: bool = False
+    user: str = ''
+    pswd_password: str = ''
+
+
+@dataclass
 class DbAdvancedParameters(ConfigurationBase):
     max_execution_time: Optional[str] = ""
+    show_binary_log_config: ShowLogConfig = dataclasses.field(default_factory=lambda: ConfigTree({}))
 
 
 @dataclass
@@ -81,15 +91,6 @@ class DbOptions(ConfigurationBase):
     ssh_options: SSHConfiguration = dataclasses.field(default_factory=lambda: ConfigTree({}))
     use_ssl: bool = False
     ssl_options: SSLConfiguration = dataclasses.field(default_factory=lambda: ConfigTree({}))
-
-
-@dataclass
-class ShowLogConfig(ConfigurationBase):
-    method: str = 'direct'
-    endpoint_url: str = ''
-    authentication: bool = False
-    user: str = ''
-    pswd_password: str = ''
 
 
 @dataclass
@@ -113,7 +114,6 @@ class BinaryHandler(str, Enum):
 class SyncOptions(ConfigurationBase):
     snapshot_mode: SnapshotMode = SnapshotMode.initial
     handle_binary: BinaryHandler = BinaryHandler.plain
-    show_binary_log_config: ShowLogConfig = dataclasses.field(default_factory=lambda: ConfigTree({}))
 
 
 class LoadType(str, Enum):
@@ -250,7 +250,7 @@ def convert_to_legacy(config: Configuration):
     legacy_cfg[KEY_VERIFY_CERT] = config.db_settings.ssl_options.verifyCert
 
     legacy_cfg[KEY_MAX_EXECUTION_TIME] = config.advanced_options.max_execution_time
-    legacy_cfg['show_binary_log_config'] = dataclasses.asdict(config.sync_options.show_binary_log_config)
+    legacy_cfg['show_binary_log_config'] = dataclasses.asdict(config.advanced_options.show_binary_log_config)
 
     legacy_cfg["fetchObjectsOnly"] = False
     legacy_cfg["storageMappingsFile"] = "mappings"
