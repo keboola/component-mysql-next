@@ -28,7 +28,7 @@ docker push ${REPOSITORY}:${BITBUCKET_TAG}
 docker push ${REPOSITORY}:latest
 
 # Update the tag in Keboola Developer Portal -> Deploy to KBC
-if echo ${BITBUCKET_TAG} | grep -c '^v\?[0-9]\+\.[0-9]\+\.[0-9]\+$'
+if echo ${BITBUCKET_TAG} | grep -c '^[a-z]\?[0-9]\+\.[0-9]\+\.[0-9]\+$'
 then
     docker run --rm \
         -e KBC_DEVELOPERPORTAL_USERNAME \
