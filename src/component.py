@@ -635,7 +635,7 @@ class Component(ComponentBase):
         try:
             if not isinstance(connection_context, nullcontext):
                 connection_context.start()
-            yield connection_context, mysql_client
+            yield mysql_client
         finally:
             if not isinstance(connection_context, nullcontext):
                 connection_context.close()
@@ -651,9 +651,8 @@ class Component(ComponentBase):
         self.walk_path(self.files_in_path)
         self.walk_path(self.tables_in_path)
 
-        with self.init_mysql_client() as context:
+        with self.init_mysql_client() as mysql_client:
 
-            mysql_client = context[1]
             self.log_server_params(mysql_client)
 
             catalog_mapping = discover_catalog(mysql_client, self.params, append_mode=self.params.get(KEY_APPEND_MODE),
