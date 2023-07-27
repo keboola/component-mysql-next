@@ -12,7 +12,7 @@ import sys
 import tempfile
 import warnings
 from collections import namedtuple
-from contextlib import nullcontext
+from contextlib import nullcontext, contextmanager
 from io import StringIO
 from typing import List
 
@@ -581,6 +581,10 @@ class Component(ComponentBase):
             # old versions do not support schema prefix
             self.params[KEY_INCLUDE_SCHEMA_NAME] = False
 
+        # TODO: Update to more clear environment variable; used must set local time to UTC.
+        os.environ['TZ'] = 'UTC'
+
+    def _init_connection_params(self):
         max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
         if max_execution_time:
             max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
@@ -590,7 +594,7 @@ class Component(ComponentBase):
                     logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
                 except ValueError as e:
                     raise Exception(f"Cannot cast parameter {max_execution_time} to integer.") from e
-
+        self.validate_configuration_parameters([KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD])
         self.mysql_config_params = {
             "host": self.params[KEY_MYSQL_HOST],
             "port": self.params[KEY_MYSQL_PORT],
@@ -603,12 +607,29 @@ class Component(ComponentBase):
             "max_execution_time": max_execution_time
         }
 
-        # TODO: Update to more clear environment variable; used must set local time to UTC.
-        os.environ['TZ'] = 'UTC'
+        if self.params[KEY_USE_SSH_TUNNEL]:
+            self.validate_configuration_parameters([KEY_SSH_PORT, KEY_SSH_USERNAME, KEY_SSH_PRIVATE_KEY, KEY_SSH_HOST])
+            logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
+            self.mysql_config_params['host'] = LOCAL_ADDRESS
+            self.mysql_config_params['port'] = SSH_BIND_PORT
+        else:
+            logging.info(
+                'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
+
+    @contextmanager
+    def init_mysql_client(self):
+        connection_context = self.get_conn_context_manager()
+        mysql_client = MySQLConnection(self.mysql_config_params)
+        try:
+            connection_context.start()
+            yield connection_context, mysql_client
+        finally:
+            connection_context.close()
 
     def run(self):
         """Execute main component extraction process."""
         self._init_configuration()
+        self._init_connection_params()
 
         file_input_path = self._check_file_inputs()  # noqa
 
@@ -616,18 +637,9 @@ class Component(ComponentBase):
         self.walk_path(self.files_in_path)
         self.walk_path(self.tables_in_path)
 
-        connection_context = self.get_conn_context_manager()
+        with self.init_mysql_client() as context:
 
-        with connection_context as server:
-            if server:  # True if set an SSH tunnel returns false if using the null context.
-                logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
-                self.mysql_config_params['host'] = server.local_bind_host
-                self.mysql_config_params['port'] = server.local_bind_port
-            else:
-                logging.info(
-                    'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
-
-            mysql_client = MySQLConnection(self.mysql_config_params)
+            mysql_client = context[1]
             self.log_server_params(mysql_client)
 
             catalog_mapping = discover_catalog(mysql_client, self.params, append_mode=self.params.get(KEY_APPEND_MODE),
@@ -890,7 +902,6 @@ class Component(ComponentBase):
 
     @staticmethod
     def _build_schema_cache_from_catalog_entry(catalog_entry, full=False):
-
         table_schema = []
         primary_keys = common.get_key_properties(catalog_entry)
         if full:
@@ -1013,12 +1024,12 @@ class Component(ComponentBase):
             try:
                 with open_conn.cursor() as cur:
                     cur.execute('''
-                    SELECT VERSION() as version,
-                           @@session.wait_timeout as wait_timeout,
-                           @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
-                           @@session.max_allowed_packet as max_allowed_packet,
-                           @@session.interactive_timeout as interactive_timeout,
-                           @@session.max_execution_time as max_execution_time''')
+                        SELECT VERSION() as version,
+                               @@session.wait_timeout as wait_timeout,
+                               @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
+                               @@session.max_allowed_packet as max_allowed_packet,
+                               @@session.interactive_timeout as interactive_timeout,
+                               @@session.max_execution_time as max_execution_time''')
                     row = cur.fetchone()
                     logging.info('Server Parameters: ' +
                                  'version: %s, ' +
@@ -1030,7 +1041,7 @@ class Component(ComponentBase):
                                  *row)
                 with open_conn.cursor() as cur:
                     cur.execute('''
-                    show session status where Variable_name IN ('Ssl_version', 'Ssl_cipher')''')
+                        show session status where Variable_name IN ('Ssl_version', 'Ssl_cipher')''')
                     rows = cur.fetchall()
                     mapped_row = dict(rows)
                     logging.info('Server SSL Parameters (blank means SSL is not active): ' +
@@ -1396,7 +1407,6 @@ class Component(ComponentBase):
 
     @staticmethod
     def create_output_bucket(bucket_name: str = None):
-
         if bucket_name is not None and bucket_name.strip() != '':
             return f'in.c-{bucket_name.strip()}'
 
