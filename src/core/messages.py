@@ -254,7 +254,8 @@ class MessageStore(dict):
     """Storage for log-based messages"""
 
     def __init__(self, state: dict = None, flush_row_threshold: int = 5000,
-                 output_table_path: str = '/data/out/tables', binary_handler: str = 'plain', output_bucket=''):
+                 output_table_path: str = '/data/out/tables', binary_handler: str = 'plain', output_bucket='',
+                 include_schema_name: bool = False):
         super().__init__()
         self.state = state
         self.flush_row_threshold = flush_row_threshold
@@ -272,6 +273,7 @@ class MessageStore(dict):
         self._processed_records = 0
         self._flush_count = 0
         self.output_bucket = output_bucket
+        self.include_schem_name = include_schema_name
 
         # self.io = {}
         # self.io_csv = {}
@@ -357,7 +359,10 @@ class MessageStore(dict):
                     binary_columns = self._data_store[schema][table]['schemas'][0]['binary']
                     if binary_columns == []:
                         binary_columns = None
+
                     file_output = table.upper() + '.csv'
+                    if self.include_schem_name:
+                        file_output = f"{schema}_{file_output}".upper()
 
                     table_schema = self._get_all_table_columns(schema, table)
 

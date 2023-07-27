@@ -52,9 +52,9 @@ class CatalogEntry:
     def table_name(self) -> str:
         table_name = ''
         if self.include_schema_name:
-            table_name += f"{self.database}."
+            table_name += f"{self.database}.".replace('.', '_')
         table_name += self.table
-        return table_name.replace('.', '_')
+        return table_name
 
     def __str__(self):
         return str(self.__dict__)
@@ -75,6 +75,8 @@ class CatalogEntry:
             result['database_name'] = self.database
         if self.table:
             result['table_name'] = self.table
+
+        result['include_schema_name'] = self.include_schema_name
 
         result['result_table_name'] = self.table_name
 
@@ -152,6 +154,7 @@ class Catalog:
             entry.primary_keys = stream.get('primary_keys')
             entry.replication_method = stream.get('replication_method')
             entry.binary_columns = stream.get('binary_columns')
+            entry.include_schema_name = stream.get('include_schema_name')
             streams.append(entry)
         return Catalog(streams)
 

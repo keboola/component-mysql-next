@@ -585,6 +585,15 @@ class Component(ComponentBase):
         os.environ['TZ'] = 'UTC'
 
     def _init_connection_params(self):
+
+        if not is_legacy_config(self.configuration.parameters):
+            cfg = Configuration.load_from_dict(self.configuration.parameters)
+            self.params = configuration.convert_to_legacy(cfg)
+        else:
+            self.params = self.configuration.parameters
+            # old versions do not support schema prefix
+            self.params[KEY_INCLUDE_SCHEMA_NAME] = False
+
         max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
         if max_execution_time:
             max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
@@ -594,7 +603,9 @@ class Component(ComponentBase):
                     logging.info(f"Using parameter max_execution time from config: {max_execution_time}")
                 except ValueError as e:
                     raise Exception(f"Cannot cast parameter {max_execution_time} to integer.") from e
-        self.validate_configuration_parameters([KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD])
+
+        self._validate_parameters(self.params, [KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD],
+                                  'Db Options')
         self.mysql_config_params = {
             "host": self.params[KEY_MYSQL_HOST],
             "port": self.params[KEY_MYSQL_PORT],
@@ -608,7 +619,8 @@ class Component(ComponentBase):
         }
 
         if self.params[KEY_USE_SSH_TUNNEL]:
-            self.validate_configuration_parameters([KEY_SSH_PORT, KEY_SSH_USERNAME, KEY_SSH_PRIVATE_KEY, KEY_SSH_HOST])
+            self._validate_parameters(self.params, [KEY_SSH_PORT, KEY_SSH_USERNAME, KEY_SSH_PRIVATE_KEY, KEY_SSH_HOST],
+                                      'SSH Options')
             logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
             self.mysql_config_params['host'] = LOCAL_ADDRESS
             self.mysql_config_params['port'] = SSH_BIND_PORT
@@ -621,10 +633,12 @@ class Component(ComponentBase):
         connection_context = self.get_conn_context_manager()
         mysql_client = MySQLConnection(self.mysql_config_params)
         try:
-            connection_context.start()
+            if not isinstance(connection_context, nullcontext):
+                connection_context.start()
             yield connection_context, mysql_client
         finally:
-            connection_context.close()
+            if not isinstance(connection_context, nullcontext):
+                connection_context.close()
 
     def run(self):
         """Execute main component extraction process."""
@@ -696,7 +710,8 @@ class Component(ComponentBase):
                 with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
                                        output_table_path=self.tables_out_path,
                                        binary_handler=self.params.get(configuration.KEY_HANDLE_BINARY, 'plain'),
-                                       output_bucket=output_bucket) as message_store:
+                                       output_bucket=output_bucket,
+                                       include_schema_name=self.params[KEY_INCLUDE_SCHEMA_NAME]) as message_store:
                     catalog = Catalog.from_dict(table_mappings)
                     self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
                                  message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,
