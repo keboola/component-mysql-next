@@ -2,10 +2,10 @@
 set -e
 
 #check if deployment is triggered only in master
-if [ $BITBUCKET_BRANCH != "master" ]; then
-               echo Deploy on tagged commit can be only executed in master!
-               exit 1
-fi
+#if [ $BITBUCKET_BRANCH != "master" ]; then
+#               echo Deploy on tagged commit can be only executed in master!
+#               exit 1
+#fi
 
 # Obtain the component repository and log in
 docker pull quay.io/keboola/developer-portal-cli-v2:latest
