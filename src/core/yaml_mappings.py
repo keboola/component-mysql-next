@@ -1,5 +1,5 @@
-import json
 # import yaml
+import json
 
 
 def make_yaml_mapping_file(json_mappings: dict):
@@ -117,34 +117,3 @@ def convert_yaml_to_json_mapping(yaml_mappings, raw_json_mapping):
 
     output_stream_mappings = json.dumps({'streams': json_mapping_streams})
     return output_stream_mappings
-
-
-# Keeping the below for test purposes - can be used to test YAML mappings by running this file directly and plugging in
-# your testing files. If you do, uncomment both the code below (and substitute what you need to) as well as the Yaml
-# if __name__ == '__main__':
-#     table_mappings_file = '{json_file}'
-#     new_yaml_file = '/Users/johnathanbrooks/PycharmProjects/keboola_ex_mysql_nextv2/data/in/files/mappings.yaml'
-#
-#     new_mappings = '/Users/johnathanbrooks/PycharmProjects/keboola_ex_mysql_nextv2/data/in/tables/xxl_tables.json'
-#
-    # with open(table_mappings_file, encoding='utf-8') as json_input_mapping:
-    #     json_mappings = json.load(json_input_mapping)
-    #
-    # raw_yaml_mapping = make_yaml_mapping_file(json_mappings)
-    #
-    # with open(new_yaml_file, 'w') as yaml_out:
-    #     yaml_out.write(yaml.dump(raw_yaml_mapping))
-    #
-    # with open(new_yaml_file, encoding='utf-8') as yaml_input_mapping:
-    #     yaml_mappings = yaml.safe_load(yaml_input_mapping)
-    #
-    # with open(new_mappings, encoding='utf-8') as new_raw_mapping_file:
-    #     new_raw_mappings = json.load(new_raw_mapping_file)
-    #     # json_mapping = convert_yaml_to_json_mapping(yaml_mappings, new_raw_mappings)
-    #
-    # with open(new_yaml_file, encoding='utf-8') as yaml_input_mapping:
-    #     yaml_mappings = yaml.safe_load(yaml_input_mapping)
-
-    # print('got yaml mappings:')
-    # print(yaml_mappings)
-    # table_mappings = json.loads(convert_yaml_to_json_mapping(yaml_mappings, dict(new_raw_mappings)))

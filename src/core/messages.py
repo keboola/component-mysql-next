@@ -267,7 +267,7 @@ class MessageStore(dict):
 
         self._data_store = {}
         self._found_schemas = []
-        self._found_tables = []
+        self._found_tables = set()
         self._found_headers = {}
         self._processed_records = 0
         self._flush_count = 0
@@ -392,6 +392,12 @@ class MessageStore(dict):
                 record = handle_binary_data(record, binary_columns, self.binary_data_handler)
             writer.writerow(record)
 
+    def _get_table_name(self, schema: str, stream_name: str):
+        table_name = stream_name
+        if stream_name.startswith(schema):
+            table_name = stream_name[len(f"{schema}_"):]
+        return table_name
+
     def add_message(self, schema: str, input_message: dict):
         msg_type = get_message_type(input_message)
 
@@ -400,18 +406,18 @@ class MessageStore(dict):
             self._found_schemas.append(schema)
 
         if msg_type == 'RECORD':
-            table_name = get_stream_name(input_message)
+            table_name = self._get_table_name(schema, get_stream_name(input_message))
             if table_name not in self._found_tables:
                 self.add_table(schema, table_name)
-                self._found_tables.append(table_name)
+                self._found_tables.add(table_name)
             self._expand_column_schema(schema, table_name, input_message['column_map'])
             self._add_record_message(schema, table_name, _required_key(input_message, 'record'))
 
         elif msg_type == 'SCHEMA':
-            table_name = get_stream_name(input_message)
-            if table_name not in self._found_tables:
+            table_name = self._get_table_name(schema, get_stream_name(input_message))
+            if table_name not in self._data_store[schema]:
                 self.add_table(schema, table_name)
-                self._found_tables.append(table_name)
+                self._found_tables.add(table_name)
 
             self._add_schema_message(schema, table_name, _required_key(input_message, 'schema'))
 

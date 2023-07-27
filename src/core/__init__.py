@@ -1,41 +1,4 @@
 from . import utils
-from .utils import (
-    chunk,
-    load_json,
-    parse_args,
-    ratelimit,
-    strftime,
-    strptime_to_utc,
-    update_state,
-    should_sync_field,
-    find_files
-)
-
-from .metrics import (
-    Counter,
-    Timer,
-    job_timer,
-    record_counter
-)
-
-from .messages import (
-    ActivateVersionMessage,
-    Message,
-    MessageStore,
-    RecordMessage,
-    SchemaMessage,
-    StateMessage,
-    format_message,
-    parse_message,
-    write_message
-)
-
-from .catalog import (
-    Catalog,
-    CatalogEntry
-)
-from .schema import Schema
-
 from .bookmarks import (
     write_bookmark,
     get_bookmark,
@@ -48,11 +11,10 @@ from .bookmarks import (
     get_currently_syncing,
     update_schema_in_state
 )
-
-from .env_handler import (
-    KBCEnvHandler
+from .catalog import (
+    Catalog,
+    CatalogEntry
 )
-
 from .datatypes import (
     BASE_BOOLEAN,
     BASE_DATE,
@@ -62,7 +24,41 @@ from .datatypes import (
     BASE_STRING,
     BASE_TIMESTAMP
 )
+from .messages import (
+    ActivateVersionMessage,
+    Message,
+    MessageStore,
+    RecordMessage,
+    SchemaMessage,
+    StateMessage,
+    format_message,
+    parse_message,
+    write_message
+)
+from .metrics import (
+    Counter,
+    Timer,
+    job_timer,
+    record_counter
+)
+from .schema import Schema
+from .utils import (
+    chunk,
+    load_json,
+    parse_args,
+    ratelimit,
+    strftime,
+    strptime_to_utc,
+    update_state,
+    should_sync_field,
+    find_files
+)
+from .yaml_mappings import (
+    convert_yaml_to_json_mapping,
+    make_yaml_mapping_file
+)
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

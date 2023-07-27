@@ -25,7 +25,7 @@ class CatalogEntry:
     def __init__(self, tap_stream_id=None, stream=None, primary_keys: list = None, key_properties=None,
                  schema=None, replication_key=None, is_view=None, database=None, table=None, row_count=None,
                  stream_alias=None, metadata=None, replication_method=None, ordered_output_columns: list = None,
-                 binary_columns: list = None, full_schema=None, ):
+                 binary_columns: list = None, full_schema=None, include_schema_name: bool = True):
 
         self.tap_stream_id = tap_stream_id
         self.stream = stream
@@ -42,10 +42,19 @@ class CatalogEntry:
         self.stream_alias = stream_alias
         self.metadata = metadata
         self.binary_columns = binary_columns
+        self.include_schema_name = include_schema_name
 
         self.primary_keys = primary_keys
 
         self.current_column_cache = {}
+
+    @property
+    def table_name(self) -> str:
+        table_name = ''
+        if self.include_schema_name:
+            table_name += f"{self.database}."
+        table_name += self.table
+        return table_name.replace('.', '_')
 
     def __str__(self):
         return str(self.__dict__)
@@ -66,6 +75,9 @@ class CatalogEntry:
             result['database_name'] = self.database
         if self.table:
             result['table_name'] = self.table
+
+        result['result_table_name'] = self.table_name
+
         if self.primary_keys:
             result['primary_keys'] = self.primary_keys
         if self.replication_key is not None:

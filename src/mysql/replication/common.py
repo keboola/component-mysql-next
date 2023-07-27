@@ -1,11 +1,13 @@
 """
 Common patterns for data replication.
 """
+import ast
 import copy
 import csv
 import datetime
 import logging
 import os
+import tempfile
 import time
 
 import pymysql
@@ -17,7 +19,7 @@ from core import metadata
 from core import utils
 from core.messages import handle_binary_data
 
-CURRENT_PATH = os.path.dirname(__file__)
+TABLE_HEADERS_PATH = os.path.join(tempfile.gettempdir(), 'table_headers.csv')
 
 # NB: Upgrading pymysql from 0.7.11 --> 0.9.3 had the undocumented change
 # to how `0000-00-00 00:00:00` date/time types are returned. In 0.7.11,
@@ -323,23 +325,22 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                     for column in KBC_METADATA_COLS:
                         headers.append(column)
 
-                    table_and_headers[catalog_entry.table] = headers
+                    table_and_headers[catalog_entry.table_name] = headers
 
                     # Write to CSV of specific structure: table, headers (no header is written to this CSV)
-                    tables_headers_path = os.path.join(CURRENT_PATH, '..', '..', '')
-                    with open(tables_headers_path + 'table_headers.csv', 'a+', newline='') as headers_csv:
+                    with open(TABLE_HEADERS_PATH, 'a+', newline='') as headers_csv:
                         writer = csv.writer(headers_csv, delimiter='\t')
-                        writer.writerow([catalog_entry.table, headers])
+                        writer.writerow([catalog_entry.table_name, headers])
                         logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
-                            catalog_entry.table, headers
+                            catalog_entry.table_name, headers
                         ))
 
-                destination_output_path = os.path.join(tables_destination, catalog_entry.table.upper() + '.csv', '')
+                destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv', '')
 
                 if not os.path.exists(destination_output_path):
                     os.mkdir(destination_output_path)
 
-                csv_path = os.path.join(destination_output_path, catalog_entry.table.upper() + '-' +
+                csv_path = os.path.join(destination_output_path, catalog_entry.table_name.upper() + '-' +
                                         str(current_chunk) + '.csv')
 
                 with open(csv_path, 'w', encoding='utf-8', newline='') as output_data_file:
@@ -370,3 +371,20 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
     logging.info('Total processing time: {} seconds'.format(full_chunk_processing_duration))
 
     core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
+
+
+def get_table_headers() -> dict:
+    """
+        Get table headers from temp file.
+    Returns:
+
+    """
+    tables_and_columns = dict()
+    if os.path.exists(TABLE_HEADERS_PATH):
+        with open(TABLE_HEADERS_PATH) as headers_file:
+            tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
+            for item, value in tables_and_columns.items():
+                tables_and_columns[item] = [column.strip().upper() for column in ast.literal_eval(value)]
+            logging.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
+        os.remove(TABLE_HEADERS_PATH)
+    return tables_and_columns

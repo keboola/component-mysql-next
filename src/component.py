@@ -1,24 +1,4 @@
 #!/usr/bin/env python
-"""Component main class for data extraction.
-
-Executes component endpoint executions based on dependent api_mappings.json file in same path. This file should have
-a set structure, see example below.
-
-Essentially at the table table and column level, add "replication-method" of: FULL_TABLE, INCREMENTAL, or LOG_BASED.
-If INCREMENTAL, you need to specify a "replication-key".
-
-# Primary To-Do Items
-TODO: Schema changes handling in extractor
-TODO: Handle schema changes in KBC Storage
-TODO: Switch to specifying schema based on array options?
-
-# Secondary To-do Items
-TODO: Table Mappings - Handle prior user inputs
-TODO: Option to do "one-time" table resync, where just one table resyncs once
-TODO: Add testing framework
-TODO: Support Ticket for UI for this component (maybe they handle SSL?)
-"""
-import ast
 import base64
 import binascii
 import copy
@@ -37,103 +17,51 @@ from io import StringIO
 from typing import List
 
 from cryptography.utils import CryptographyDeprecationWarning
+from keboola.component import ComponentBase, UserException
+
+import configuration
+from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, \
+    KEY_MYSQL_USER, KEY_INCLUDE_SCHEMA_NAME, \
+    KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL, KEY_USE_SSL, KEY_MAX_EXECUTION_TIME, \
+    KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
+    MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
+    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
 
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
     import paramiko
 import pendulum
 import pymysql
-import yaml
 from sshtunnel import SSHTunnelForwarder
 
 from mysql.replication.stream_reader import TableColumnSchemaCache
 
-KEY_SHOW_BIN_LOG_CFG = 'show_binary_log_config'
+import core as core
+from core import convert_yaml_to_json_mapping, make_yaml_mapping_file
+import core.metrics as metrics
+import core.datatypes as datatypes
 
-try:
-    import core as core
-    import core.metrics as metrics
-    import core.datatypes as datatypes
+from core import metadata
+from core.catalog import Catalog, CatalogEntry
+from core.schema import Schema
 
-    from core import metadata
-    from core.catalog import Catalog, CatalogEntry
-    from core.env_handler import KBCEnvHandler
-    from core.schema import Schema
-    from core.yaml_mappings import convert_yaml_to_json_mapping, make_yaml_mapping_file
+# import mysql.result as result_writer
+import mysql.replication.binlog as binlog
+import mysql.replication.common as common
+import mysql.replication.full_table as full_table
+import mysql.replication.incremental as incremental
 
-    # import mysql.result as result_writer
-    import mysql.replication.binlog as binlog
-    import mysql.replication.common as common
-    import mysql.replication.full_table as full_table
-    import mysql.replication.incremental as incremental
-
-    from mysql.client import connect_with_backoff, MySQLConnection
-except ImportError:
-    import src.core as core
-    import src.core.metrics as metrics
-    import src.core.datatypes as datatypes
-
-    from src.core import metadata
-    from src.core.catalog import Catalog, CatalogEntry
-    from src.core.env_handler import KBCEnvHandler
-    from src.core.schema import Schema
-    from src.core.yaml_mappings import convert_yaml_to_json_mapping, make_yaml_mapping_file
-
-    # import src.mysql.result as result_writer
-    import src.mysql.replication.binlog as binlog
-    import src.mysql.replication.common as common
-    import src.mysql.replication.full_table as full_table
-    import src.mysql.replication.incremental as incremental
-
-    from src.mysql.client import connect_with_backoff, MySQLConnection
-
-current_path = os.path.dirname(__file__)
-module_path = os.path.dirname(current_path)
+from mysql.client import connect_with_backoff, MySQLConnection
 
 # Define mandatory parameter constants, matching Config Schema.
-KEY_OBJECTS_ONLY = 'fetchObjectsOnly'
-KEY_TABLE_MAPPINGS_JSON = 'inputMappingsJson'
-KEY_DATABASES = 'databases'
-KEY_MYSQL_HOST = 'host'
-KEY_MYSQL_PORT = 'port'
-KEY_MYSQL_USER = 'username'
-KEY_MYSQL_PWD = '#password'
-KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
-KEY_OUTPUT_BUCKET = 'outputBucket'
-KEY_USE_SSH_TUNNEL = 'sshTunnel'
-KEY_USE_SSL = 'ssl'
-KEY_MAPPINGS_FILE = 'storageMappingsFile'
-KEY_INPUT_MAPPINGS_YAML = 'inputMappingsYaml'
-KEY_STATE_JSON = 'base64StateJson'
-KEY_APPEND_MODE = 'appendMode'
-KEY_HANDLE_BINARY = 'handle_binary'
 
-# Define optional parameters as constants for later use.
-KEY_SSH_HOST = 'sshHost'
-KEY_SSH_PORT = 'sshPort'
-KEY_SSH_PUBLIC_KEY = 'sshPublicKey'
-KEY_SSH_PRIVATE_KEY = '#sshBase64PrivateKey'
-KEY_SSH_USERNAME = 'sshUser'
-KEY_SSL_CA = 'sslCa'
-KEY_VERIFY_CERT = 'verifyCert'
-KEY_MAX_EXECUTION_TIME = 'maxExecutionTime'
-
-ENV_COMPONENT_ID = 'KBC_COMPONENTID'
-ENV_CONFIGURATION_ID = 'KBC_CONFIGID'
-
-MAPPINGS_FILE = 'table_mappings.json'
-LOCAL_ADDRESS = '127.0.0.1'
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 1000000
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
-MANDATORY_PARS = (KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, KEY_MYSQL_USER, KEY_MYSQL_PWD,
-                  KEY_USE_SSH_TUNNEL, KEY_USE_SSL)
 MANDATORY_IMAGE_PARS = ()
-
-APP_VERSION = '0.9.4'
 
 pymysql.converters.conversions[pendulum.Pendulum] = pymysql.converters.escape_datetime
 
@@ -250,7 +178,7 @@ def create_column_metadata(cols):
     return metadata.to_list(mdata)
 
 
-def discover_catalog(mysql_conn, config, append_mode):
+def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool = True):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
     logging.debug('Filtering databases via config to: {}'.format(filter_dbs_config))
@@ -375,10 +303,13 @@ def discover_catalog(mysql_conn, config, append_mode):
                 for column in cols:
                     if column.data_type.lower() == 'binary':
                         binary_columns += [column.column_name]
-                entry = CatalogEntry(table=table_name, stream=table_name, metadata=metadata.to_list(md_map),
+                stream_name = table_name
+                if include_schema_name:
+                    stream_name = f"{table_schema}_{table_name}".replace(".", "_")
+                entry = CatalogEntry(table=table_name, stream=stream_name, metadata=metadata.to_list(md_map),
                                      tap_stream_id=common.generate_tap_stream_id(table_schema, table_name),
                                      schema=schema, primary_keys=primary_keys, database=table_schema,
-                                     binary_columns=binary_columns)
+                                     binary_columns=binary_columns, include_schema_name=include_schema_name)
 
                 entries.append(entry)
 
@@ -512,6 +443,7 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
             metadata=catalog_entry.metadata,
             stream=catalog_entry.stream,
             table=catalog_entry.table,
+            include_schema_name=catalog_entry.include_schema_name,
             schema=Schema(
                 type='object',
                 properties={col: discovered_table.schema.properties[col]
@@ -626,34 +558,25 @@ def write_schema_message(catalog_entry, message_store=None, bookmark_properties=
                        message_store=message_store, database_schema=catalog_entry.database)
 
 
-class Component(KBCEnvHandler):
+class Component(ComponentBase):
     """Keboola extractor component."""
 
-    def __init__(self, debug: bool = False, data_path: str = None):
-        KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
-                               log_level=logging.DEBUG if debug else logging.INFO)
+    def __init__(self):
+        super().__init__()
 
-        if self.cfg_params.get(KEY_DEBUG, False) is True:
-            logger = logging.getLogger()
-            logger.setLevel(logging.DEBUG)
-            # sys.tracebacklimit = 10
+        self.params: dict
 
-            for h in logger.handlers:
-                h.setFormatter(logging.Formatter('%(levelname)10s - %(filename)s - %(lineno)4d: %(message)s'))
-
-        self.files_out_path = os.path.join(self.data_path, 'out', 'files')
-        self.files_in_path = os.path.join(self.data_path, 'in', 'files')
-        self.state_out_file_path = os.path.join(self.data_path, 'out', 'state.json')
-        self.params = self.cfg_params
-        logging.info('Running version %s', APP_VERSION)
+    def _init_configuration(self):
         logging.info('Loading configuration...')
-
-        try:
-            self.validate_config()
-            self.validate_image_parameters(MANDATORY_IMAGE_PARS)
-        except ValueError as err:
-            logging.exception(err)
-            exit(1)
+        if not is_legacy_config(self.configuration.parameters):
+            self.validate_configuration_parameters(Configuration.get_dataclass_required_parameters())
+            cfg = Configuration.load_from_dict(self.configuration.parameters)
+            self.params = configuration.convert_to_legacy(cfg)
+        else:
+            self.validate_configuration_parameters(MANDATORY_PARS)
+            self.params = self.configuration.parameters
+            # old versions do not support schema prefix
+            self.params[KEY_INCLUDE_SCHEMA_NAME] = False
 
         max_execution_time = self.params.get(KEY_MAX_EXECUTION_TIME)
         if max_execution_time:
@@ -674,12 +597,204 @@ class Component(KBCEnvHandler):
             "ssl_ca": self.params.get(KEY_SSL_CA),
             "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
             "connect_timeout": CONNECT_TIMEOUT,
-            "show_binary_log_config": self.params.get(KEY_SHOW_BIN_LOG_CFG, {}),
             "max_execution_time": max_execution_time
         }
 
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
+
+    def run(self):
+        """Execute main component extraction process."""
+        self._init_configuration()
+
+        file_input_path = self._check_file_inputs()  # noqa
+
+        # QA Input data
+        self.walk_path(self.files_in_path)
+        self.walk_path(self.tables_in_path)
+
+        connection_context = self.get_conn_context_manager()
+
+        with connection_context as server:
+            if server:  # True if set an SSH tunnel returns false if using the null context.
+                logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
+                self.mysql_config_params['host'] = server.local_bind_host
+                self.mysql_config_params['port'] = server.local_bind_port
+            else:
+                logging.info(
+                    'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
+
+            mysql_client = MySQLConnection(self.mysql_config_params)
+            self.log_server_params(mysql_client)
+
+            catalog_mapping = discover_catalog(mysql_client, self.params, append_mode=self.params.get(KEY_APPEND_MODE),
+                                               include_schema_name=self.params.get(KEY_INCLUDE_SCHEMA_NAME, False))
+
+            # TODO: WTF???
+            # Make Raw Mapping file to allow edits
+            raw_yaml_mapping = make_yaml_mapping_file(catalog_mapping.to_dict())
+            if (_json := self.params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':  # noqa
+                input_method = 'json'
+                logging.info('Using table mappings based on input JSON mappings.')
+
+                try:
+                    input_mapping = json.loads(self.params.get(configuration.KEY_TABLE_MAPPINGS_JSON))
+                    logging.debug(f"Received input schema: {input_mapping}")
+                except ValueError:
+                    logging.error("Invalid JSON mappins provided. Could not parse JSON.")
+                    sys.exit(1)
+
+                input_mapping, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(
+                    input_mapping)
+                table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
+
+
+            else:
+                raise AttributeError('You are missing either a YAML input mapping, or the '
+                                     'JSON input mapping. Please specify either to appropriately execute the extractor')
+
+            if self.params[KEY_OBJECTS_ONLY]:
+                # Run only schema discovery process.
+                logging.info('Fetching only object and field names, not running full extraction.')
+
+                # TODO: Retain prior selected choices by user despite refresh.
+                input_file_name = self.params.get(configuration.KEY_MAPPINGS_FILE) or 'mappings'
+                if input_method == 'json':
+                    logging.info('Outputting JSON to file {}.json in KBC storage'.format(input_file_name))
+                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.json')
+                    with open(out_path, 'w') as json_out:
+                        json.dump(raw_yaml_mapping, json_out)
+
+            elif table_mappings:
+                # Run extractor data sync.
+                if self.params[KEY_INCREMENTAL_SYNC]:
+                    prior_state = self.get_state_file() or {}
+                else:
+                    prior_state = {}
+
+                if prior_state:
+                    logging.info('Using prior state file to execute sync')
+                elif prior_state == {}:
+                    logging.info('No prior state was found, will execute full data sync')
+                else:
+                    logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
+                output_bucket = self.create_output_bucket(self.params.get(KEY_OUTPUT_BUCKET))
+                with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
+                                       output_table_path=self.tables_out_path,
+                                       binary_handler=self.params.get(configuration.KEY_HANDLE_BINARY, 'plain'),
+                                       output_bucket=output_bucket) as message_store:
+                    catalog = Catalog.from_dict(table_mappings)
+                    self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
+                                 message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,
+                                 columns=columns_to_sync)
+
+                    logging.info('Data extraction completed')
+
+                # Determine Manifest file outputs
+                tables_and_columns = common.get_table_headers()
+
+                for entry in catalog.to_dict()['streams']:
+                    entry_table_name = entry.get('result_table_name')
+                    table_metadata = entry['metadata'][0]['metadata']
+                    column_metadata = entry['metadata'][1:]
+
+                    output_bucket = self.create_output_bucket(self.params.get(KEY_OUTPUT_BUCKET))
+
+                    if table_metadata.get('selected'):
+                        table_replication_method = table_metadata.get('replication-method').upper()
+
+                        # Confirm corresponding table or folder exists
+                        table_specific_sliced_path = os.path.join(self.tables_out_path,
+                                                                  entry_table_name.upper() + '.csv')
+                        if os.path.isdir(table_specific_sliced_path):
+                            logging.info('Table {} at location {} is a directory'.format(entry_table_name,
+                                                                                         table_specific_sliced_path))
+                            output_is_sliced = True
+                        elif os.path.isfile(table_specific_sliced_path):
+                            logging.info('Table {} at location {} is a file'.format(entry_table_name,
+                                                                                    table_specific_sliced_path))
+                            output_is_sliced = False
+                        else:
+                            output_is_sliced = False
+                            logging.info('NO DATA found for table {} in either a file or sliced table directory, this '
+                                         'table is not being synced'.format(entry_table_name))
+
+                        # TODO: Consider other options for writing to storage based on user choices
+                        logging.info('Table has rep method {} and user incremental param is {}'.format(
+                            table_replication_method, self.params[KEY_INCREMENTAL_SYNC]
+                        ))
+                        if table_replication_method.upper() == 'FULL_TABLE' or \
+                                not self.params[KEY_INCREMENTAL_SYNC]:
+                            logging.info('Manifest file will have incremental false for Full Table syncs')
+                            manifest_incremental = False
+                        else:
+                            logging.info('Manifest file will have incremental True for {} sync'.format(
+                                table_replication_method
+                            ))
+                            manifest_incremental = True
+
+                        _table_column_metadata = self.get_table_column_metadata(column_metadata)
+
+                        try:
+                            if not output_is_sliced:
+                                with open(table_specific_sliced_path) as io:
+                                    rdr = csv.DictReader(io)
+                                    fields = rdr.fieldnames
+                            else:
+                                fields = None
+                        except FileNotFoundError:
+                            fields = []
+                        except IsADirectoryError:
+                            fields = None
+
+                        logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
+                                                                                  entry_table_name))
+
+                        if fields is not None:
+                            table_column_metadata = dict()
+                            for key, val in _table_column_metadata.items():
+                                if key in fields:
+                                    table_column_metadata[key] = val
+                        else:
+                            table_column_metadata = _table_column_metadata
+
+                        # Write manifest files
+                        if output_is_sliced:
+                            if core.find_files(table_specific_sliced_path, '*.csv'):
+                                logging.info('Writing manifest for {} to "{}" with columns for sliced table'.format(
+                                    entry_table_name, self.tables_out_path))
+                                self.create_manifests(entry, self.tables_out_path,
+                                                      columns=list(tables_and_columns.get(entry_table_name)),
+                                                      column_metadata=table_column_metadata,
+                                                      set_incremental=manifest_incremental, output_bucket=output_bucket)
+                        elif os.path.isfile(table_specific_sliced_path):
+                            logging.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
+                                entry_table_name, self.tables_out_path))
+                            self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
+                                                  set_incremental=manifest_incremental, output_bucket=output_bucket)
+
+                            # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
+                            self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'),
+                                                                  self.params.get(KEY_APPEND_MODE,
+                                                                                  False))
+                        else:
+                            logging.info('No manifest file found for selected table {}, because no data was synced '
+                                         'from the database for this table. This may be expected behavior if the table '
+                                         'is empty or no new rows were added (if incremental)'.format(entry_table_name))
+
+                        # Write output state file
+                        logging.debug('Got final state {}'.format(message_store.get_state()))
+                        self.write_state_file(message_store.get_state())
+
+                # QA: Walk through output destination
+                self.walk_path(path=self.tables_out_path, is_pre_manifest=False)
+
+            else:
+                raise UserException(
+                    'You have either specified incorrect input parameters, or have not chosen to either '
+                    'specify a table mappings file manually or via the File Input Mappings configuration.')
+
+        logging.info('Process execution completed')
 
     def _check_file_inputs(self) -> str:
         """Return path name of file inputs if any."""
@@ -1046,13 +1161,13 @@ class Component(KBCEnvHandler):
         :param output_bucket: The name of the output bucket to be written to Storage
         :return:
         """
-        if bool(self.cfg_params.get(KEY_APPEND_MODE, False)) is True:
+        if bool(self.params.get(KEY_APPEND_MODE, False)) is True:
             primary_keys = None
         elif entry.get('primary_keys'):
             primary_keys = [key.upper() for key in entry.get('primary_keys')]
         else:
             primary_keys = None
-        table_name = entry.get('table_name').upper()
+        table_name = entry.get('result_table_name').upper()
         result_full_path = os.path.join(data_path, table_name + '.csv')
 
         # for r in results:
@@ -1196,8 +1311,8 @@ class Component(KBCEnvHandler):
                                     'records must be processed downstream'.format(csv_table_path))
 
     def get_conn_context_manager(self):
-        if self.cfg_params[KEY_USE_SSH_TUNNEL]:
-            b64_input_key = self.cfg_params.get(KEY_SSH_PRIVATE_KEY)
+        if self.params[KEY_USE_SSH_TUNNEL]:
+            b64_input_key = self.params.get(KEY_SSH_PRIVATE_KEY)
             input_key = None
             try:
                 input_key = base64.b64decode(b64_input_key, validate=True).decode('utf-8')
@@ -1208,10 +1323,11 @@ class Component(KBCEnvHandler):
 
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
             context_manager = SSHTunnelForwarder(
-                (self.cfg_params[KEY_SSH_HOST], self.cfg_params[KEY_SSH_PORT]),
-                ssh_username=self.cfg_params[KEY_SSH_USERNAME],
+                (self.params[KEY_SSH_HOST], self.params[KEY_SSH_PORT]),
+                ssh_username=self.params[KEY_SSH_USERNAME],
                 ssh_pkey=pkey_from_input,
-                remote_bind_address=(self.cfg_params[KEY_MYSQL_HOST], self.cfg_params[KEY_MYSQL_PORT]),
+                remote_bind_address=(
+                    self.params[KEY_MYSQL_HOST], self.params[KEY_MYSQL_PORT]),
                 local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
                 ssh_config_file=None,
                 allow_agent=False
@@ -1238,76 +1354,38 @@ class Component(KBCEnvHandler):
             logging.info('All directories at walked path: {}'.format(directories))
             logging.info('All files sent at walked path: {}'.format(files))
 
-    def parse_input_mapping(self, input_mapping, input_mapping_type='json'):
+    def parse_input_mapping(self, input_mapping):
         """Parses provided input mappings and returns a list of selected tables and schemas."""
         schemas = []
         tables = []
         output_mapping = []
         columns = {}
 
-        if input_mapping_type == 'json':
-
-            for schema in input_mapping:
-                # Because yaml and json mapping have different specification. YAML is an array, JSON is an object.
-                # Converting this to be same as YAML mapping.
-                output_mapping += [{schema: input_mapping[schema]}]
-                _tables = input_mapping[schema].get('tables', [])
-
-                if _tables == []:
-                    logging.warn(f"No tables specified for schema {schema}. Skipping.")
-                elif isinstance(_tables, list) is False:
-                    logging.error(f"Tables for schema {schema} are not an array.")
-                    sys.exit(1)
-                else:
-                    schemas += [schema]
-                    tables += [list(table.keys())[0] for table in _tables]
-
-                for table in _tables:
-                    table_name = list(table.keys())[0]
-
-                    tap_stream_id = '-'.join([schema, table_name])
-                    desired_columns = [k for k, v in table[table_name].get('columns', {}).items() if v is True]
-                    columns_to_watch = table[table_name].get('columns_to_watch')
-                    columns_to_ignore = table[table_name].get('columns_to_ignore')
-                    columns[tap_stream_id] = {
-                        'desired': None if desired_columns == [] else desired_columns + list(common.KBC_METADATA_COLS),
-                        'watch': columns_to_watch,
-                        'ignore': columns_to_ignore
-                    }
-
-        elif input_mapping_type == 'yaml':
+        for schema in input_mapping:
             # Because yaml and json mapping have different specification. YAML is an array, JSON is an object.
-            output_mapping = input_mapping
+            # Converting this to be same as YAML mapping.
+            output_mapping += [{schema: input_mapping[schema]}]
+            _tables = input_mapping[schema].get('tables', [])
 
-            for schema_spec in input_mapping:
-                schema = list(schema_spec.keys())[0]
-                _tables = schema_spec[schema]['tables']
-
-                if _tables == []:
-                    logging.warn(f"No tables specified for schema {schema}. Skipping.")
-                elif isinstance(_tables, list) is False:
-                    logging.error(f"Tables for schema {schema} are not an array.")
-                    sys.exit(1)
-                else:
-                    schemas += [schema]
-                    tables += [list(table.keys())[0] for table in _tables]
-
-                for table in _tables:
-                    table_name = list(table.keys())[0]
-
-                    tap_stream_id = '-'.join([schema, table_name])
-                    desired_columns = [k for k, v in table[table_name].get('columns', {}).items() if v is True]
-                    columns_to_watch = table[table_name].get('columns_to_watch', [])
-                    columns_to_ignore = table[table_name].get('columns_to_ignore', [])
-                    columns[tap_stream_id] = {
-                        'desired': None if desired_columns == [] else desired_columns + list(common.KBC_METADATA_COLS),
-                        'watch': columns_to_watch,
-                        'ignore': columns_to_ignore
-                    }
-
-        else:
-            logging.error(f"Incorrect mapping file specification provided: {input_mapping_type}.")
-            sys.exit(1)
+            if _tables == []:
+                logging.warning(f"No tables specified for schema {schema}. Skipping.")
+            elif isinstance(_tables, list) is False:
+                logging.error(f"Tables for schema {schema} are not an array.")
+                sys.exit(1)
+            else:
+                schemas += [schema]
+                tables += [list(table.keys())[0] for table in _tables]
+            for table in _tables:
+                table_name = list(table.keys())[0]
+                tap_stream_id = '-'.join([schema, table_name])
+                desired_columns = [k for k, v in table[table_name].get('columns', {}).items() if v is True]
+                columns_to_watch = table[table_name].get('columns_to_watch')
+                columns_to_ignore = table[table_name].get('columns_to_ignore')
+                columns[tap_stream_id] = {
+                    'desired': None if desired_columns == [] else desired_columns + list(common.KBC_METADATA_COLS),
+                    'watch': columns_to_watch,
+                    'ignore': columns_to_ignore
+                }
 
         logging.debug(f"Parsed following schemas: {schemas}.")
         logging.debug(f"Parsed following tables: {tables}.")
@@ -1330,260 +1408,20 @@ class Component(KBCEnvHandler):
             else:
                 return None
 
-    def run(self):
-        """Execute main component extraction process."""
-        table_mappings = {}
-        file_input_path = self._check_file_inputs()  # noqa
-
-        # QA Input data
-        self.walk_path(self.files_in_path)
-        self.walk_path(self.tables_in_path)
-
-        connection_context = self.get_conn_context_manager()
-
-        with connection_context as server:
-            if server:  # True if set an SSH tunnel returns false if using the null context.
-                logging.info('Connecting via SSH tunnel over bind port {}'.format(SSH_BIND_PORT))
-                self.mysql_config_params['host'] = server.local_bind_host
-                self.mysql_config_params['port'] = server.local_bind_port
-            else:
-                logging.info('Connecting directly to database via port {}'.format(self.cfg_params[KEY_MYSQL_PORT]))
-
-            mysql_client = MySQLConnection(self.mysql_config_params)
-            self.log_server_params(mysql_client)
-
-            # elif file_input_path:
-            #     manual_table_mappings_file = os.path.join(file_input_path, MAPPINGS_FILE)
-            #     logging.info('Fetching table mappings from file input mapping configuration: {}.'.format(
-            #         manual_table_mappings_file))
-            #     with open(manual_table_mappings_file, 'r') as mappings_file:
-            #         table_mappings = json.load(mappings_file)
-
-            # TESTING: Fetch current state of database: schemas, tables, columns, datatypes, etc.
-            catalog_mapping = discover_catalog(mysql_client, self.params, append_mode=self.params.get(KEY_APPEND_MODE))
-
-            # Make Raw Mapping file to allow edits
-            raw_yaml_mapping = make_yaml_mapping_file(catalog_mapping.to_dict())
-
-            if (_json := self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON)) and _json != '{}' and _json != '':  # noqa
-                input_method = 'json'
-                logging.info('Using table mappings based on input JSON mappings.')
-
-                try:
-                    input_mapping = json.loads(self.cfg_params.get(KEY_TABLE_MAPPINGS_JSON))
-                    logging.debug(f"Received input schema: {input_mapping}")
-                except ValueError:
-                    logging.error("Invalid JSON mappins provided. Could not parse JSON.")
-                    sys.exit(1)
-
-                input_mapping, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(
-                    input_mapping, input_method)
-                table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
-
-            elif self.params.get(KEY_INPUT_MAPPINGS_YAML) and self.params.get(KEY_MAPPINGS_FILE):
-                input_method = 'yaml'
-                logging.info('Using table mappings based on input YAML mappings.')
-                input_mapping = yaml.safe_load(self.params[KEY_INPUT_MAPPINGS_YAML])
-                table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
-
-                logging.debug(f"Received input schema: {input_mapping}")
-
-                _, schemas_to_sync, tables_to_sync, columns_to_sync = self.parse_input_mapping(input_mapping,
-                                                                                               input_method)
-
-            else:
-                raise AttributeError('You are missing either a YAML input mapping, or the '
-                                     'JSON input mapping. Please specify either to appropriately execute the extractor')
-
-            if self.params[KEY_OBJECTS_ONLY]:
-                # Run only schema discovery process.
-                logging.info('Fetching only object and field names, not running full extraction.')
-
-                # TODO: Retain prior selected choices by user despite refresh.
-                input_file_name = self.params.get(KEY_MAPPINGS_FILE) or 'mappings'
-                if input_method == 'json':
-                    logging.info('Outputting JSON to file {}.json in KBC storage'.format(input_file_name))
-                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.json')
-                    with open(out_path, 'w') as json_out:
-                        json.dump(raw_yaml_mapping, json_out)
-
-                elif input_method == 'yaml':
-                    logging.info('Outputting YAML to file {}.yaml in KBC storage'.format(input_file_name))
-                    out_path = os.path.join(self.files_out_path, input_file_name + '_raw.yaml')
-                    with open(out_path, 'w') as yaml_out:
-                        yaml_out.write(yaml.dump(raw_yaml_mapping))
-
-            elif table_mappings:
-                # Run extractor data sync.
-                if self.cfg_params[KEY_INCREMENTAL_SYNC]:
-                    prior_state = self.get_state_file() or {}
-                else:
-                    prior_state = {}
-
-                if prior_state:
-                    logging.info('Using prior state file to execute sync')
-                elif prior_state == {}:
-                    logging.info('No prior state was found, will execute full data sync')
-                else:
-                    logging.info('Incremental sync set to false, ignoring prior state and running full data sync')
-                output_bucket = self.create_output_bucket(self.cfg_params.get(KEY_OUTPUT_BUCKET))
-                with core.MessageStore(state=prior_state, flush_row_threshold=FLUSH_STORE_THRESHOLD,
-                                       output_table_path=self.tables_out_path,
-                                       binary_handler=self.cfg_params.get(KEY_HANDLE_BINARY, 'plain'),
-                                       output_bucket=output_bucket) as message_store:
-                    catalog = Catalog.from_dict(table_mappings)
-                    self.do_sync(mysql_client, self.params, self.mysql_config_params, catalog, prior_state,
-                                 message_store=message_store, schemas=schemas_to_sync, tables=tables_to_sync,
-                                 columns=columns_to_sync)
-
-                    logging.info('Data extraction completed')
-
-                # QA: Walk through output destination pre-manifest
-                self.walk_path(path=self.tables_out_path, is_pre_manifest=True)
-
-                # Determine Manifest file outputs
-                tables_and_columns = dict()
-                if os.path.exists(os.path.join(current_path, 'table_headers.csv')):
-                    with open(os.path.join(current_path, 'table_headers.csv')) as headers_file:
-                        tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
-                        for item, value in tables_and_columns.items():
-                            tables_and_columns[item] = [column.strip().upper() for column in ast.literal_eval(value)]
-                        logging.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
-
-                for entry in catalog.to_dict()['streams']:
-                    entry_table_name = entry.get('table_name')
-                    table_metadata = entry['metadata'][0]['metadata']
-                    column_metadata = entry['metadata'][1:]
-
-                    output_bucket = self.create_output_bucket(self.cfg_params.get(KEY_OUTPUT_BUCKET))
-
-                    if table_metadata.get('selected'):
-                        table_replication_method = table_metadata.get('replication-method').upper()
-
-                        # Confirm corresponding table or folder exists
-                        table_specific_sliced_path = os.path.join(self.tables_out_path,
-                                                                  entry_table_name.upper() + '.csv')
-                        if os.path.isdir(table_specific_sliced_path):
-                            logging.info('Table {} at location {} is a directory'.format(entry_table_name,
-                                                                                         table_specific_sliced_path))
-                            output_is_sliced = True
-                        elif os.path.isfile(table_specific_sliced_path):
-                            logging.info('Table {} at location {} is a file'.format(entry_table_name,
-                                                                                    table_specific_sliced_path))
-                            output_is_sliced = False
-                        else:
-                            output_is_sliced = False
-                            logging.info('NO DATA found for table {} in either a file or sliced table directory, this '
-                                         'table is not being synced'.format(entry_table_name))
-
-                        # TODO: Consider other options for writing to storage based on user choices
-                        logging.info('Table has rep method {} and user incremental param is {}'.format(
-                            table_replication_method, self.cfg_params[KEY_INCREMENTAL_SYNC]
-                        ))
-                        if table_replication_method.upper() == 'FULL_TABLE' or \
-                                not self.cfg_params[KEY_INCREMENTAL_SYNC]:
-                            logging.info('Manifest file will have incremental false for Full Table syncs')
-                            manifest_incremental = False
-                        else:
-                            logging.info('Manifest file will have incremental True for {} sync'.format(
-                                table_replication_method
-                            ))
-                            manifest_incremental = True
-
-                        _table_column_metadata = self.get_table_column_metadata(column_metadata)
-
-                        try:
-                            if not output_is_sliced:
-                                with open(table_specific_sliced_path) as io:
-                                    rdr = csv.DictReader(io)
-                                    fields = rdr.fieldnames
-                            else:
-                                fields = None
-                        except FileNotFoundError:
-                            fields = []
-                        except IsADirectoryError:
-                            fields = None
-
-                        logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
-                                                                                  entry_table_name))
-
-                        if fields is not None:
-                            table_column_metadata = dict()
-                            for key, val in _table_column_metadata.items():
-                                if key in fields:
-                                    table_column_metadata[key] = val
-                        else:
-                            table_column_metadata = _table_column_metadata
-
-                        # Write manifest files
-                        if output_is_sliced:
-                            if core.find_files(table_specific_sliced_path, '*.csv'):
-                                logging.info('Writing manifest for {} to "{}" with columns for sliced table'.format(
-                                    entry_table_name, self.tables_out_path))
-                                self.create_manifests(entry, self.tables_out_path,
-                                                      columns=list(tables_and_columns.get(entry_table_name)),
-                                                      column_metadata=table_column_metadata,
-                                                      set_incremental=manifest_incremental, output_bucket=output_bucket)
-                        elif os.path.isfile(table_specific_sliced_path):
-                            logging.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
-                                entry_table_name, self.tables_out_path))
-                            self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
-                                                  set_incremental=manifest_incremental, output_bucket=output_bucket)
-
-                            # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
-                            self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'),
-                                                                  self.cfg_params.get(KEY_APPEND_MODE, False))
-                        else:
-                            logging.info('No manifest file found for selected table {}, because no data was synced '
-                                         'from the database for this table. This may be expected behavior if the table '
-                                         'is empty or no new rows were added (if incremental)'.format(entry_table_name))
-
-                        # Write output state file
-                        logging.debug('Got final state {}'.format(message_store.get_state()))
-                        self.write_state_file(message_store.get_state())
-                        file_state_destination = os.path.join(self.files_out_path, 'state.json')
-                        self.write_state_file(message_store.get_state(), output_path=file_state_destination)
-
-                # QA: Walk through output destination
-                self.walk_path(path=self.tables_out_path, is_pre_manifest=False)
-
-            else:
-                logging.error('You have either specified incorrect input parameters, or have not chosen to either '
-                              'specify a table mappings file manually or via the File Input Mappings configuration.')
-                exit(1)
-
-        # all_tables = glob.glob(os.path.join(self.tables_in_path, '*.csv'))
-        # for table in all_tables:
-        #     if os.path.isdir(table) is True:
-        #         pass
-        #     else:
-        #         self._uppercase_table(table)
-
-        logging.info('Process execution completed')
-
 
 if __name__ == "__main__":
     component_start = core.utils.now()
-    if len(sys.argv) > 1:
-        set_debug = sys.argv[1]
-    else:
-        set_debug = False
-
     try:
-        if os.path.dirname(current_path) == '/code':
-            # Running in docker, assumes volume ./code
-            comp = Component(debug=set_debug)
-            comp.run()
-        else:
-            # Running locally, not in Docker
-            debug_data_path = os.path.join(module_path, 'data')
-            comp = Component(debug=set_debug, data_path=debug_data_path)
-            comp.run()
+        comp = Component()
+        # this triggers the run method by default and is controlled by the configuration.action parameter
+        comp.execute_action()
 
         component_end = core.utils.now()
         component_duration = (component_end - component_start).total_seconds()
         logging.info('Extraction completed successfully in {} seconds'.format(component_duration))
-
+    except UserException as exc:
+        logging.exception(exc)
+        exit(1)
     except Exception as generic_err:
         logging.exception(generic_err)
         exit(1)
