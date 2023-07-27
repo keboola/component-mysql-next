@@ -335,7 +335,8 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                             catalog_entry.table_name, headers
                         ))
 
-                destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv', '')
+                destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv',
+                                                       '')
 
                 if not os.path.exists(destination_output_path):
                     os.mkdir(destination_output_path)

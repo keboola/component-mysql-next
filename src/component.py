@@ -651,7 +651,6 @@ class Component(ComponentBase):
                     input_mapping)
                 table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
 
-
             else:
                 raise AttributeError('You are missing either a YAML input mapping, or the '
                                      'JSON input mapping. Please specify either to appropriately execute the extractor')
