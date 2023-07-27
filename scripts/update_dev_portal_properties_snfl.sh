@@ -7,7 +7,7 @@ docker pull quay.io/keboola/developer-portal-cli-v2:latest
 
 # Update properties in Keboola Developer Portal
 echo "Updating long description"
-value=`cat component_config/component_long_description.md`
+value=`cat component_config_snfl/component_long_description.md`
 echo "$value"
 if [ ! -z "$value" ]
 then
@@ -22,7 +22,7 @@ else
 fi
 
 echo "Updating config schema"
-value=`cat component_config/configSchema.json`
+value=`cat component_config_snfl/configSchema.json`
 echo "$value"
 if [ ! -z "$value" ]
 then
@@ -38,7 +38,7 @@ fi
 
 echo "Updating config description"
 
-value=`cat component_config/configuration_description.md`
+value=`cat component_config_snfl/configuration_description.md`
 echo "$value"
 if [ ! -z "$value" ]
 then
@@ -54,7 +54,7 @@ fi
 
 echo "Updating short description"
 
-value=`cat component_config/component_short_description.md`
+value=`cat component_config_snfl/component_short_description.md`
 echo "$value"
 if [ ! -z "$value" ]
 then
