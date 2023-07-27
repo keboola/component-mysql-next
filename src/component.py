@@ -18,6 +18,8 @@ from typing import List
 
 from cryptography.utils import CryptographyDeprecationWarning
 from keboola.component import ComponentBase, UserException
+from keboola.component.base import sync_action
+from keboola.component.sync_actions import ValidationResult
 
 import configuration
 from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, \
@@ -26,6 +28,7 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
     ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
+from ssh.ssh_utils import generate_ssh_key_pair
 
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
@@ -1407,6 +1410,16 @@ class Component(ComponentBase):
 
             else:
                 return None
+
+    # ##### SYNC ACTIONS
+    @sync_action("generate_ssh_key")
+    def generate_ssh_key(self):
+        private_key, public_key = generate_ssh_key_pair()
+        md_message = f"**Private Key**  (*Copy this to the `Private Key` configuration field*):\n\n" \
+                     f"```\n{private_key}\n```\n\n" \
+                     f"**Public Key**  (*Add this to your servers `ssh_keys`*): \n\n```\n{public_key}\n```"
+
+        return ValidationResult(message=md_message)
 
 
 if __name__ == "__main__":
