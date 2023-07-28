@@ -749,8 +749,15 @@ class Component(ComponentBase):
                         table_replication_method = table_metadata.get('replication-method').upper()
 
                         # Confirm corresponding table or folder exists
-                        table_specific_sliced_path = os.path.join(self.tables_out_path,
-                                                                  entry_table_name.upper() + '.csv')
+                        table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name.upper())
+                        # TODO: in platform sometimes extension was upper case - WTF fix
+                        if os.path.exists(table_specific_sliced_path + '.csv'):
+                            extension = '.csv'
+
+                        else:
+                            extension = '.CSV'
+                        table_specific_sliced_path += extension
+
                         if os.path.isdir(table_specific_sliced_path):
                             logging.info('Table {} at location {} is a directory'.format(entry_table_name,
                                                                                          table_specific_sliced_path))
@@ -761,8 +768,9 @@ class Component(ComponentBase):
                             output_is_sliced = False
                         else:
                             output_is_sliced = False
-                            logging.info('NO DATA found for table {} in either a file or sliced table directory, this '
-                                         'table is not being synced'.format(entry_table_name))
+                            logging.warning(
+                                'NO DATA found for table {} in either a file or sliced table directory, this '
+                                'table is not being synced'.format(entry_table_name))
 
                         # TODO: Consider other options for writing to storage based on user choices
                         logging.info('Table has rep method {} and user incremental param is {}'.format(
@@ -811,12 +819,15 @@ class Component(ComponentBase):
                                 self.create_manifests(entry, self.tables_out_path,
                                                       columns=list(tables_and_columns.get(entry_table_name)),
                                                       column_metadata=table_column_metadata,
-                                                      set_incremental=manifest_incremental, output_bucket=output_bucket)
+                                                      set_incremental=manifest_incremental,
+                                                      output_bucket=output_bucket,
+                                                      extension=extension)
                         elif os.path.isfile(table_specific_sliced_path):
                             logging.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
                                 entry_table_name, self.tables_out_path))
                             self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
-                                                  set_incremental=manifest_incremental, output_bucket=output_bucket)
+                                                  set_incremental=manifest_incremental, output_bucket=output_bucket,
+                                                  extension=extension)
 
                             # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
                             self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'),
@@ -1192,7 +1203,7 @@ class Component(ComponentBase):
         logging.warning('Processed data type {} does not match any KBC base types'.format(column_type))
 
     def create_manifests(self, entry: dict, data_path: str, columns: list = None, column_metadata: dict = None,
-                         set_incremental: bool = True, output_bucket: str = None):
+                         set_incremental: bool = True, output_bucket: str = None, extension='.csv'):
         """Write manifest files for the results produced by the results writer.
 
         :param entry: Dict entry from catalog
@@ -1212,7 +1223,7 @@ class Component(ComponentBase):
         else:
             primary_keys = None
         table_name = entry.get('result_table_name').upper()
-        result_full_path = os.path.join(data_path, table_name + '.csv')
+        result_full_path = os.path.join(data_path, table_name + extension)
 
         # for r in results:
         if not columns:
