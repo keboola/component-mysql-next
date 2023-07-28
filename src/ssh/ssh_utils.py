@@ -1,10 +1,15 @@
 import base64
 import binascii
 import contextlib
+import warnings
 from io import StringIO
 from typing import Tuple
 
-import paramiko
+from cryptography.utils import CryptographyDeprecationWarning
+
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
+    import paramiko
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization as crypt_serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
