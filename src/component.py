@@ -629,7 +629,7 @@ class Component(ComponentBase):
                 'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
 
     @contextmanager
-    def init_mysql_client(self):
+    def init_mysql_client(self) -> MySQLConnection:
         connection_context = self.get_conn_context_manager()
         mysql_client = MySQLConnection(self.mysql_config_params)
         try:
@@ -1435,6 +1435,32 @@ class Component(ComponentBase):
                 return None
 
     # ##### SYNC ACTIONS
+    @sync_action('testConnection')
+    def test_connection(self):
+        self._init_connection_params()
+        with self.init_mysql_client() as client:
+            client.ping()
+
+    # @sync_action('get_schemas')
+    # def get_schemas(self):
+    #     with self._init_client():
+    #         self._client.connect()
+    #         schemas = self._client.metadata_provider.get_schemas()
+    #         return [
+    #             SelectElement(schema) for schema in schemas
+    #         ]
+    #
+    # @sync_action('get_tables')
+    # def get_tables(self):
+    #     with self._init_client():
+    #         self._init_configuration()
+    #         if not self._configuration.source_settings.schemas:
+    #             raise UserException("Schema must be selected first!")
+    #         tables = []
+    #         for s in self._configuration.source_settings.schemas:
+    #             tables.extend(self._client.metadata_provider.get_tables(schema_pattern=s))
+    #         return [SelectElement(f"{table[0]}.{table[1]}") for table in tables]
+
     @sync_action("generate_ssh_key")
     def generate_ssh_key(self):
         private_key, public_key = generate_ssh_key_pair()
