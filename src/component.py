@@ -1444,6 +1444,7 @@ class Component(ComponentBase):
         else:
             _component_id = os.environ.get(ENV_COMPONENT_ID)
             _configuration_id = os.environ.get(ENV_CONFIGURATION_ID)
+            logging.debug(f"Env {_component_id} - {_configuration_id}")
 
             if _component_id is not None and _component_id is not None:
                 return f"in.c-{_component_id.replace('.', '-')}-{_configuration_id}"
