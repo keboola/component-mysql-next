@@ -1471,7 +1471,6 @@ class Component(ComponentBase):
     def get_tables(self):
         self._init_connection_params()
         with self.init_mysql_client() as client:
-            self._init_configuration()
             params = self.configuration.parameters
             databases = params.get(KEY_DATABASES) or params.get('source_settings', {}).get('schemas')
             if not databases:
