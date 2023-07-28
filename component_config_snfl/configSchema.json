@@ -134,7 +134,7 @@
         "max_execution_time": {
           "type": "string",
           "title": "Max connection time",
-          "description": "Optional parameter which sets @@session.max_execution_time to desired integer value",
+          "description": "Optional parameter which sets @@session.max_execution_time to desired integer value. Use this when initial full syncs are failing due to the size of the tables.",
           "propertyOrder": 1
         },
         "show_binary_log_config": {
@@ -252,16 +252,16 @@
         "snapshot_mode": {
           "type": "string",
           "title": "Replication Mode",
-          "description": "The mode 'Snapshot Only' will perform full sync each time. Standard mode performs full sync of the tables on the first run.",
+          "description": " Standard mode performs full sync of the tables on the first run. The mode 'Snapshot Only' will perform full sync each time.",
           "propertyOrder": 1,
           "enum": [
-            "snapshot_only",
-            "initial"
+            "initial",
+            "snapshot_only"
           ],
           "options": {
             "enum_titles": [
               "Standard",
-              "Changes only"
+              "Snapshot only"
             ]
           }
         },
@@ -290,7 +290,6 @@
         "load_type": {
           "enum": [
             "incremental_load",
-            "full_load",
             "append_only"
           ],
           "type": "string",
@@ -299,7 +298,6 @@
           "options": {
             "enum_titles": [
               "Incremental Load",
-              "Full Load",
               "Append"
             ]
           },
