@@ -351,8 +351,8 @@ class MessageStore(dict):
 
     def flush_records(self):
         logging.debug('Flushing records for each of found tables: {}'.format(self._found_tables))
-        for schema in self._found_schemas:
-            for table in self.found_tables:
+        for schema, tables in self._data_store.items():
+            for table in tables:
                 if self._data_store[schema][table].get('records'):
                     # logging.debug('got records for {} {}'.format(schema, table))
 
