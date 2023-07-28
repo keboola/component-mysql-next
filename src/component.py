@@ -596,6 +596,9 @@ class Component(ComponentBase):
             # old versions do not support schema prefix
             self.params[KEY_INCLUDE_SCHEMA_NAME] = False
 
+        if self.params.get(KEY_TABLE_MAPPINGS_JSON) == '{}':
+            raise UserException("You must select at least one database and table to sync!")
+
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
 
@@ -692,8 +695,7 @@ class Component(ComponentBase):
                 table_mappings = json.loads(convert_yaml_to_json_mapping(input_mapping, catalog_mapping.to_dict()))
 
             else:
-                raise AttributeError('You are missing either a YAML input mapping, or the '
-                                     'JSON input mapping. Please specify either to appropriately execute the extractor')
+                raise AttributeError('No schemas or tables are selected.')
 
             if self.params[KEY_OBJECTS_ONLY]:
                 # Run only schema discovery process.
