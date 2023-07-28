@@ -19,7 +19,7 @@ from typing import List
 from cryptography.utils import CryptographyDeprecationWarning
 from keboola.component import ComponentBase, UserException
 from keboola.component.base import sync_action
-from keboola.component.sync_actions import ValidationResult
+from keboola.component.sync_actions import ValidationResult, SelectElement
 
 import configuration
 from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, \
@@ -179,6 +179,21 @@ def create_column_metadata(cols):
                                c.ordinal_position)
 
     return metadata.to_list(mdata)
+
+
+def get_schemas(mysql_conn) -> list[str]:
+    with connect_with_backoff(mysql_conn) as open_conn:
+        with open_conn.cursor() as cur:
+            cur.execute("""
+            SELECT schema_name
+            FROM information_schema.schemata
+            WHERE schema_name not in ('information_schema', 'sys', 'performance_schema');
+            """)
+
+            schemas = []
+            for res in cur.fetchall():
+                schemas.append(res[0])
+            return schemas
 
 
 def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool = True):
@@ -1441,25 +1456,27 @@ class Component(ComponentBase):
         with self.init_mysql_client() as client:
             client.ping()
 
-    # @sync_action('get_schemas')
-    # def get_schemas(self):
-    #     with self._init_client():
-    #         self._client.connect()
-    #         schemas = self._client.metadata_provider.get_schemas()
-    #         return [
-    #             SelectElement(schema) for schema in schemas
-    #         ]
-    #
-    # @sync_action('get_tables')
-    # def get_tables(self):
-    #     with self._init_client():
-    #         self._init_configuration()
-    #         if not self._configuration.source_settings.schemas:
-    #             raise UserException("Schema must be selected first!")
-    #         tables = []
-    #         for s in self._configuration.source_settings.schemas:
-    #             tables.extend(self._client.metadata_provider.get_tables(schema_pattern=s))
-    #         return [SelectElement(f"{table[0]}.{table[1]}") for table in tables]
+    @sync_action('get_schemas')
+    def get_schemas(self):
+        self._init_connection_params()
+        with self.init_mysql_client() as client:
+            schemas = get_schemas(client)
+            return [
+                SelectElement(schema) for schema in schemas
+            ]
+
+    @sync_action('get_tables')
+    def get_tables(self):
+        self._init_connection_params()
+        with self.init_mysql_client() as client:
+            self._init_configuration()
+            params = self.configuration.parameters
+            databases = params.get(KEY_DATABASES) or params.get('source_settings', {}).get('schemas')
+            if not databases:
+                raise UserException("Schema must be selected first!")
+            catalog = discover_catalog(client, {KEY_DATABASES: databases}, False, False)
+            streams = [entry for entry in catalog.streams if entry.database in databases]
+            return [SelectElement(f"{stream.database}.{stream.table}") for stream in streams]
 
     @sync_action("generate_ssh_key")
     def generate_ssh_key(self):
