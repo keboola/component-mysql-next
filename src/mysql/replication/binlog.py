@@ -146,7 +146,8 @@ def row_to_data_record(catalog_entry, version, db_column_map, row, time_extracte
             db_column_type = db_column_map[column_name].get('type')
         except KeyError:
             # skip system columns
-            if column_name.startswith('_KBC') or column_name.startswith('_BINLOG'):
+            # TODO: originaly was prefixed with _, do this only on native types projects for backward comp
+            if column_name.startswith('KBC_') or column_name.startswith('BINLOG_'):
                 pass
             else:
                 raise SchemaOffsyncError(f'Schema for {column_name} is not available!')
