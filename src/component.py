@@ -1438,7 +1438,7 @@ class Component(ComponentBase):
 
     @staticmethod
     def create_output_bucket(bucket_name: str = None):
-        if bucket_name is not None and bucket_name.strip() != '':
+        if bucket_name and bucket_name.strip() != '':
             return f'in.c-{bucket_name.strip()}'
 
         else:
