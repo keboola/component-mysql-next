@@ -98,7 +98,7 @@ def generate_ssh_key_pair(key_size: int = 2048) -> tuple[str, str]:
 
     private_key = key_pair.private_bytes(
         crypt_serialization.Encoding.PEM,
-        crypt_serialization.PrivateFormat.PKCS8,
+        crypt_serialization.PrivateFormat.TraditionalOpenSSL,
         crypt_serialization.NoEncryption()).decode('utf-8')
     public_key = key_pair.public_key().public_bytes(
         crypt_serialization.Encoding.OpenSSH,
