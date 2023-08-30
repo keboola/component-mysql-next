@@ -122,7 +122,8 @@ class SnowflakeClient:
 
         self.execute_query(query)
 
-    def copy_csv_into_table_from_file(self, table_name: str, table_columns: list[str], csv_file_path: str,
+    def copy_csv_into_table_from_file(self, table_name: str, table_columns: list[str], column_types: list[dict],
+                                      csv_file_path: str,
                                       file_format: dict = None):
         """
         Import from file by default CSV format with skip header setup and ERROR_ON_COLUMN_COUNT_MISMATCH=false.
@@ -130,6 +131,7 @@ class SnowflakeClient:
         Args:
             table_name:
             table_columns:
+            column_types: types used for transformation
             csv_file_path:
             file_format:
         """
@@ -145,12 +147,22 @@ class SnowflakeClient:
         # insert data
         table_name = self.wrap_in_quote(table_name)
         columns = self.wrap_columns_in_quotes(table_columns)
-        query = f"COPY INTO {table_name} ({', '.join(columns)}) FROM @{table_name}"
+
+        columns_converted = [self._convert_nulls(f'${idx + 1}', col.get('convert_nulls', False)) for idx, col in
+                             enumerate(column_types)]
+        query = f"COPY INTO {table_name} ({', '.join(columns)}) FROM " \
+                f"(SELECT {','.join(columns_converted)} FROM @{table_name})"
         query += " FILE_FORMAT = ("
         for key in file_format:
             query += f"{key}={file_format[key]} "
         query += ");"
         self.execute_query(query)
+
+    def _convert_nulls(self, col_name: str, convert: bool):
+        col_def = col_name
+        if convert:
+            col_def = f"NULLIF({col_def},'')"
+        return col_def
 
     def wrap_columns_in_quotes(self, columns):
         return [self.wrap_in_quote(col) for col in columns]

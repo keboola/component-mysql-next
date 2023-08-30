@@ -31,6 +31,7 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
     ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
 from ssh.ssh_utils import generate_ssh_key_pair
+from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
 
 with warnings.catch_warnings():
@@ -904,11 +905,11 @@ class Component(ComponentBase):
             # chunks if fullsync
             tables = glob.glob(os.path.join(table_path, '*.csv'))
             for table in tables:
-                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, table)
+                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table)
         else:
             file_format = self._snowflake_client.DEFAULT_FILE_FORMAT.copy()
             file_format['SKIP_HEADER'] = 0
-            self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, table_path)
+            self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
 
             self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
 
@@ -952,8 +953,31 @@ class Component(ComponentBase):
 
     def _convert_to_snowflake_column_definitions(self, column_metadata: dict) -> list[dict[str, str]]:
         column_types = []
-        for c in column_metadata:
-            column_types.append({"name": c, "type": "TEXT"})
+
+        for name, md in column_metadata.items():
+            c = column_metadata_to_schema(name, md)
+            dtype = c.base_type
+            # Only NUMERIC types can have length
+            length_clause = ''
+            if c.length and c.base_type.upper() in ['NUMERIC', 'STRING']:
+                # Postgres return full integer value if no length is specified
+                if c.base_type.upper() == 'STRING' and c.length > 16777216:
+                    c.length = 16777216
+
+                length_clause += str(c.length)
+            if c.precision and c.base_type.upper() in ['NUMERIC']:
+                length_clause += f', {c.precision}'
+
+            if length_clause:
+                dtype += f'({length_clause})'
+
+            type_def = {"name": c.name, "type": dtype, 'convert_nulls': False}
+
+            if c.base_type.upper() != 'STRING':
+                type_def['convert_nulls'] = True
+
+            column_types.append(type_def)
+
         return column_types
 
     # Sync Methods

@@ -1,3 +1,4 @@
+import ast
 from dataclasses import dataclass
 from typing import Optional, List
 
@@ -23,9 +24,20 @@ def column_metadata_to_schema(col_name: str, column_metadata: List[dict]):
     for md in column_metadata:
         if md['key'] == 'KBC.datatype.type':
             schema.source_type = md['value']
+            size = ()
+            if len(split_parts := md['value'].split('(')) > 1:
+                size = ast.literal_eval(f'({split_parts[1]}')
+
+            if size and isinstance(size, tuple):
+                schema.length = size[0]
+                schema.precision = size[1]
+            elif size:
+                schema.length = size
 
         if md['key'] == 'KBC.datatype.basetype':
             schema.base_type = md['value']
 
         if md['key'] == 'KBC.datatype.length':
             schema.length = md['value']
+
+    return schema
