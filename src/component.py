@@ -757,11 +757,14 @@ class Component(ComponentBase):
                     logging.info('Data extraction completed')
 
                 # upload data to stage in parallel
+                # Determine Manifest file outputs (Only full load)
+                tables_and_columns_order = common.get_table_headers()
                 with self._snowflake_client.connect():
 
                     with ThreadPoolExecutor(max_workers=10) as executor:
                         futures = {
-                            executor.submit(self._write_result_table, entry, message_store): entry for
+                            executor.submit(self._write_result_table, entry, message_store,
+                                            tables_and_columns_order): entry for
                             entry in [entry for entry in catalog.to_dict()['streams']
                                       if entry['metadata'][0]['metadata'].get('selected')]
                         }
@@ -784,7 +787,7 @@ class Component(ComponentBase):
 
         logging.info('Process execution completed')
 
-    def _write_result_table(self, entry: dict, message_store):
+    def _write_result_table(self, entry: dict, message_store, tables_and_columns_order: dict):
         entry_table_name = entry.get('result_table_name')
         table_metadata = entry['metadata'][0]['metadata']
         column_metadata = entry['metadata'][1:]
@@ -851,7 +854,6 @@ class Component(ComponentBase):
             table_column_metadata = dict()
 
             for key, val in _table_column_metadata.items():
-
                 if key in fields:
                     table_column_metadata[key] = val
 
@@ -875,8 +877,12 @@ class Component(ComponentBase):
             primary_keys = None
 
         # TODO: for backward compatibility, make configurable
-        entry_table_name = entry_table_name.upper()
-        self._create_table_in_stage(entry_table_name, table_specific_sliced_path,
+        ordered_columns = tables_and_columns_order.get(entry_table_name)
+        result_table_name = entry_table_name.upper()
+        if output_is_sliced:
+            # order metadata
+            table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
+        self._create_table_in_stage(result_table_name, table_specific_sliced_path,
                                     primary_keys, table_column_metadata, output_is_sliced)
 
         self.create_manifests(entry, self.tables_out_path,
@@ -889,6 +895,21 @@ class Component(ComponentBase):
 
         # Write output state file
         logging.debug('Got final state {}'.format(message_store.get_state()))
+
+    def _order_metadata(self, column_metadata: dict, column_order: list):
+        """
+        This orders metadata based on column order.
+        Relevant for full sync. Spaghetti code patch.
+        Args:
+            column_metadata:
+            column_order:
+
+        Returns:
+
+        """
+        ordered_metadata = {col: column_metadata[col] for col in column_order}
+
+        return ordered_metadata
 
     def _create_table_in_stage(self, result_table_name: str, table_path: str, primary_key_columns: list[str],
                                table_column_metadata: dict,
