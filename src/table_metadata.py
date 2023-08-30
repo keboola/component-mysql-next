@@ -18,14 +18,14 @@ class ColumnSchema:
     default: Optional[str] = None
 
 
-def column_metadata_to_schema(col_name:str, column_metadata:List[dict]):
+def column_metadata_to_schema(col_name: str, column_metadata: List[dict]):
     schema = ColumnSchema(col_name)
     for md in column_metadata:
         if md['key'] == 'KBC.datatype.type':
-            schema.source_type=md['value']
+            schema.source_type = md['value']
 
         if md['key'] == 'KBC.datatype.basetype':
-            schema.base_type=md['value']
+            schema.base_type = md['value']
 
         if md['key'] == 'KBC.datatype.length':
-            schema.length=md['value']
+            schema.length = md['value']

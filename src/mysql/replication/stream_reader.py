@@ -7,7 +7,6 @@ from typing import List
 
 import backoff
 import pymysql
-from pymysql.util import byte2int
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication import constants, row_event, event
 from pymysqlreplication.column import Column
@@ -351,7 +350,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                  report_slave=None, slave_uuid=None,
                  pymysql_wrapper=None,
                  fail_on_table_metadata_unavailable=False,
-                 slave_heartbeat=None, table_schema_cache: dict = None):
+                 slave_heartbeat=None, table_schema_cache: dict = None,
+                 ignore_decode_errors=False):
         """
         Attributes:
             ctl_connection_settings: Connection settings for cluster holding
@@ -408,7 +408,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                          slave_uuid=slave_uuid,
                          pymysql_wrapper=pymysql_wrapper,
                          fail_on_table_metadata_unavailable=fail_on_table_metadata_unavailable,
-                         slave_heartbeat=slave_heartbeat)
+                         slave_heartbeat=slave_heartbeat,
+                         ignore_decode_errors=ignore_decode_errors)
 
         # We can't filter on packet level TABLE_MAP, Query and rotate event because
         # we need them for handling other operations. Add custom events
@@ -473,6 +474,7 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
 
             binlog_event = BinLogPacketWrapperModified(pkt, self.table_map,
                                                        self._ctl_connection,
+                                                       self.mysql_version,
                                                        self._BinLogStreamReader__use_checksum,
                                                        self._BinLogStreamReader__allowed_events_in_packet,
                                                        self._BinLogStreamReader__only_tables,
@@ -480,7 +482,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                                                        self._BinLogStreamReader__only_schemas,
                                                        self._BinLogStreamReader__ignored_schemas,
                                                        self._BinLogStreamReader__freeze_schema,
-                                                       self._BinLogStreamReader__fail_on_table_metadata_unavailable)
+                                                       self._BinLogStreamReader__fail_on_table_metadata_unavailable,
+                                                       self._BinLogStreamReader__ignore_decode_errors)
 
             if binlog_event.event_type == ROTATE_EVENT:
                 self.log_pos = binlog_event.event.position
@@ -682,21 +685,27 @@ class TableMapEventAlterTracking(BinLogEvent):
     def __init__(self, from_packet, event_size, table_map, ctl_connection, **kwargs):
         super(TableMapEventAlterTracking, self).__init__(from_packet, event_size,
                                                          table_map, ctl_connection, **kwargs)
+
         self.__only_tables = kwargs["only_tables"]
         self.__ignored_tables = kwargs["ignored_tables"]
         self.__only_schemas = kwargs["only_schemas"]
         self.__ignored_schemas = kwargs["ignored_schemas"]
+        self.__freeze_schema = kwargs["freeze_schema"]
 
         # Post-Header
         self.table_id = self._read_table_id()
 
+        if self.table_id in table_map and self.__freeze_schema:
+            self._processed = False
+            return
+
         self.flags = struct.unpack('<H', self.packet.read(2))[0]
 
         # Payload
-        self.schema_length = byte2int(self.packet.read(1))
+        self.schema_length = struct.unpack("!B", self.packet.read(1))[0]
         self.schema = self.packet.read(self.schema_length).decode()
         self.packet.advance(1)
-        self.table_length = byte2int(self.packet.read(1))
+        self.table_length = struct.unpack("!B", self.packet.read(1))[0]
         self.table = self.packet.read(self.table_length).decode()
 
         if self.__only_tables is not None and self.table not in self.__only_tables:
@@ -755,7 +764,7 @@ class TableMapEventAlterTracking(BinLogEvent):
                                              f"to include schema matching the last execution time and provide it "
                                              f"within the table_schema_cache parameter. ")
 
-                col = Column(byte2int(column_type), column_schema, from_packet)
+                col = Column(column_type, column_schema, from_packet)
                 self.columns.append(col)
 
         self.table_obj = Table(self.column_schemas, self.table_id, self.schema,

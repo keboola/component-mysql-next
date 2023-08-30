@@ -589,6 +589,9 @@ class Component(ComponentBase):
 
         self._snowflake_client: SnowflakeClient
 
+        if not self.configuration.parameters.get("debug"):
+            logging.getLogger('snowflake.connector').setLevel(logging.WARNING)
+
     def _init_workspace_client(self):
         snfwlk_credentials = {
             "account": self.configuration.workspace_credentials['host'].replace('.snowflakecomputing.com', ''),
@@ -856,11 +859,11 @@ class Component(ComponentBase):
 
         # Write manifest files
 
-        if not ((output_is_sliced and core.find_files(table_specific_sliced_path, '*.csv')) \
-                or os.path.isfile(table_specific_sliced_path)):
-            logging.info('No data was synced '
-                         'from the database for this table. This may be expected behavior if the table '
-                         'is empty or no new rows were added (if incremental)'.format(entry_table_name))
+        if not ((output_is_sliced and core.find_files(table_specific_sliced_path, '*.csv')) or os.path.isfile(
+                table_specific_sliced_path)):
+            logging.info(f'No data was synced '
+                         f'from the database for {entry_table_name} table. This may be expected behavior if the table '
+                         'is empty or no new rows were added (if incremental)')
             return
 
         if bool(self.params.get(KEY_APPEND_MODE, False)) is True:

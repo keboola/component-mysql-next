@@ -23,7 +23,7 @@ services:
       - KBC_CONFIGID=12345
       - KBC_COMPONENTID=kds-team.ex-mysql-next
   mysql:
-    image: mysql:${MYSQL_VERSION}
+    image: mysql:5.7.12
     command: mysqld --local-infile --port=3306 --default-authentication-plugin=mysql_native_password
     environment:
       MYSQL_DATABASE: test
