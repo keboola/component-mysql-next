@@ -5,6 +5,7 @@ Provides an object model for JSON Schema.
 import json
 
 # These are standard keys defined in the JSON Schema spec
+
 STANDARD_KEYS = [
     'selected',
     'inclusion',

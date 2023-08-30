@@ -3,6 +3,7 @@ import base64
 import binascii
 import copy
 import csv
+import glob
 import itertools
 import json
 import logging
@@ -12,6 +13,7 @@ import sys
 import tempfile
 import warnings
 from collections import namedtuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext, contextmanager
 from io import StringIO
 from typing import List
@@ -29,6 +31,7 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
     ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
 from ssh.ssh_utils import generate_ssh_key_pair
+from workspace_client import SnowflakeClient
 
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
@@ -584,6 +587,19 @@ class Component(ComponentBase):
 
         self.params: dict
 
+        self._snowflake_client: SnowflakeClient
+
+    def _init_workspace_client(self):
+        snfwlk_credentials = {
+            "account": self.configuration.workspace_credentials['host'].replace('.snowflakecomputing.com', ''),
+            "user": self.configuration.workspace_credentials['user'],
+            "password": self.configuration.workspace_credentials['password'],
+            "database": self.configuration.workspace_credentials['database'],
+            "schema": self.configuration.workspace_credentials['schema'],
+            "warehouse": self.configuration.workspace_credentials['warehouse']
+        }
+        self._snowflake_client = SnowflakeClient(**snfwlk_credentials)
+
     def _init_configuration(self):
         logging.info('Loading configuration...')
         if not is_legacy_config(self.configuration.parameters):
@@ -662,6 +678,7 @@ class Component(ComponentBase):
         """Execute main component extraction process."""
         self._init_configuration()
         self._init_connection_params()
+        self._init_workspace_client()
 
         file_input_path = self._check_file_inputs()  # noqa
 
@@ -735,112 +752,23 @@ class Component(ComponentBase):
 
                     logging.info('Data extraction completed')
 
-                # Determine Manifest file outputs
-                tables_and_columns = common.get_table_headers()
+                # upload data to stage in parallel
+                with self._snowflake_client.connect():
 
-                for entry in catalog.to_dict()['streams']:
-                    entry_table_name = entry.get('result_table_name')
-                    table_metadata = entry['metadata'][0]['metadata']
-                    column_metadata = entry['metadata'][1:]
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = {
+                            executor.submit(self._write_result_table, entry, message_store): entry for
+                            entry in [entry for entry in catalog.to_dict()['streams']
+                                      if entry['metadata'][0]['metadata'].get('selected')]
+                        }
+                        for future in as_completed(futures):
+                            if future.exception():
+                                raise UserException(
+                                    f"Could not create table: {futures[future]}, reason: {future.exception()}")
 
-                    output_bucket = self.create_output_bucket(self.params.get(KEY_OUTPUT_BUCKET))
+                            future.result()
 
-                    if table_metadata.get('selected'):
-                        table_replication_method = table_metadata.get('replication-method').upper()
-
-                        # Confirm corresponding table or folder exists
-                        table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name.upper())
-                        # TODO: in platform sometimes extension was upper case - WTF fix
-                        if os.path.exists(table_specific_sliced_path + '.csv'):
-                            extension = '.csv'
-
-                        else:
-                            extension = '.CSV'
-                        table_specific_sliced_path += extension
-
-                        if os.path.isdir(table_specific_sliced_path):
-                            logging.info('Table {} at location {} is a directory'.format(entry_table_name,
-                                                                                         table_specific_sliced_path))
-                            output_is_sliced = True
-                        elif os.path.isfile(table_specific_sliced_path):
-                            logging.info('Table {} at location {} is a file'.format(entry_table_name,
-                                                                                    table_specific_sliced_path))
-                            output_is_sliced = False
-                        else:
-                            output_is_sliced = False
-                            logging.warning(
-                                'NO DATA found for table {} in either a file or sliced table directory, this '
-                                'table is not being synced'.format(entry_table_name))
-
-                        # TODO: Consider other options for writing to storage based on user choices
-                        logging.info('Table has rep method {} and user incremental param is {}'.format(
-                            table_replication_method, self.params[KEY_INCREMENTAL_SYNC]
-                        ))
-                        if table_replication_method.upper() == 'FULL_TABLE' or \
-                                not self.params[KEY_INCREMENTAL_SYNC]:
-                            logging.info('Manifest file will have incremental false for Full Table syncs')
-                            manifest_incremental = False
-                        else:
-                            logging.info('Manifest file will have incremental True for {} sync'.format(
-                                table_replication_method
-                            ))
-                            manifest_incremental = True
-
-                        _table_column_metadata = self.get_table_column_metadata(column_metadata)
-
-                        try:
-                            if not output_is_sliced:
-                                with open(table_specific_sliced_path) as io:
-                                    rdr = csv.DictReader(io)
-                                    fields = rdr.fieldnames
-                            else:
-                                fields = None
-                        except FileNotFoundError:
-                            fields = []
-                        except IsADirectoryError:
-                            fields = None
-
-                        logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
-                                                                                  entry_table_name))
-
-                        if fields is not None:
-                            table_column_metadata = dict()
-                            for key, val in _table_column_metadata.items():
-                                if key in fields:
-                                    table_column_metadata[key] = val
-                        else:
-                            table_column_metadata = _table_column_metadata
-
-                        # Write manifest files
-                        if output_is_sliced:
-                            if core.find_files(table_specific_sliced_path, '*.csv'):
-                                logging.info('Writing manifest for {} to "{}" with columns for sliced table'.format(
-                                    entry_table_name, self.tables_out_path))
-                                self.create_manifests(entry, self.tables_out_path,
-                                                      columns=list(tables_and_columns.get(entry_table_name)),
-                                                      column_metadata=table_column_metadata,
-                                                      set_incremental=manifest_incremental,
-                                                      output_bucket=output_bucket,
-                                                      extension=extension)
-                        elif os.path.isfile(table_specific_sliced_path):
-                            logging.info('Writing manifest for {} to path "{}" for non-sliced table'.format(
-                                entry_table_name, self.tables_out_path))
-                            self.create_manifests(entry, self.tables_out_path, column_metadata=table_column_metadata,
-                                                  set_incremental=manifest_incremental, output_bucket=output_bucket,
-                                                  extension=extension)
-
-                            # For binlogs (only binlogs are written non-sliced) rewrite CSVs de-duped to latest per PK
-                            self.write_only_latest_result_binlogs(table_specific_sliced_path, entry.get('primary_keys'),
-                                                                  self.params.get(KEY_APPEND_MODE,
-                                                                                  False))
-                        else:
-                            logging.info('No manifest file found for selected table {}, because no data was synced '
-                                         'from the database for this table. This may be expected behavior if the table '
-                                         'is empty or no new rows were added (if incremental)'.format(entry_table_name))
-
-                        # Write output state file
-                        logging.debug('Got final state {}'.format(message_store.get_state()))
-                        self.write_state_file(message_store.get_state())
+                self.write_state_file(message_store.get_state())
 
                 # QA: Walk through output destination
                 self.walk_path(path=self.tables_out_path, is_pre_manifest=False)
@@ -852,6 +780,163 @@ class Component(ComponentBase):
 
         logging.info('Process execution completed')
 
+    def _write_result_table(self, entry: dict, message_store):
+        entry_table_name = entry.get('result_table_name')
+        table_metadata = entry['metadata'][0]['metadata']
+        column_metadata = entry['metadata'][1:]
+
+        output_bucket = self.create_output_bucket(self.params.get(KEY_OUTPUT_BUCKET))
+
+        table_replication_method = table_metadata.get('replication-method').upper()
+        # Confirm corresponding table or folder exists
+        table_specific_sliced_path = os.path.join(self.tables_out_path, entry_table_name.upper())
+
+        # TODO: in platform sometimes extension was upper case - WTF fix
+        if entry_table_name.upper() + '.csv' in os.listdir(self.tables_out_path):
+            extension = '.csv'
+        else:
+            extension = '.CSV'
+
+        table_specific_sliced_path += extension
+        if os.path.isdir(table_specific_sliced_path):
+            logging.info('Table {} at location {} is a directory'.format(entry_table_name,
+                                                                         table_specific_sliced_path))
+            output_is_sliced = True
+        elif os.path.isfile(table_specific_sliced_path):
+            logging.info('Table {} at location {} is a file'.format(entry_table_name,
+                                                                    table_specific_sliced_path))
+            output_is_sliced = False
+        else:
+            output_is_sliced = False
+            logging.warning(
+                'NO DATA found for table {} in either a file or sliced table directory, this '
+                'table is not being synced'.format(entry_table_name))
+
+        # TODO: Consider other options for writing to storage based on user choices
+        logging.info('Table has rep method {} and user incremental param is {}'.format(
+            table_replication_method, self.params[KEY_INCREMENTAL_SYNC]
+        ))
+
+        if table_replication_method.upper() == 'FULL_TABLE' or \
+                not self.params[KEY_INCREMENTAL_SYNC]:
+            logging.info('Manifest file will have incremental false for Full Table syncs')
+            manifest_incremental = False
+        else:
+            logging.info('Manifest file will have incremental True for {} sync'.format(
+                table_replication_method
+            ))
+            manifest_incremental = True
+
+        _table_column_metadata = self.get_table_column_metadata(column_metadata)
+
+        try:
+            if not output_is_sliced:
+                with open(table_specific_sliced_path) as io:
+                    rdr = csv.DictReader(io)
+                    fields = rdr.fieldnames
+            else:
+                fields = None
+
+        except FileNotFoundError:
+            fields = []
+        except IsADirectoryError:
+            fields = None
+        logging.info('Table specific path {} for table {}'.format(table_specific_sliced_path,
+                                                                  entry_table_name))
+        if fields is not None:
+            table_column_metadata = dict()
+
+            for key, val in _table_column_metadata.items():
+
+                if key in fields:
+                    table_column_metadata[key] = val
+
+        else:
+            table_column_metadata = _table_column_metadata
+
+        # Write manifest files
+
+        if not ((output_is_sliced and core.find_files(table_specific_sliced_path, '*.csv')) \
+                or os.path.isfile(table_specific_sliced_path)):
+            logging.info('No data was synced '
+                         'from the database for this table. This may be expected behavior if the table '
+                         'is empty or no new rows were added (if incremental)'.format(entry_table_name))
+            return
+
+        if bool(self.params.get(KEY_APPEND_MODE, False)) is True:
+            primary_keys = None
+        elif entry.get('primary_keys'):
+            primary_keys = [key.upper() for key in entry.get('primary_keys')]
+        else:
+            primary_keys = None
+
+        self._create_table_in_stage(entry_table_name, table_specific_sliced_path,
+                                    primary_keys, table_column_metadata, output_is_sliced)
+
+        self.create_manifests(entry, self.tables_out_path,
+                              columns=list(table_column_metadata.keys()),
+                              column_metadata=table_column_metadata,
+                              set_incremental=manifest_incremental,
+                              output_bucket=output_bucket,
+                              extension=extension,
+                              primary_keys=primary_keys)
+
+        # Write output state file
+        logging.debug('Got final state {}'.format(message_store.get_state()))
+
+    def _create_table_in_stage(self, result_table_name: str, table_path: str, primary_key_columns: list[str],
+                               table_column_metadata: dict,
+                               is_full_sync: bool):
+
+        column_types = self._convert_to_snowflake_column_definitions(table_column_metadata)
+        columns = list(table_column_metadata.keys())
+
+        logging.info(f"Creating table {result_table_name} in stage")
+        self._snowflake_client.create_table(result_table_name, column_types)
+
+        logging.info(f"Uploading data into table {result_table_name} in stage")
+        if is_full_sync:
+            # chunks if fullsync
+            tables = glob.glob(os.path.join(table_path, '*.csv'))
+            for table in tables:
+                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, table)
+        else:
+            file_format = self._snowflake_client.DEFAULT_FILE_FORMAT.copy()
+            file_format['SKIP_HEADER'] = 0
+            self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, table_path)
+
+            self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
+
+    def _dedupe_stage_table(self, table_name: str, id_columns: list[str]):
+        """
+        Dedupe staging table and keep only latest records.
+        Based on the internal column kbc__event_order produced by CDC engine
+        Args:
+            table_name:
+            id_columns:
+
+        Returns:
+
+        """
+        id_cols = self._snowflake_client.wrap_columns_in_quotes(id_columns)
+        id_cols_str = ','.join([f'"{table_name}".{col}' for col in id_cols])
+        unique_id_concat = f"CONCAT_WS('|',{id_cols_str},\"BINLOG_CHANGE_AT\")"
+
+        query = f"""DELETE FROM
+                            "{table_name}" USING (
+                            SELECT
+                                {unique_id_concat} AS "ID"
+                            FROM
+                                "{table_name}"
+                                QUALIFY ROW_NUMBER() OVER (PARTITION BY {id_cols_str} ORDER BY
+                                    "BINLOG_CHANGE_AT"::INT DESC) != 1) TO_DELETE
+                        WHERE
+                            TO_DELETE.ID = {unique_id_concat}
+            """
+
+        logging.debug(f'Dedupping table {table_name}: {query}')
+        self._snowflake_client.execute_query(query)
+
     def _check_file_inputs(self) -> str:
         """Return path name of file inputs if any."""
         file_input = self.files_in_path
@@ -859,6 +944,12 @@ class Component(ComponentBase):
 
         if has_file_inputs:
             return file_input
+
+    def _convert_to_snowflake_column_definitions(self, column_metadata: dict) -> list[dict[str, str]]:
+        column_types = []
+        for c in column_metadata:
+            column_types.append({"name": c, "type": "TEXT"})
+        return column_types
 
     # Sync Methods
     @staticmethod
@@ -1120,11 +1211,10 @@ class Component(ComponentBase):
             is_selected_in_detail = True if 'selected' in column_detail else False
             is_column_set_as_selected = column_detail.get('selected')
             is_selected_by_default = column_detail.get('selected-by-default')
-            if is_column_set_as_selected or (is_selected_by_default and not is_selected_in_detail):
-                column_name = column_metadata['breadcrumb'][1].upper()
-                data_type = column_detail.get('sql-datatype')
+            column_name = column_metadata['breadcrumb'][1].upper()
+            data_type = column_detail.get('sql-datatype')
 
-                table_columns_metadata[column_name] = self.generate_column_metadata(data_type=data_type, nullable=True)
+            table_columns_metadata[column_name] = self.generate_column_metadata(data_type=data_type, nullable=True)
 
         # Append KBC metadata column types, hard coded for now
         table_columns_metadata[common.KBC_SYNCED] = self.generate_column_metadata(data_type='timestamp', nullable=True)
@@ -1203,7 +1293,8 @@ class Component(ComponentBase):
         logging.warning('Processed data type {} does not match any KBC base types'.format(column_type))
 
     def create_manifests(self, entry: dict, data_path: str, columns: list = None, column_metadata: dict = None,
-                         set_incremental: bool = True, output_bucket: str = None, extension='.csv'):
+                         set_incremental: bool = True, output_bucket: str = None, extension='.csv',
+                         primary_keys: list = None):
         """Write manifest files for the results produced by the results writer.
 
         :param entry: Dict entry from catalog
@@ -1216,12 +1307,7 @@ class Component(ComponentBase):
         :param output_bucket: The name of the output bucket to be written to Storage
         :return:
         """
-        if bool(self.params.get(KEY_APPEND_MODE, False)) is True:
-            primary_keys = None
-        elif entry.get('primary_keys'):
-            primary_keys = [key.upper() for key in entry.get('primary_keys')]
-        else:
-            primary_keys = None
+
         table_name = entry.get('result_table_name').upper()
         result_full_path = os.path.join(data_path, table_name + extension)
 

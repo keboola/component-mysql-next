@@ -18,3 +18,4 @@ sshtunnel==0.4.0
 sqlparse
 pyhocon
 dataconf
+snowflake-connector-python
