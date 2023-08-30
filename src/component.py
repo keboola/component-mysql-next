@@ -873,6 +873,8 @@ class Component(ComponentBase):
         else:
             primary_keys = None
 
+        # TODO: for backward compatibility, make configurable
+        entry_table_name = entry_table_name.upper()
         self._create_table_in_stage(entry_table_name, table_specific_sliced_path,
                                     primary_keys, table_column_metadata, output_is_sliced)
 
@@ -1312,7 +1314,7 @@ class Component(ComponentBase):
         """
 
         table_name = entry.get('result_table_name').upper()
-        result_full_path = os.path.join(data_path, table_name + extension)
+        result_full_path = os.path.join(data_path, table_name)
 
         # for r in results:
         if not columns:

@@ -637,7 +637,8 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                 cur = self._ctl_connection.cursor()
                 query = cur.mogrify("""SELECT
                         COLUMN_NAME, COLLATION_NAME, CHARACTER_SET_NAME,
-                        COLUMN_COMMENT, COLUMN_TYPE, COLUMN_KEY, ORDINAL_POSITION, defaults.DEFAULT_COLLATION_NAME,
+                        COLUMN_COMMENT, COLUMN_TYPE, COLUMN_KEY, ORDINAL_POSITION, DATA_TYPE,
+                        defaults.DEFAULT_COLLATION_NAME,
                         defaults.DEFAULT_CHARSET
                     FROM
                         information_schema.columns col
@@ -667,6 +668,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
         # convert to upper case
         for c in column_schema:
             c['COLUMN_NAME'] = c['COLUMN_NAME'].upper()
+            # backward compatibility after update to mysql-replication==0.43.0
+            if not c.get('DATA_TYPE'):
+                c['DATA_TYPE'] = c['COLUMN_TYPE']
 
         return column_schema
 
