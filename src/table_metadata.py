@@ -37,7 +37,4 @@ def column_metadata_to_schema(col_name: str, column_metadata: List[dict]):
         if md['key'] == 'KBC.datatype.basetype':
             schema.base_type = md['value']
 
-        if md['key'] == 'KBC.datatype.length':
-            schema.length = md['value']
-
     return schema
