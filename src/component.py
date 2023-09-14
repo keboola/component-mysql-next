@@ -674,8 +674,11 @@ class Component(ComponentBase):
             if not isinstance(connection_context, nullcontext):
                 connection_context.start()
             yield mysql_client
+        except Exception as e:
+            raise UserException(f"Failed to create connection, please check you have properly set the private key "
+                                f"and updated your server's ssh_keys. {e}") from e
         finally:
-            if not isinstance(connection_context, nullcontext):
+            if not isinstance(connection_context, nullcontext) and connection_context.is_alive:
                 connection_context.close()
 
     def run(self):
