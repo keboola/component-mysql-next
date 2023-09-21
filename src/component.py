@@ -58,7 +58,7 @@ import mysql.replication.common as common
 import mysql.replication.full_table as full_table
 import mysql.replication.incremental as incremental
 
-from mysql.client import connect_with_backoff, MySQLConnection
+from mysql.client import connect_with_backoff, MySQLConnection, get_execution_time_parameter
 
 # Define mandatory parameter constants, matching Config Schema.
 
@@ -1209,13 +1209,14 @@ class Component(ComponentBase):
         with connect_with_backoff(mysql_conn) as open_conn:
             try:
                 with open_conn.cursor() as cur:
-                    cur.execute('''
+                    exec_time_variable = get_execution_time_parameter(cur)
+                    cur.execute(f'''
                         SELECT VERSION() as version,
                                @@session.wait_timeout as wait_timeout,
                                @@session.innodb_lock_wait_timeout as innodb_lock_wait_timeout,
                                @@session.max_allowed_packet as max_allowed_packet,
                                @@session.interactive_timeout as interactive_timeout,
-                               @@session.max_execution_time as max_execution_time''')
+                               @@session.{exec_time_variable} as max_execution_time''')
                     row = cur.fetchone()
                     logging.info('Server Parameters: ' +
                                  'version: %s, ' +

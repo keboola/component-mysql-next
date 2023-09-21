@@ -28,6 +28,16 @@ def connect_with_backoff(connection):
     return connection
 
 
+def get_execution_time_parameter(cursor: pymysql.connections.Connection.cursor):
+    cursor.execute('SELECT VERSION()')
+    version = cursor.fetchone()[0]
+    is_maria_db = 'MariaDB' in version
+    exec_time_variable = 'max_execution_time'
+    if is_maria_db:
+        exec_time_variable = 'max_statement_time'
+    return exec_time_variable
+
+
 def set_session_parameters(cursor: pymysql.connections.Connection.cursor, max_execution_time: Union[int, bool],
                            wait_timeout: int = 300,
                            net_read_timeout: int = 60, innodb_lock_wait_timeout: int = 300, time_zone: str = '+0:00'
@@ -67,8 +77,9 @@ def set_session_parameters(cursor: pymysql.connections.Connection.cursor, max_ex
         logged_warnings.append('Could not set session.innodb_lock_wait_timeout. Error: ({}) {}'.format(*e.args))
 
     if max_execution_time:
+        exec_time_variable = get_execution_time_parameter(cursor)
         try:
-            cursor.execute('SET @@session.max_execution_time={}'.format(max_execution_time))
+            cursor.execute(f'SET @@session.{exec_time_variable}={max_execution_time}')
             logging.info(f"Setting session parameter max_execution_time to {max_execution_time}")
         except pymysql.err.InternalError as e:
             logged_warnings.append('Could not set session.max_execution_time. Error: ({}) {}'.format(*e.args))
