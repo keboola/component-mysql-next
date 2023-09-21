@@ -137,6 +137,52 @@ class MySQLConnection(pymysql.connections.Connection):
         self.close()
 
 
+def get_schemas(mysql_conn) -> list[str]:
+    with connect_with_backoff(mysql_conn) as open_conn:
+        with open_conn.cursor() as cur:
+            cur.execute("""
+            SELECT schema_name
+            FROM information_schema.schemata
+            WHERE schema_name not in ('information_schema', 'sys', 'performance_schema');
+            """)
+
+            schemas = []
+            for res in cur.fetchall():
+                schemas.append(res[0])
+            return schemas
+
+
+def get_tables(mysql_conn, schemas: list[str] = None) -> list[dict]:
+    if schemas:
+        filter_dbs_clause = ",".join(["'{}'".format(db) for db in schemas])
+        table_schema_clause = "WHERE t.table_schema IN ({})".format(filter_dbs_clause)
+    else:
+        table_schema_clause = """
+        WHERE t.table_schema NOT IN (
+        'information_schema',
+        'performance_schema',
+        'mysql',
+        'sys'
+        )"""
+
+    with connect_with_backoff(mysql_conn) as open_conn:
+        with open_conn.cursor() as cur:
+            cur.execute("""
+            SELECT table_schema,
+                   table_name,
+                   table_type,
+                   table_rows
+            FROM information_schema.tables t
+                {}
+            AND table_type != 'VIEW'
+            """.format(table_schema_clause))
+
+            tables = []
+            for res in cur.fetchall():
+                tables.append({"schema": res[0], "name": res[1]})
+            return tables
+
+
 def make_connection_wrapper(config):
     class ConnectionWrapper(MySQLConnection):
         def __init__(self, *args, **kwargs):

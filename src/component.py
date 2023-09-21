@@ -24,6 +24,7 @@ from keboola.component.base import sync_action
 from keboola.component.sync_actions import ValidationResult, SelectElement
 
 import configuration
+import mysql
 from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, \
     KEY_MYSQL_USER, KEY_INCLUDE_SCHEMA_NAME, \
     KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL, KEY_USE_SSL, KEY_MAX_EXECUTION_TIME, \
@@ -185,21 +186,6 @@ def create_column_metadata(cols):
     return metadata.to_list(mdata)
 
 
-def get_schemas(mysql_conn) -> list[str]:
-    with connect_with_backoff(mysql_conn) as open_conn:
-        with open_conn.cursor() as cur:
-            cur.execute("""
-            SELECT schema_name
-            FROM information_schema.schemata
-            WHERE schema_name not in ('information_schema', 'sys', 'performance_schema');
-            """)
-
-            schemas = []
-            for res in cur.fetchall():
-                schemas.append(res[0])
-            return schemas
-
-
 def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool = True):
     """Returns a Catalog describing the structure of the database."""
     filter_dbs_config = config.get(KEY_DATABASES)
@@ -219,7 +205,6 @@ def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool 
 
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
-            # TODO: allow views as well, or to choose
             cur.execute("""
             SELECT table_schema,
                    table_name,
@@ -1614,7 +1599,7 @@ class Component(ComponentBase):
     def get_schemas(self):
         self._init_connection_params()
         with self.init_mysql_client() as client:
-            schemas = get_schemas(client)
+            schemas = mysql.client.get_schemas(client)
             return [
                 SelectElement(schema) for schema in schemas
             ]
@@ -1627,9 +1612,8 @@ class Component(ComponentBase):
             databases = params.get(KEY_DATABASES) or params.get('source_settings', {}).get('schemas')
             if not databases:
                 raise UserException("Schema must be selected first!")
-            catalog = discover_catalog(client, {KEY_DATABASES: databases}, False, False)
-            streams = [entry for entry in catalog.streams if entry.database in databases]
-            return [SelectElement(f"{stream.database}.{stream.table}") for stream in streams]
+            tables = mysql.client.get_tables(client, databases)
+            return [SelectElement(f"{table['schema']}.{table['name']}") for table in tables]
 
     @sync_action("generate_ssh_key")
     def generate_ssh_key(self):
