@@ -759,7 +759,8 @@ class Component(ComponentBase):
                         for future in as_completed(futures):
                             if future.exception():
                                 raise UserException(
-                                    f"Could not create table: {futures[future]}, reason: {future.exception()}")
+                                    f"Could not create table: {futures[future].get('result_table_name')},"
+                                    f" reason: {future.exception()}") from future.exception()
 
                             future.result()
 
