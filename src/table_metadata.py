@@ -28,7 +28,9 @@ def column_metadata_to_schema(col_name: str, column_metadata: List[dict]):
                 schema.source_type = md['value']
                 size = ()
                 if len(split_parts := md['value'].split('(')) > 1:
-                    size = ast.literal_eval(f'({split_parts[1]}')
+                    # remove anything after ) e.g. int(12) unsigned)
+                    size_str = split_parts[1].split(')')[0]
+                    size = ast.literal_eval(f'({size_str})')
 
                 if size and isinstance(size, tuple):
                     schema.length = size[0]
