@@ -869,6 +869,7 @@ class Component(ComponentBase):
         ordered_columns = tables_and_columns_order.get(entry_table_name)
         result_table_name = entry_table_name.upper()
         if output_is_sliced:
+            logging.info("Ordering columns for sliced upload.")
             # order metadata
             table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
         self._create_table_in_stage(result_table_name, table_specific_sliced_path,

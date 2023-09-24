@@ -330,6 +330,8 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                         headers.append(i[0])
                     for column in KBC_METADATA_COLS:
                         headers.append(column)
+                    # TODO: remove
+                    logging.info(f'Headers of table {catalog_entry.table_name} = {headers}')
 
                     table_and_headers[catalog_entry.table_name] = headers
 
