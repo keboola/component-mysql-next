@@ -331,6 +331,8 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                     for column in KBC_METADATA_COLS:
                         headers.append(column)
 
+                    logging.debug(f'Headers of table {catalog_entry.table_name} = {headers}')
+
                     table_and_headers[catalog_entry.table_name] = headers
 
                     # Write to CSV of specific structure: table, headers (no header is written to this CSV)

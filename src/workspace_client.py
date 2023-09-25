@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 
@@ -34,6 +35,7 @@ class SnowflakeClient:
         executes the query
         """
         cur = self._connection.cursor(snowflake.connector.DictCursor)
+        logging.debug(query)
         results = cur.execute(query).fetchall()
         return results
 
