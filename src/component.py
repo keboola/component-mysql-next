@@ -915,11 +915,12 @@ class Component(ComponentBase):
         if is_full_sync:
             # chunks if fullsync
             tables = glob.glob(os.path.join(table_path, '*.csv'))
-            for table in tables:
-                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table)
-        else:
             file_format = self._snowflake_client.DEFAULT_FILE_FORMAT.copy()
             file_format['SKIP_HEADER'] = 0
+            for table in tables:
+                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table,
+                                                                     file_format=file_format)
+        else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
 
             self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
