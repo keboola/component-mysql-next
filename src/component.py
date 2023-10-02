@@ -965,6 +965,22 @@ class Component(KBCEnvHandler):
 
         return table_columns_metadata
 
+    def _get_size_and_precision(self, datatype: str):
+        length = None
+        precision = None
+        size = ()
+        if len(split_parts := datatype.split('(')) > 1:
+            # remove anything after ) e.g. int(12) unsigned)
+            size_str = split_parts[1].split(')')[0]
+            size = ast.literal_eval(f'({size_str})')
+
+        if size and isinstance(size, tuple):
+            length = size[0]
+            precision = size[1]
+        elif size:
+            length = size
+        return length, precision
+
     def generate_column_metadata(self, data_type: str = None, nullable: bool = None):
         """Return metadata for given column"""
         column_metadata = []
@@ -972,6 +988,7 @@ class Component(KBCEnvHandler):
 
         # Append metadata per input parameter, if present
         if data_type:
+            length, precision = self._get_size_and_precision(data_type)
             type_metadata = {}
             type_key, type_value = 'KBC.datatype.type', data_type if 'binary' not in data_type.lower() \
                 else data_type.lower().replace('binary', 'varchar')
@@ -986,12 +1003,16 @@ class Component(KBCEnvHandler):
             column_metadata.append(base_type_metadata)
 
             # Add length data type if String, just using max for now
-            if base_data_type == 'STRING':
+            if base_data_type in ['STRING', 'NUMERIC', 'FLOAT']:
                 string_length_metadata = {}
-                length_type_key, length_type_value = 'KBC.datatype.length', 16777216
-                string_length_metadata['key'] = length_type_key
-                string_length_metadata['value'] = length_type_value
-                column_metadata.append(string_length_metadata)
+                if length:
+                    length_type_key = 'KBC.datatype.length'
+                    if precision:
+                        length = f'{length},{precision}'
+
+                    string_length_metadata['key'] = length_type_key
+                    string_length_metadata['value'] = length
+                    column_metadata.append(string_length_metadata)
 
         if nullable:
             nullable_metadata = {}
