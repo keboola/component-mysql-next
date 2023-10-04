@@ -973,7 +973,7 @@ class Component(ComponentBase):
             length_clause = ''
             if c.length and c.base_type.upper() in ['NUMERIC', 'STRING']:
                 # Postgres return full integer value if no length is specified
-                if c.base_type.upper() == 'STRING' and c.length > 16777216:
+                if c.base_type.upper() == 'STRING' and int(c.length) > 16777216:
                     c.length = 16777216
 
                 length_clause += str(c.length)
