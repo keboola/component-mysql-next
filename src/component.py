@@ -990,8 +990,7 @@ class Component(KBCEnvHandler):
         if data_type:
             length, precision = self._get_size_and_precision(data_type)
             type_metadata = {}
-            type_key, type_value = 'KBC.datatype.type', data_type if 'binary' not in data_type.lower() \
-                else data_type.lower().replace('binary', 'varchar')
+            type_key, type_value = 'KBC.datatype.type', data_type
             type_metadata['key'] = type_key
             type_metadata['value'] = type_value
             column_metadata.append(type_metadata)
@@ -1003,13 +1002,23 @@ class Component(KBCEnvHandler):
             column_metadata.append(base_type_metadata)
 
             # Add length data type if String, just using max for now
-            if base_data_type in ['STRING', 'NUMERIC', 'FLOAT']:
+            length_type_key = 'KBC.datatype.length'
+            if length:
+                if precision:
+                    length = f'{length},{precision}'
+            if base_data_type in ['NUMERIC', 'FLOAT']:
                 string_length_metadata = {}
-                if length:
-                    length_type_key = 'KBC.datatype.length'
-                    if precision:
-                        length = f'{length},{precision}'
 
+                if length:
+                    string_length_metadata['key'] = length_type_key
+                    string_length_metadata['value'] = length
+                    column_metadata.append(string_length_metadata)
+            elif base_data_type in ['STRING']:
+                string_length_metadata = {}
+                if 'binary' in data_type.lower():
+                    # store binary as TEXT size
+                    length = 16777216
+                if length:
                     string_length_metadata['key'] = length_type_key
                     string_length_metadata['value'] = length
                     column_metadata.append(string_length_metadata)
