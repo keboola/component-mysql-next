@@ -38,6 +38,8 @@ from typing import List
 
 from cryptography.utils import CryptographyDeprecationWarning
 
+import table_metadata
+
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
     import paramiko
@@ -151,6 +153,8 @@ BYTES_FOR_INTEGER_TYPE = {
     'bigint': 8
 }
 BINARY_TYPES = {'binary', 'varbinary'}
+
+TYPES_SUPPORTING_LENGTH = ['CHAR', 'VARCHAR', 'TEXT', 'FLOAT', 'DECIMAL', 'DEC', 'DOUBLE', 'DOUBLE PRECISION']
 
 Column = namedtuple('Column', [
     "table_schema",
@@ -1002,26 +1006,27 @@ class Component(KBCEnvHandler):
             column_metadata.append(base_type_metadata)
 
             # Add length data type if String, just using max for now
-            length_type_key = 'KBC.datatype.length'
-            if length:
-                if precision:
-                    length = f'{length},{precision}'
-            if base_data_type in ['NUMERIC', 'FLOAT']:
-                string_length_metadata = {}
+            if table_metadata.is_type_with_length(data_type, TYPES_SUPPORTING_LENGTH):
+                length_type_key = 'KBC.datatype.length'
+                if length:
+                    if precision:
+                        length = f'{length},{precision}'
+                if base_data_type in ['NUMERIC', 'FLOAT']:
+                    string_length_metadata = {}
 
-                if length:
-                    string_length_metadata['key'] = length_type_key
-                    string_length_metadata['value'] = length
-                    column_metadata.append(string_length_metadata)
-            elif base_data_type in ['STRING']:
-                string_length_metadata = {}
-                if 'binary' in data_type.lower():
-                    # store binary as TEXT size
-                    length = 16777216
-                if length:
-                    string_length_metadata['key'] = length_type_key
-                    string_length_metadata['value'] = length
-                    column_metadata.append(string_length_metadata)
+                    if length:
+                        string_length_metadata['key'] = length_type_key
+                        string_length_metadata['value'] = length
+                        column_metadata.append(string_length_metadata)
+                elif base_data_type in ['STRING']:
+                    string_length_metadata = {}
+                    if 'binary' in data_type.lower():
+                        # store binary as TEXT size
+                        length = 16777216
+                    if length:
+                        string_length_metadata['key'] = length_type_key
+                        string_length_metadata['value'] = length
+                        column_metadata.append(string_length_metadata)
 
         if nullable:
             nullable_metadata = {}
