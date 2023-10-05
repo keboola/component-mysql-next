@@ -26,6 +26,7 @@ from keboola.component.sync_actions import ValidationResult, SelectElement
 
 import configuration
 import mysql
+import table_metadata
 from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY_MYSQL_HOST, KEY_MYSQL_PORT, \
     KEY_MYSQL_USER, KEY_INCLUDE_SCHEMA_NAME, \
     KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL, KEY_USE_SSL, KEY_MAX_EXECUTION_TIME, \
@@ -88,6 +89,8 @@ BYTES_FOR_INTEGER_TYPE = {
     'bigint': 8
 }
 BINARY_TYPES = {'binary', 'varbinary'}
+
+TYPES_SUPPORTING_LENGTH = ['CHAR', 'VARCHAR', 'TEXT', 'FLOAT', 'DECIMAL', 'DEC', 'DOUBLE', 'DOUBLE PRECISION']
 
 Column = namedtuple('Column', [
     "table_schema",
@@ -968,7 +971,7 @@ class Component(ComponentBase):
         column_types = []
 
         for name, md in column_metadata.items():
-            c = column_metadata_to_schema(name, md)
+            c = column_metadata_to_schema(name, md, TYPES_SUPPORTING_LENGTH)
             dtype = c.base_type
             # Only NUMERIC types can have length
             length_clause = ''
@@ -1307,26 +1310,27 @@ class Component(ComponentBase):
             column_metadata.append(base_type_metadata)
 
             # Add length data type if String, just using max for now
-            length_type_key = 'KBC.datatype.length'
-            if length:
-                if precision:
-                    length = f'{length},{precision}'
-            if base_data_type in ['NUMERIC', 'FLOAT']:
-                string_length_metadata = {}
+            if table_metadata.is_type_with_length(data_type, TYPES_SUPPORTING_LENGTH):
+                length_type_key = 'KBC.datatype.length'
+                if length:
+                    if precision:
+                        length = f'{length},{precision}'
+                if base_data_type in ['NUMERIC', 'FLOAT']:
+                    string_length_metadata = {}
 
-                if length:
-                    string_length_metadata['key'] = length_type_key
-                    string_length_metadata['value'] = length
-                    column_metadata.append(string_length_metadata)
-            elif base_data_type in ['STRING']:
-                string_length_metadata = {}
-                if 'binary' in data_type.lower():
-                    # store binary as TEXT size
-                    length = 16777216
-                if length:
-                    string_length_metadata['key'] = length_type_key
-                    string_length_metadata['value'] = length
-                    column_metadata.append(string_length_metadata)
+                    if length:
+                        string_length_metadata['key'] = length_type_key
+                        string_length_metadata['value'] = length
+                        column_metadata.append(string_length_metadata)
+                elif base_data_type in ['STRING']:
+                    string_length_metadata = {}
+                    if 'binary' in data_type.lower():
+                        # store binary as TEXT size
+                        length = 16777216
+                    if length:
+                        string_length_metadata['key'] = length_type_key
+                        string_length_metadata['value'] = length
+                        column_metadata.append(string_length_metadata)
 
         if nullable:
             nullable_metadata = {}

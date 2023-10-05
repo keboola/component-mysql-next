@@ -19,24 +19,32 @@ class ColumnSchema:
     default: Optional[str] = None
 
 
-def column_metadata_to_schema(col_name: str, column_metadata: List[dict]):
-    schema = ColumnSchema(col_name)
+def is_type_with_length(source_type: str, types_with_length: list[str]):
+    for t in types_with_length:
+        if source_type.upper() in t.upper():
+            return True
+    return False
 
+
+def column_metadata_to_schema(col_name: str, column_metadata: List[dict], types_with_length: list[str]):
+    schema = ColumnSchema(col_name)
     for md in column_metadata:
         try:
             if md['key'] == 'KBC.datatype.type':
                 schema.source_type = md['value']
-                size = ()
-                if len(split_parts := md['value'].split('(')) > 1:
-                    # remove anything after ) e.g. int(12) unsigned)
-                    size_str = split_parts[1].split(')')[0]
-                    size = ast.literal_eval(f'({size_str})')
 
-                if size and isinstance(size, tuple):
-                    schema.length = size[0]
-                    schema.precision = size[1]
-                elif size:
-                    schema.length = size
+                if is_type_with_length(md['value'], types_with_length):
+                    size = ()
+                    if len(split_parts := md['value'].split('(')) > 1:
+                        # remove anything after ) e.g. int(12) unsigned)
+                        size_str = split_parts[1].split(')')[0]
+                        size = ast.literal_eval(f'({size_str})')
+
+                    if size and isinstance(size, tuple):
+                        schema.length = size[0]
+                        schema.precision = size[1]
+                    elif size:
+                        schema.length = size
 
             if md['key'] == 'KBC.datatype.basetype':
                 schema.base_type = md['value']
