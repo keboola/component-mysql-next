@@ -18,7 +18,7 @@ class Credentials:
 
 
 class SnowflakeClient:
-    DEFAULT_FILE_FORMAT = dict(TYPE="CSV", FIELD_DELIMITER="','", SKIP_HEADER=1, FIELD_OPTIONALLY_ENCLOSED_BY="'""\"'",
+    DEFAULT_FILE_FORMAT = dict(TYPE="CSV", FIELD_DELIMITER="','", SKIP_HEADER=1, FIELD_OPTIONALLY_ENCLOSED_BY="'\"'",
                                ERROR_ON_COLUMN_COUNT_MISMATCH=False, COMPRESSION="GZIP", NULL_IF="('KBC__NULL')",
                                ESCAPE_UNENCLOSED_FIELD="NONE")
 
