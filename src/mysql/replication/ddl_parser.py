@@ -123,7 +123,8 @@ class AlterStatementParser:
                 tokens.extend(t.flatten())
             elif isinstance(t, Parenthesis):
                 tokens.extend(self._split_parenthesis(statement, t, idx))
-            elif isinstance(t, Identifier) and len(t.tokens) > 1:
+            # exclude schema.table id
+            elif isinstance(t, Identifier) and len(t.tokens) > 1 and t.tokens[1].normalized != '.':
                 tokens.extend(t.tokens)
             else:
                 tokens.append(t)
@@ -150,8 +151,8 @@ class AlterStatementParser:
 
     @staticmethod
     def _normalize_token_name(token: Token):
-        value = token.normalized or ''
-        if token.ttype == Name and value.startswith('`') and value.endswith('`'):
+        value = token.normalized if token else ''
+        if value and token.ttype == Name and value.startswith('`') and value.endswith('`'):
             value = value[1:][:-1]
 
         return value
