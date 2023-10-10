@@ -880,7 +880,7 @@ class Component(ComponentBase):
         if tables_and_columns_order.get(entry_table_name):
             ordered_columns = tables_and_columns_order.get(entry_table_name)
         else:
-            ordered_columns = self.get_header_from_file(table_specific_sliced_path)
+            ordered_columns = fields
         result_table_name = entry_table_name.upper()
         logging.info("Ordering columns for sliced upload.")
         # order metadata
@@ -902,7 +902,7 @@ class Component(ComponentBase):
     def _order_metadata(self, column_metadata: dict, column_order: list):
         """
         This orders metadata based on column order.
-        Relevant for full sync. Spaghetti code patch.
+        Relevant for full sync and when schema changes. Spaghetti code patch.
         Args:
             column_metadata:
             column_order:
@@ -910,7 +910,17 @@ class Component(ComponentBase):
         Returns:
 
         """
-        ordered_metadata = {col: column_metadata[col[1:] if col.startswith('_') else col] for col in column_order}
+        default_metadata = [
+            # {'key': 'KBC.datatype.basetype', 'value': 'STRING'},
+            {'key': 'KBC.datatype.nullable', 'value': True}]
+        ordered_metadata = dict()
+        for col in column_order:
+            col_name = col[1:] if col.startswith('_') else col
+            if col_name in column_metadata:
+                ordered_metadata[col] = column_metadata[col_name]
+            else:
+                # column was deleted, putting default type
+                ordered_metadata[col] = default_metadata
 
         return ordered_metadata
 
