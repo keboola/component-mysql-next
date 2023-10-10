@@ -446,6 +446,38 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([], table_changes)
 
+    def test_quoted_col_names(self):
+        drop = """alter table `orders` add column `delivery_window_till` datetime null after `time`, add column `delivery_window_since` datetime null after `time`, add column `timeslot_type` varchar(20) null after `time`, ALGORITHM = INSTANT, LOCK = DEFAULT"""
+        query_res = 'alter table `orders` add column `delivery_window_till` datetime null after `time`,        add column `delivery_window_since` datetime null after `time`,        add column `timeslot_type` varchar(20) null after `time`,        ALGORITHM = INSTANT,        LOCK = DEFAULT'
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    first_position=False,
+                                    table_name='orders',
+                                    schema='',
+                                    column_name='delivery_window_till',
+                                    after_column='time',
+                                    data_type='DATETIME',
+                                    query=query_res)
+        change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    first_position=False,
+                                    table_name='orders',
+                                    schema='',
+                                    column_name='delivery_window_since',
+                                    after_column='time',
+                                    data_type='DATETIME',
+                                    query=query_res)
+        change3 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    first_position=False,
+                                    table_name='orders',
+                                    schema='',
+                                    column_name='timeslot_type',
+                                    after_column='time',
+                                    data_type='VARCHAR(20)',
+                                    query=query_res)
+
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([change1, change2, change3], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
