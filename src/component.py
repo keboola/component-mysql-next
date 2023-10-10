@@ -780,6 +780,13 @@ class Component(ComponentBase):
 
         logging.info('Process execution completed')
 
+    def get_header_from_file(self, file_path: str):
+        with open(file_path) as input:
+            delimiter = ','
+            enclosure = '"'
+            reader = csv.DictReader(input, lineterminator='\n', delimiter=delimiter, quotechar=enclosure)
+            return reader.fieldnames
+
     def _write_result_table(self, entry: dict, message_store, tables_and_columns_order: dict):
         entry_table_name = entry.get('result_table_name')
         table_metadata = entry['metadata'][0]['metadata']
@@ -870,12 +877,14 @@ class Component(ComponentBase):
             primary_keys = None
 
         # TODO: for backward compatibility, make configurable
-        ordered_columns = tables_and_columns_order.get(entry_table_name)
+        if tables_and_columns_order.get(entry_table_name):
+            ordered_columns = tables_and_columns_order.get(entry_table_name)
+        else:
+            ordered_columns = fields
         result_table_name = entry_table_name.upper()
-        if output_is_sliced:
-            logging.info("Ordering columns for sliced upload.")
-            # order metadata
-            table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
+        logging.info("Ordering columns for sliced upload.")
+        # order metadata
+        table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
         self._create_table_in_stage(result_table_name, table_specific_sliced_path,
                                     primary_keys, table_column_metadata, output_is_sliced)
 
@@ -893,7 +902,7 @@ class Component(ComponentBase):
     def _order_metadata(self, column_metadata: dict, column_order: list):
         """
         This orders metadata based on column order.
-        Relevant for full sync. Spaghetti code patch.
+        Relevant for full sync and when schema changes. Spaghetti code patch.
         Args:
             column_metadata:
             column_order:
@@ -901,7 +910,17 @@ class Component(ComponentBase):
         Returns:
 
         """
-        ordered_metadata = {col: column_metadata[col] for col in column_order}
+        default_metadata = [
+            # {'key': 'KBC.datatype.basetype', 'value': 'STRING'},
+            {'key': 'KBC.datatype.nullable', 'value': True}]
+        ordered_metadata = dict()
+        for col in column_order:
+            col_name = col[1:] if col.startswith('_') else col
+            if col_name in column_metadata:
+                ordered_metadata[col] = column_metadata[col_name]
+            else:
+                # column was deleted, putting default type
+                ordered_metadata[col] = default_metadata
 
         return ordered_metadata
 

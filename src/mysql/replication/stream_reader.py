@@ -214,7 +214,7 @@ class TableColumnSchemaCache:
 
         self.table_schema_cache[index] = new_schema
 
-    def __add_column_at_position(self, original_schema, added_column, after_col):
+    def __add_column_at_position(self, original_schema, added_column, after_col, table_name):
         new_schema = []
         # add column if not exists
         update_ordinal_position = False
@@ -244,7 +244,7 @@ class TableColumnSchemaCache:
                 new_schema.append(col)
 
         if not update_ordinal_position:
-            raise SchemaOffsyncError(f'Dropped column: "{added_column["COLUMN_NAME"]}" '
+            raise SchemaOffsyncError(f'Dropped column: "{added_column["COLUMN_NAME"]}" in table {table_name}'
                                      f'is already missing in the provided starting schema => may lead to value shift!')
         return new_schema
 
@@ -278,7 +278,7 @@ class TableColumnSchemaCache:
 
         # exit
         if not new_schema:
-            new_schema = self.__add_column_at_position(column_schema, added_column, after_col)
+            new_schema = self.__add_column_at_position(column_schema, added_column, after_col, add_change.table_name)
 
         if not column_schema:
             # should not happen
