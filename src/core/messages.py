@@ -344,7 +344,7 @@ class MessageStore(dict):
             manifest = {'primary_key': ['column_name', 'query', 'timestamp'],
                         'incremental': True,
                         'destination': _schema_changes_destination}
-            with open(path + '.manifest', 'w') as manifest_file:
+            with open(path.replace('.csv', '') + '.manifest', 'w') as manifest_file:
                 json.dump(manifest, manifest_file)
 
         self._schema_change_writer.writerow(message)
