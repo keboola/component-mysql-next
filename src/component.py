@@ -768,6 +768,14 @@ class Component(ComponentBase):
 
                             future.result()
 
+                    # write schema changes if present.
+                    chc_path = os.path.join(self.tables_out_path, 'SCHEMA_CHANGES.csv')
+                    if os.path.exists(chc_path):
+                        self._create_table_in_stage('SCHEMA_CHANGES', chc_path,
+                                                    primary_key_columns=['column_name', 'query', 'timestamp'],
+                                                    table_column_metadata=self.get_schema_changes_metadata(),
+                                                    is_full_sync=False,
+                                                    dedupe=False)
                 self.write_state_file(message_store.get_state())
 
                 # QA: Walk through output destination
@@ -926,7 +934,7 @@ class Component(ComponentBase):
 
     def _create_table_in_stage(self, result_table_name: str, table_path: str, primary_key_columns: list[str],
                                table_column_metadata: dict,
-                               is_full_sync: bool):
+                               is_full_sync: bool, dedupe: bool = True):
 
         column_types = self._convert_to_snowflake_column_definitions(table_column_metadata)
         columns = list(table_column_metadata.keys())
@@ -945,8 +953,8 @@ class Component(ComponentBase):
                                                                      file_format=file_format)
         else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
-
-            self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
+            if dedupe:
+                self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
 
     def _dedupe_stage_table(self, table_name: str, id_columns: list[str]):
         """
@@ -1680,6 +1688,15 @@ class Component(ComponentBase):
                      f"**Public Key**  (*Add this to your servers `ssh_keys`*): \n\n```\n{public_key}\n```"
 
         return ValidationResult(message=md_message)
+
+    def get_schema_changes_metadata(self):
+        schema_changes_cols = ['schema', 'table', 'change_type', 'column_name', 'query', 'timestamp']
+        chc_metadata = {}
+        for col in schema_changes_cols:
+            dtype = 'STRING' if col != 'timestamp' else 'TIMESTAMP'
+            chc_metadata[col] = [{'key': 'KBC.datatype.basetype', 'value': dtype},
+                                 {'key': 'KBC.datatype.nullable', 'value': True}]
+        return chc_metadata
 
 
 if __name__ == "__main__":

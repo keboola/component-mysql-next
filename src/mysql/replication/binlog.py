@@ -607,5 +607,5 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
         # BinLogStreamReader doesn't implement the `with` methods
         # So, try/finally will close the chain from the top
         reader.close()
-
+    message_store.close_schema_change_writer()
     core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
