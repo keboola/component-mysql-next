@@ -250,6 +250,16 @@ def handle_binary_data(row: dict, binary_columns: list, binary_data_handler, rep
     return row
 
 
+def handle_boolean_data(row: dict, schema: dict):
+    new_row = dict()
+    for name, value in row.items():
+        new_value = value
+        if schema.get(name) and schema[name].type[1] == 'boolean' and isinstance(value, bytes):
+            new_value = value != b'\x00'
+        new_row[name] = new_value
+    return new_row
+
+
 class MessageStore(dict):
     """Storage for log-based messages"""
 

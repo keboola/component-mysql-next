@@ -17,7 +17,7 @@ import core as core
 import core.metrics as metrics
 from core import metadata
 from core import utils
-from core.messages import handle_binary_data
+from core.messages import handle_binary_data, handle_boolean_data
 
 TABLE_HEADERS_PATH = os.path.join(tempfile.gettempdir(), 'table_headers.csv')
 
@@ -357,8 +357,11 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                     for row in rows:
                         rows_with_metadata = row + KBC_METADATA
                         rows_dict = dict(zip(headers, rows_with_metadata))
+
                         rows_to_write = handle_binary_data(rows_dict, catalog_entry.binary_columns,
                                                            message_store.binary_data_handler, True)
+                        rows_to_write = handle_boolean_data(rows_to_write, catalog_entry.full_schema.properties)
+
                         writer.writerow(rows_to_write)
 
                 chunk_end = utils.now()

@@ -1,7 +1,7 @@
 """
 Keboola base data types for manifest files.
 """
-BASE_STRING = {'string', 'char', 'enum', 'longtext', 'mediumtext', 'text', 'year',
+BASE_STRING = {'string', 'char', 'enum', 'longtext', 'mediumtext', 'tinytext', 'text', 'year',
                'varchar', 'set', 'json', 'binary', 'varbinary', 'blob', "tinyblob", "blob", "mediumblob", "longblob",
                "time"}
 BASE_INTEGER = {'integer', 'tinyint', 'smallint', 'mediumint', 'int', 'bigint'}
