@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 
 import sqlparse
 from sqlparse.sql import Identifier, Statement, Token, IdentifierList, TokenList, Parenthesis
-from sqlparse.tokens import Whitespace
+from sqlparse.tokens import Whitespace, Name
 
 TABLE_NAME_INDEX = 4
 
@@ -123,6 +123,9 @@ class AlterStatementParser:
                 tokens.extend(t.flatten())
             elif isinstance(t, Parenthesis):
                 tokens.extend(self._split_parenthesis(statement, t, idx))
+            # exclude schema.table id
+            elif isinstance(t, Identifier) and len(t.tokens) > 1 and t.tokens[1].normalized != '.':
+                tokens.extend(t.tokens)
             else:
                 tokens.append(t)
         return TokenList(tokens)
@@ -146,9 +149,18 @@ class AlterStatementParser:
             schema = split[0]
         return self._normalize_identifier(schema), self._normalize_identifier(table_name)
 
+    @staticmethod
+    def _normalize_token_name(token: Token):
+        value = token.normalized if token else ''
+        if value and token.ttype == Name and value.startswith('`') and value.endswith('`'):
+            value = value[1:][:-1]
+
+        return value
+
     def _get_element_next_to_position(self, statement: TokenList, position):
         index, value = statement.token_next(position, skip_cm=True)
-        next_value = value.normalized if value else ''
+        next_value = self._normalize_token_name(value)
+
         return index, next_value
 
     def _process_drop_event(self, table_name, schema,

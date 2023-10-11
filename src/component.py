@@ -768,6 +768,14 @@ class Component(ComponentBase):
 
                             future.result()
 
+                    # write schema changes if present.
+                    chc_path = os.path.join(self.tables_out_path, 'SCHEMA_CHANGES.csv')
+                    if os.path.exists(chc_path):
+                        self._create_table_in_stage('SCHEMA_CHANGES', chc_path,
+                                                    primary_key_columns=['column_name', 'query', 'timestamp'],
+                                                    table_column_metadata=self.get_schema_changes_metadata(),
+                                                    is_full_sync=False,
+                                                    dedupe=False)
                 self.write_state_file(message_store.get_state())
 
                 # QA: Walk through output destination
@@ -779,6 +787,13 @@ class Component(ComponentBase):
                     'specify a table mappings file manually or via the File Input Mappings configuration.')
 
         logging.info('Process execution completed')
+
+    def get_header_from_file(self, file_path: str):
+        with open(file_path) as input:
+            delimiter = ','
+            enclosure = '"'
+            reader = csv.DictReader(input, lineterminator='\n', delimiter=delimiter, quotechar=enclosure)
+            return reader.fieldnames
 
     def _write_result_table(self, entry: dict, message_store, tables_and_columns_order: dict):
         entry_table_name = entry.get('result_table_name')
@@ -870,12 +885,14 @@ class Component(ComponentBase):
             primary_keys = None
 
         # TODO: for backward compatibility, make configurable
-        ordered_columns = tables_and_columns_order.get(entry_table_name)
+        if tables_and_columns_order.get(entry_table_name):
+            ordered_columns = tables_and_columns_order.get(entry_table_name)
+        else:
+            ordered_columns = fields
         result_table_name = entry_table_name.upper()
-        if output_is_sliced:
-            logging.info("Ordering columns for sliced upload.")
-            # order metadata
-            table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
+        logging.info("Ordering columns for sliced upload.")
+        # order metadata
+        table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
         self._create_table_in_stage(result_table_name, table_specific_sliced_path,
                                     primary_keys, table_column_metadata, output_is_sliced)
 
@@ -893,7 +910,7 @@ class Component(ComponentBase):
     def _order_metadata(self, column_metadata: dict, column_order: list):
         """
         This orders metadata based on column order.
-        Relevant for full sync. Spaghetti code patch.
+        Relevant for full sync and when schema changes. Spaghetti code patch.
         Args:
             column_metadata:
             column_order:
@@ -901,13 +918,23 @@ class Component(ComponentBase):
         Returns:
 
         """
-        ordered_metadata = {col: column_metadata[col] for col in column_order}
+        default_metadata = [
+            # {'key': 'KBC.datatype.basetype', 'value': 'STRING'},
+            {'key': 'KBC.datatype.nullable', 'value': True}]
+        ordered_metadata = dict()
+        for col in column_order:
+            col_name = col[1:] if col.startswith('_') else col
+            if col_name in column_metadata:
+                ordered_metadata[col] = column_metadata[col_name]
+            else:
+                # column was deleted, putting default type
+                ordered_metadata[col] = default_metadata
 
         return ordered_metadata
 
     def _create_table_in_stage(self, result_table_name: str, table_path: str, primary_key_columns: list[str],
                                table_column_metadata: dict,
-                               is_full_sync: bool):
+                               is_full_sync: bool, dedupe: bool = True):
 
         column_types = self._convert_to_snowflake_column_definitions(table_column_metadata)
         columns = list(table_column_metadata.keys())
@@ -926,8 +953,8 @@ class Component(ComponentBase):
                                                                      file_format=file_format)
         else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
-
-            self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
+            if dedupe:
+                self._dedupe_stage_table(table_name=result_table_name, id_columns=primary_key_columns)
 
     def _dedupe_stage_table(self, table_name: str, id_columns: list[str]):
         """
@@ -1661,6 +1688,15 @@ class Component(ComponentBase):
                      f"**Public Key**  (*Add this to your servers `ssh_keys`*): \n\n```\n{public_key}\n```"
 
         return ValidationResult(message=md_message)
+
+    def get_schema_changes_metadata(self):
+        schema_changes_cols = ['schema', 'table', 'change_type', 'column_name', 'query', 'timestamp']
+        chc_metadata = {}
+        for col in schema_changes_cols:
+            dtype = 'STRING' if col != 'timestamp' else 'TIMESTAMP'
+            chc_metadata[col] = [{'key': 'KBC.datatype.basetype', 'value': dtype},
+                                 {'key': 'KBC.datatype.nullable', 'value': True}]
+        return chc_metadata
 
 
 if __name__ == "__main__":

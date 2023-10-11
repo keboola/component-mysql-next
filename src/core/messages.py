@@ -3,6 +3,7 @@ import csv
 import logging
 import os
 from dataclasses import dataclass
+from io import BufferedReader
 from typing import Dict, List, TextIO
 
 import ciso8601
@@ -274,7 +275,7 @@ class MessageStore(dict):
 
         # cache of dict writers
         self._writer_cache: Dict[str, WriterCacheRecord] = {}
-        self._schema_change_writer = None
+        self._schema_change_writer: tuple[BufferedReader, csv.DictWriter] = None
 
         self._data_store = {}
         self._found_schemas = []
@@ -343,21 +344,26 @@ class MessageStore(dict):
                 columns.append(c)
         return columns
 
+    def close_schema_change_writer(self):
+        if self._schema_change_writer:
+            self._schema_change_writer[0].close()
+
     def write_schema_change_message(self, message: dict):
         if self._schema_change_writer is None:
             path = os.path.join(self.output_table_path, 'SCHEMA_CHANGES.csv')
-            writer = csv.DictWriter(open(path, 'w+', newline=''), fieldnames=SCHEMA_CHANGE_COLS)
-            self._schema_change_writer = writer
-            self._schema_change_writer.writeheader()
+            fout = open(path, 'w+', newline='')
+            writer = csv.DictWriter(fout, fieldnames=SCHEMA_CHANGE_COLS)
+            self._schema_change_writer = [fout, writer]
+            self._schema_change_writer[1].writeheader()
             # create manifest
             _schema_changes_destination = f'{self.output_bucket}_metadata.SCHEMA_CHANGES'
             manifest = {'primary_key': ['column_name', 'query', 'timestamp'],
                         'incremental': True,
                         'destination': _schema_changes_destination}
-            with open(path + '.manifest', 'w') as manifest_file:
+            with open(path.replace('.csv', '') + '.manifest', 'w') as manifest_file:
                 json.dump(manifest, manifest_file)
 
-        self._schema_change_writer.writerow(message)
+        self._schema_change_writer[1].writerow(message)
 
     def flush_records(self):
         logging.debug('Flushing records for each of found tables: {}'.format(self._found_tables))
