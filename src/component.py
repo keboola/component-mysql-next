@@ -752,7 +752,11 @@ class Component(ComponentBase):
 
                 # upload data to stage in parallel
                 # Determine Manifest file outputs (Only full load)
-                tables_and_columns_order = common.get_table_headers()
+
+                # convert to uppercase to match behaviour in other places
+                tables_and_columns_order = {t: [col.upper() for col in v] for t, v in
+                                            message_store.full_sync_headers.items()}
+
                 with self._snowflake_client.connect():
 
                     with ThreadPoolExecutor(max_workers=10) as executor:

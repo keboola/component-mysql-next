@@ -1,13 +1,11 @@
 """
 Common patterns for data replication.
 """
-import ast
 import copy
 import csv
 import datetime
 import logging
 import os
-import shutil
 import tempfile
 import time
 
@@ -323,7 +321,6 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                 logging.debug('Fetched {} rows from query result'.format(number_of_rows))
 
                 if current_chunk == 1:
-                    table_and_headers = {}
 
                     # Fetch column names from first item in cursor description tuple
                     headers = list()
@@ -334,15 +331,7 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
 
                     logging.debug(f'Headers of table {catalog_entry.table_name} = {headers}')
 
-                    table_and_headers[catalog_entry.table_name] = headers
-
-                    # Write to CSV of specific structure: table, headers (no header is written to this CSV)
-                    with open(TABLE_HEADERS_PATH, 'a+', newline='') as headers_csv:
-                        writer = csv.writer(headers_csv, delimiter='\t')
-                        writer.writerow([catalog_entry.table_name, headers])
-                        logging.info('Setting table {} metadata for columns to {}, staged for manifest'.format(
-                            catalog_entry.table_name, headers
-                        ))
+                    message_store.full_sync_headers[catalog_entry.table_name] = headers
 
                 destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv',
                                                        '')
@@ -384,21 +373,3 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
     logging.info('Total processing time: {} seconds'.format(full_chunk_processing_duration))
 
     core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
-
-
-def get_table_headers() -> dict:
-    """
-        Get table headers from temp file.
-    Returns:
-
-    """
-    tables_and_columns = dict()
-    if os.path.exists(TABLE_HEADERS_PATH):
-        with open(TABLE_HEADERS_PATH) as headers_file:
-            tables_and_columns = {row.split('\t')[0]: row.split('\t')[1] for row in headers_file}
-            for item, value in tables_and_columns.items():
-                tables_and_columns[item] = [column.strip().upper() for column in ast.literal_eval(value)]
-            logging.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
-        shutil.copyfile(TABLE_HEADERS_PATH, '/data/out/files/columns.csv')
-        os.remove(TABLE_HEADERS_PATH)
-    return tables_and_columns
