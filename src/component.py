@@ -33,6 +33,7 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
     ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
+
 from ssh.ssh_utils import generate_ssh_key_pair
 from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
@@ -50,6 +51,7 @@ import core as core
 from core import convert_yaml_to_json_mapping, make_yaml_mapping_file
 import core.metrics as metrics
 import core.datatypes as datatypes
+import core.utils as utils
 
 from core import metadata
 from core.catalog import Catalog, CatalogEntry
@@ -936,8 +938,14 @@ class Component(ComponentBase):
                                table_column_metadata: dict,
                                is_full_sync: bool, dedupe: bool = True):
 
-        column_types = self._convert_to_snowflake_column_definitions(table_column_metadata)
-        columns = list(table_column_metadata.keys())
+        # rename columns to deal with KBC Storage limitations
+        normalizer = utils.KBCNormalizer()
+        columns = normalizer.normalize_header(list(table_column_metadata.keys()))
+        renamed_metadata = {}
+        for renamed, v in zip(columns, table_column_metadata.values()):
+            renamed_metadata[renamed] = v
+
+        column_types = self._convert_to_snowflake_column_definitions(renamed_metadata)
 
         logging.info(f"Creating table {result_table_name} in stage")
         self._snowflake_client.create_table(result_table_name, column_types)

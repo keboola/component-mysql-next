@@ -14,6 +14,7 @@ from warnings import warn
 import backoff as backoff_module
 import dateutil.parser
 import pytz
+from keboola.utils import header_normalizer
 from typing.io import IO
 
 from .catalog import Catalog
@@ -402,3 +403,20 @@ def reverse_readline(file, buf_size=8192):
             part += c
     if part:
         yield part[::-1]
+
+
+class KBCNormalizer(header_normalizer.DefaultHeaderNormalizer):
+
+    def _normalize_column_name(self, header: str) -> str:
+        header = self._replace_whitespace(header)
+        header = self._replace_forbidden(header)
+        header = self._remove_leading_underscore(header)
+        return header
+
+    def _remove_leading_underscore(self, column: str):
+        new_name = column
+        if column.startswith('_'):
+            new_name = column[1:]
+            if new_name.startswith('_'):
+                return self._remove_leading_underscore(new_name)
+        return new_name
