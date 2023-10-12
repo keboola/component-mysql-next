@@ -7,6 +7,7 @@ import csv
 import datetime
 import logging
 import os
+import shutil
 import tempfile
 import time
 
@@ -398,5 +399,6 @@ def get_table_headers() -> dict:
             for item, value in tables_and_columns.items():
                 tables_and_columns[item] = [column.strip().upper() for column in ast.literal_eval(value)]
             logging.debug('Tables and columns mappings for manifests set to: {}'.format(tables_and_columns))
+        shutil.copyfile(TABLE_HEADERS_PATH, '/data/out/files/columns.csv')
         os.remove(TABLE_HEADERS_PATH)
     return tables_and_columns
