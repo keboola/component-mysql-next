@@ -285,6 +285,7 @@ class MessageStore(dict):
         self._flush_count = 0
         self.output_bucket = output_bucket
         self.include_schem_name = include_schema_name
+        self._full_sync_headers = {}
 
         # self.io = {}
         # self.io_csv = {}
@@ -299,6 +300,10 @@ class MessageStore(dict):
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.flush_records()
         self._close_writer_cache()
+
+    @property
+    def full_sync_headers(self):
+        return self._full_sync_headers
 
     @property
     def found_schemas(self):

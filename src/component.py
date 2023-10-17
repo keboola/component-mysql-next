@@ -752,7 +752,11 @@ class Component(ComponentBase):
 
                 # upload data to stage in parallel
                 # Determine Manifest file outputs (Only full load)
-                tables_and_columns_order = common.get_table_headers()
+
+                # convert to uppercase to match behaviour in other places
+                tables_and_columns_order = {t: [col.upper() for col in v] for t, v in
+                                            message_store.full_sync_headers.items()}
+
                 with self._snowflake_client.connect():
 
                     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -921,7 +925,7 @@ class Component(ComponentBase):
 
         """
         default_metadata = [
-            # {'key': 'KBC.datatype.basetype', 'value': 'STRING'},
+            {'key': 'KBC.datatype.basetype', 'value': 'STRING'},
             {'key': 'KBC.datatype.nullable', 'value': True}]
         ordered_metadata = dict()
         for col in column_order:
@@ -1423,15 +1427,22 @@ class Component(ComponentBase):
         table_name = entry.get('result_table_name').upper()
         result_full_path = os.path.join(data_path, table_name)
 
+        # rename columns to deal with KBC Storage limitations
+        normalizer = utils.KBCNormalizer()
+        columns_renamed = normalizer.normalize_header(columns)
+        renamed_metadata = {}
+        for renamed, v in zip(columns_renamed, column_metadata.values()):
+            renamed_metadata[renamed] = v
+
         # for r in results:
         if not columns:
             self.write_table_manifest(result_full_path, destination=table_name,
-                                      primary_key=primary_keys, column_metadata=column_metadata,
+                                      primary_key=primary_keys, column_metadata=renamed_metadata,
                                       is_incremental=set_incremental, output_bucket=output_bucket)
         else:
             self.write_table_manifest(result_full_path, destination=table_name,
-                                      primary_key=primary_keys, columns=columns,
-                                      column_metadata=column_metadata, is_incremental=set_incremental,
+                                      primary_key=primary_keys, columns=columns_renamed,
+                                      column_metadata=renamed_metadata, is_incremental=set_incremental,
                                       output_bucket=output_bucket)
 
     @staticmethod
