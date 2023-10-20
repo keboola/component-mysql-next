@@ -228,9 +228,17 @@ class ODBCConnection(DbConnection):
 
         try:
             if cursor.rowcount > 0:
-                for res in cursor.fetchall():
-                    yield res
+                try:
+                    for res in cursor.fetchall():
+                        yield res
+                except pypyodbc.ProgrammingError as e:
+                    # empty result
+                    if 'Invalid cursor state' in str(e):
+                        yield []
+                    else:
+                        raise
+
             else:
-                return []
+                yield []
         except Exception as e:
             raise e
