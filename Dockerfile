@@ -29,15 +29,6 @@ RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install Java dependencies needed for JDBC
-RUN apt-get update && \
-    apt-get install -y openjdk-11-jre-headless && \
-    apt-get clean;
-
-
-# set switch that enables correct JVM memory allocation in containers
-ENV JAVA_OPTS="-XX:+UseContainerSupport -Xmx512m"
-
 RUN pip install flake8
 
 
