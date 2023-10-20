@@ -8,20 +8,176 @@ import fnmatch
 import functools
 import json
 import os
+import re
+import string
 import time
+from abc import ABC, abstractmethod
+from typing import IO
+from typing import List, Tuple
 from warnings import warn
 
 import backoff as backoff_module
 import dateutil.parser
 import pytz
-from keboola.utils import header_normalizer
-from typing.io import IO
 
 from .catalog import Catalog
 
 DATETIME_PARSE = "%Y-%m-%dT%H:%M:%SZ"
 DATETIME_FMT = "%04Y-%m-%d %H:%M:%S.%f"
 DATETIME_FMT_SAFE = "%Y-%m-%d %H:%M:%S.%f"
+
+PERMITTED_CHARS = string.digits + string.ascii_letters + '_'
+
+DEFAULT_WHITESPACE_SUB = "_"
+DEFAULT_NON_PERMITTED_SUB = ""
+DEFAULT_ENCODE_DELIM = "_"
+
+
+class HeaderNormalizer(ABC):
+    """
+    Abstract class for column normalization.
+
+    """
+
+    def __init__(self, permitted_chars: str = PERMITTED_CHARS, whitespace_sub: str = DEFAULT_WHITESPACE_SUB):
+        """
+
+        Args:
+            permitted_chars: all characters that are permitted to be in a column concatenated together in one string
+            whitespace_sub: character to substitute a whitespace
+        """
+
+        self.permitted_chars = permitted_chars
+        self.whitespace_sub = whitespace_sub
+        self._check_chars_permitted(self.whitespace_sub)
+
+    @abstractmethod
+    def _normalize_column_name(self, column_name: str):
+        pass
+
+    def _check_chars_permitted(self, in_string: str):
+        """
+        Checks whether characters of a string are within a permitted characters string
+
+        Args:
+            in_string: Input string
+
+        Returns:
+
+        Raises:
+            ValueError
+                If string contains characters that are not permitted
+
+        """
+
+        for char in in_string:
+            if char not in self.permitted_chars:
+                raise ValueError(f"Substitute: '{in_string}' not in permitted characters")
+
+    def _replace_whitespace(self, in_string: str) -> str:
+        """
+        Replaces whitespaces with a substitute character
+        Args:
+            in_string:
+
+        Returns:
+            in_string : str
+                A string with replaced whitespaces by a substitute character
+
+        """
+        in_string = self.whitespace_sub.join(in_string.split())
+        return in_string
+
+    def normalize_header(self, header: List[str]) -> List[str]:
+        """
+        Normalizes a list of columns to match the Keboola Connection Storage requirements:
+
+        `Only alphanumeric characters and underscores are allowed in column name.
+         Underscore is not allowed on the beginning.`
+
+        It also checks for empty headers and adds a name to them so they do not remain empty
+
+        Args:
+            header:
+
+        Returns:
+            Normalized column.
+
+        """
+
+        normalized_header = []
+        empty_column_id = 1
+
+        for column in header:
+            column = self._normalize_column_name(column)
+            column, empty_column_id = self._check_empty_column(column, empty_column_id)
+            normalized_header.append(column)
+        return normalized_header
+
+    @staticmethod
+    def _check_empty_column(column: str, empty_column_id: int) -> Tuple[str, int]:
+        """
+        Checks if header is empty and fills it in
+
+        Headers are checked if the string is empty, and if it is a new name is given.
+        If the header contains more than 0 characters it will be returned.
+        Each new name is appended a number, this number is increased and return as well if the
+        header is empty.
+
+        Args:
+            column:
+            empty_column_id: An integer contaning a number to be appended to the new name of an empty header
+
+        Returns:
+            column (str): The new name of an empty column
+            empty_header_id (int) : An integer holding the id of the next empty column string
+
+        """
+
+        if not column:
+            column = f"empty_{str(empty_column_id)}"
+            empty_column_id += 1
+        return column, empty_column_id
+
+
+class DefaultHeaderNormalizer(HeaderNormalizer):
+    """
+        A class used to normalize headers using a substitute character
+    """
+
+    def __init__(self, permitted_chars: str = PERMITTED_CHARS, forbidden_sub: str = DEFAULT_NON_PERMITTED_SUB,
+                 whitespace_sub: str = DEFAULT_WHITESPACE_SUB):
+        """
+
+        Args:
+            permitted_chars: all characters that are permitted to be in a column concatenated together in one string
+            forbidden_sub: substitute character for a forbidden character
+            whitespace_sub: character to substitute a whitespace
+        """
+
+        super().__init__(permitted_chars=permitted_chars, whitespace_sub=whitespace_sub)
+
+        self._check_chars_permitted(forbidden_sub)
+        self.forbidden_sub = forbidden_sub
+
+    def _normalize_column_name(self, header: str) -> str:
+        header = self._replace_whitespace(header)
+        header = self._replace_forbidden(header)
+        return header
+
+    def _replace_forbidden(self, in_string: str) -> str:
+        """
+        Replaces forbidden characters in a string by a substitute character
+
+        Args:
+            in_string:
+        Returns:
+            str - fixed name
+
+        """
+
+        in_string = re.sub("[^" + self.permitted_chars + "]", self.forbidden_sub, in_string)
+        return in_string
 
 
 def now(format='dt'):
@@ -405,9 +561,7 @@ def reverse_readline(file, buf_size=8192):
         yield part[::-1]
 
 
-class KBCNormalizer(header_normalizer.DefaultHeaderNormalizer):
-    def __init__(self):
-        super().__init__(forbidden_sub='_')
+class KBCNormalizer(DefaultHeaderNormalizer):
 
     def _normalize_column_name(self, header: str) -> str:
         header = self._replace_whitespace(header)

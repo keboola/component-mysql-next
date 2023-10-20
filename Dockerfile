@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM pypy:3.9-slim
 ENV PYTHONIOENCODING utf-8
 # ENV CRYPTOGRAPHY_DONT_BUILD_RUST=1
 
@@ -11,49 +11,41 @@ RUN apt-get update
 # Get Ubuntu packages
 RUN apt-get install -y \
     build-essential \
+    wget \
     curl \
-    libssl-dev \
-    zlib1g-dev wget
-#
-#
-#
-## https://community.snowflake.com/s/question/0D5Do000010NAVzKAO/hi-snowflake-teami-am-facing-issues-while-connecting-to-snowflake-using-snowflake-connector-with-oscryptoerrorslibrarynotfounderror-error-detecting-the-version-of-libcrypto
-RUN wget https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.6.tar.gz &&\
-    tar -xzvf libressl-3.3.6.tar.gz
+    unixodbc \
+    odbcinst \
+    unixodbc-dev \
+    openssl
+
+# install Snowflake odbc
+WORKDIR /tmp
+RUN wget https://sfc-repo.snowflakecomputing.com/odbc/linux/3.1.1/snowflake-odbc-3.1.1.x86_64.deb
+RUN dpkg -i snowflake-odbc-3.1.1.x86_64.deb; apt-get install -y -f
 
 
-RUN cd libressl-3.3.6 && ./configure &&\
-    make &&\
-    make install
-
-RUN ln -s /usr/lib/aarch64-linux-gnu/libssl.so.48.0.2 libssl.so.48 && \
-    ln -s /usr/lib/aarch64-linux-gnu/libcrypto.so.46.0.2 libcrypto.so46 && \
-    ldconfig
-
-
-
-
-#RUN echo '/usr/local/ssl/lib' > /etc/ld.so.conf.d/libressl-3.3.6.conf &&\
-#    ldconfig -v &&\
-#    mv /usr/bin/openssl /usr/bin/openssl.bak &&\
-#    mv /usr/bin/c_rehash /usr/bin/c_rehash.bak &&\
-#    update-alternatives --install /usr/bin/openssl openssl /usr/local/ssl/bin/openssl 1 &&\
-#    update-alternatives --install /usr/bin/c_rehash c_rehash /usr/local/ssl/bin/c_rehash 1
-
-#RUN ln -s libcrypto.so.3 /usr/lib/libcrypto.so
 # Get Rust
-#RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
-#
-#ENV PATH="/root/.cargo/bin:${PATH}"
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install Java dependencies needed for JDBC
+RUN apt-get update && \
+    apt-get install -y openjdk-11-jre-headless && \
+    apt-get clean;
+
+
+# set switch that enables correct JVM memory allocation in containers
+ENV JAVA_OPTS="-XX:+UseContainerSupport -Xmx512m"
 
 RUN pip install flake8
 
 
 # requirements
-#RUN -m ensurepip
-RUN pip install -U pip wheel
-RUN pip install --upgrade pip
-RUN pip install -r /code/requirements.txt
+RUN pypy -m ensurepip
+RUN pypy -m pip install -U pip wheel
+RUN pypy -m pip install --upgrade pip
+RUN pypy -m pip install -r /code/requirements.txt
 
 WORKDIR /code/
 
