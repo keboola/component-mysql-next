@@ -1,9 +1,8 @@
 import logging
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
-import snowflake
-from snowflake.connector import SnowflakeConnection
+from db_common.db_connection import ODBCConnection
 
 
 @dataclass
@@ -17,43 +16,53 @@ class Credentials:
     role: str = None
 
 
+class ExtractorUserException(Exception):
+    pass
+
+
 class SnowflakeClient:
     DEFAULT_FILE_FORMAT = dict(TYPE="CSV", FIELD_DELIMITER="','", SKIP_HEADER=1, FIELD_OPTIONALLY_ENCLOSED_BY="'\"'",
                                ERROR_ON_COLUMN_COUNT_MISMATCH=False, COMPRESSION="GZIP", NULL_IF="('KBC__NULL')",
                                ESCAPE_UNENCLOSED_FIELD="NONE")
 
     def __init__(self, account, user, password, database, schema, warehouse):
-        self._connection: SnowflakeConnection
-        self._credentials = Credentials(account=account,
-                                        user=user,
-                                        password=password,
-                                        database=self.wrap_in_quote(database),
-                                        schema=self.wrap_in_quote(schema),
-                                        warehouse=self.wrap_in_quote(warehouse))
+        connection_string = self._build_connection_string(database, warehouse, schema, account, user, password)
+        self._connection = ODBCConnection(connection_string)
+
+    @staticmethod
+    def _build_connection_string(database, warehouse, schema, account, user, password) -> str:
+        return ("Driver={SnowflakeDSIIDriver};"
+                f"Server={account}.snowflakecomputing.com;"
+                f"Database={database};uid={user};pwd={password};warehouse={warehouse};schema={schema}")
+
+    @contextmanager
+    def connect(self) -> 'SnowflakeClient':
+        logging.info("Connecting to database.")
+        try:
+            self._connection.connect()
+            list(self._connection.perform_query("ALTER SESSION SET JDBC_QUERY_RESULT_FORMAT='JSON'"))
+            yield self
+
+        except Exception as e:
+            raise ExtractorUserException(f"Login to database failed, please check your credentials. Detail: {e}") from e
+        finally:
+            self.close_connection()
+
+    def test_connection(self):
+        self.connect()
+        self.close_connection()
+
+    def close_connection(self):
+        logging.debug("Closing the outer connection.")
+        self._connection.connection.close()
 
     def execute_query(self, query):
         """
         executes the query
         """
-        cur = self._connection.cursor(snowflake.connector.DictCursor)
-        logging.debug(query)
-        results = cur.execute(query).fetchall()
+        results = list(self._connection.perform_query(query))
+        logging.debug(results)
         return results
-
-    @contextmanager
-    def connect(self, session_parameters=None):
-        try:
-            if not session_parameters:
-                session_parameters = {}
-            cfg = asdict(self._credentials)
-            cfg['session_parameters'] = session_parameters
-            self._connection = snowflake.connector.connect(**cfg)
-            yield self
-        finally:
-            self.close_connection()
-
-    def close_connection(self):
-        self._connection.close()
 
     def create_table(self, name, columns: [dict]):
         query = f"""
@@ -160,6 +169,7 @@ class SnowflakeClient:
             query += f"{key}={file_format[key]} "
         query += ");"
         self.execute_query(query)
+        self.execute_query('commit')
 
     def _convert_nulls(self, col_name: str, convert: bool):
         col_def = col_name
@@ -172,7 +182,3 @@ class SnowflakeClient:
 
     def wrap_in_quote(self, s):
         return s if s.startswith('"') else '"' + s + '"'
-
-    def close(self):
-        self._connection.close()
-        self._engine.dispose()

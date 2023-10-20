@@ -167,15 +167,19 @@ def get_tables(mysql_conn, schemas: list[str] = None) -> list[dict]:
 
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
-            cur.execute("""
-            SELECT table_schema,
-                   table_name,
-                   table_type,
-                   table_rows
+            cur.execute(f"""
+            SELECT t.table_schema,
+                   t.table_name,
+                   t.table_type,
+                   t.table_rows
             FROM information_schema.tables t
-                {}
+            JOIN information_schema.TABLE_CONSTRAINTS k
+                ON k.TABLE_NAME=t.TABLE_NAME and k.TABLE_SCHEMA=t.TABLE_SCHEMA
+                {table_schema_clause}
             AND table_type != 'VIEW'
-            """.format(table_schema_clause))
+            AND table_type != 'VIEW'
+            AND k.constraint_type='PRIMARY KEY';
+            """)
 
             tables = []
             for res in cur.fetchall():

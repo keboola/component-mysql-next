@@ -439,6 +439,10 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                             database_name, catalog_entry.table)
             continue
 
+        if not discovered_table.primary_keys:
+            logging.warning(f'Table {database_name}.{catalog_entry.table} '
+                            'was selected but does not have primary keys defined, skipping.')
+
         selected = {k for k, v in catalog_entry.schema.properties.items()
                     if common.property_is_selected(catalog_entry, k) or k == replication_key}
 
@@ -963,6 +967,7 @@ class Component(ComponentBase):
             for table in tables:
                 self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table,
                                                                      file_format=file_format)
+
         else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
             if dedupe:
@@ -997,6 +1002,8 @@ class Component(ComponentBase):
 
         logging.debug(f'Dedupping table {table_name}: {query}')
         self._snowflake_client.execute_query(query)
+
+        self._snowflake_client.execute_query('commit')
 
     def _check_file_inputs(self) -> str:
         """Return path name of file inputs if any."""
