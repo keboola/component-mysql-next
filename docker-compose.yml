@@ -19,7 +19,7 @@ services:
         - ./:/code
         - ./data:/data
     environment:
-      - KBC_DATADIR=./data
+      - KBC_DATADIR=/data
       - KBC_CONFIGID=12345
       - KBC_COMPONENTID=kds-team.ex-mysql-next
   mysql:

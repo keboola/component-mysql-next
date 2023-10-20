@@ -61,7 +61,8 @@ class SnowflakeClient:
         executes the query
         """
         results = self._connection.perform_query(query)
-        return results
+        logging.debug(list(results))
+        return list(results)
 
     def create_table(self, name, columns: [dict]):
         query = f"""
@@ -168,6 +169,7 @@ class SnowflakeClient:
             query += f"{key}={file_format[key]} "
         query += ");"
         self.execute_query(query)
+        self.execute_query('commit')
 
     def _convert_nulls(self, col_name: str, convert: bool):
         col_def = col_name

@@ -44,7 +44,7 @@ class ODBCConnection(DbConnection):
         Args:
              connection_string: Full qualified ODBC connection string.
         """
-        self._connection: pypyodbc.Connection | None = None
+        self._connection: pypyodbc.Connection
         self.connection_string = connection_string
         self.connected = False
 

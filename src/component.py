@@ -963,6 +963,7 @@ class Component(ComponentBase):
             for table in tables:
                 self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table,
                                                                      file_format=file_format)
+
         else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
             if dedupe:
@@ -997,6 +998,8 @@ class Component(ComponentBase):
 
         logging.debug(f'Dedupping table {table_name}: {query}')
         self._snowflake_client.execute_query(query)
+
+        self._snowflake_client.execute_query('commit')
 
     def _check_file_inputs(self) -> str:
         """Return path name of file inputs if any."""
