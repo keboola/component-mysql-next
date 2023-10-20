@@ -439,6 +439,10 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
                             database_name, catalog_entry.table)
             continue
 
+        if not discovered_table.primary_keys:
+            logging.warning(f'Table {database_name}.{catalog_entry.table} '
+                            'was selected but does not have primary keys defined, skipping.')
+
         selected = {k for k, v in catalog_entry.schema.properties.items()
                     if common.property_is_selected(catalog_entry, k) or k == replication_key}
 

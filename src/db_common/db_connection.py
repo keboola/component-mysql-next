@@ -234,5 +234,3 @@ class ODBCConnection(DbConnection):
                 return []
         except Exception as e:
             raise e
-
-        cursor.close()

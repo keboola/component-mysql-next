@@ -60,9 +60,9 @@ class SnowflakeClient:
         """
         executes the query
         """
-        results = self._connection.perform_query(query)
-        logging.debug(list(results))
-        return list(results)
+        results = list(self._connection.perform_query(query))
+        logging.debug(results)
+        return results
 
     def create_table(self, name, columns: [dict]):
         query = f"""
