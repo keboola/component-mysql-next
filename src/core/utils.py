@@ -562,6 +562,8 @@ def reverse_readline(file, buf_size=8192):
 
 
 class KBCNormalizer(DefaultHeaderNormalizer):
+    def __init__(self):
+        super().__init__(forbidden_sub='_')
 
     def _normalize_column_name(self, header: str) -> str:
         header = self._replace_whitespace(header)
