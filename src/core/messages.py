@@ -264,7 +264,7 @@ def handle_boolean_data(row: dict, schema: dict):
 class MessageStore(dict):
     """Storage for log-based messages"""
 
-    def __init__(self, state: dict = None, flush_row_threshold: int = 5000,
+    def __init__(self, state: dict = None, flush_row_threshold: int = 100,
                  output_table_path: str = '/data/out/tables', binary_handler: str = 'plain', output_bucket='',
                  include_schema_name: bool = False):
         super().__init__()
