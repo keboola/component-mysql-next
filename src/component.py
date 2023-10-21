@@ -69,7 +69,7 @@ from mysql.client import connect_with_backoff, MySQLConnection, get_execution_ti
 
 SSH_BIND_PORT = 3307
 CONNECT_TIMEOUT = 30
-FLUSH_STORE_THRESHOLD = 1000000
+FLUSH_STORE_THRESHOLD = 100
 
 # Keep for debugging
 KEY_DEBUG = 'debug'
