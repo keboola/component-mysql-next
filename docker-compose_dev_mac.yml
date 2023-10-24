@@ -1,7 +1,7 @@
 version: "2"
 services:
   app: &app
-    build: .
+    build: ./Dockerfile_dev_mac
     environment:
       MYSQL_DB_HOST: mysql
       MYSQL_DB_SSL_HOST: mysql-ssl
@@ -30,7 +30,7 @@ services:
       MYSQL_ROOT_PASSWORD: rootpassword
   test:
     # Use to run flake8 and unittests checks
-    build: .
+    build: ./Dockerfile_dev_mac
     volumes:
       - ./:/code
       - ./data:/data
