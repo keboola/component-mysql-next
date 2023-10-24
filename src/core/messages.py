@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from io import BufferedReader
 from typing import Dict, List, TextIO
+from keboola.csvwriter import ElasticDictWriter
 
 import ciso8601
 import pytz
@@ -23,8 +24,7 @@ except ImportError:
 
 @dataclass
 class WriterCacheRecord:
-    writer: csv.DictWriter
-    out_stream: TextIO
+    writer: ElasticDictWriter
 
 
 class Message:
@@ -406,10 +406,9 @@ class MessageStore(dict):
             # init writer
             # get columns of all collected columns so far -> the rest will handle the writer
             columns = schema
-            out_stream = open(full_path, 'w+')
-            writer = csv.DictWriter(out_stream, columns, quoting=csv.QUOTE_ALL)
+            writer = ElasticDictWriter(full_path, columns, quoting=csv.QUOTE_ALL)
             writer.writeheader()
-            self._writer_cache[full_path] = WriterCacheRecord(writer, out_stream)
+            self._writer_cache[full_path] = WriterCacheRecord(writer)
         else:
             writer = self._writer_cache.get(full_path).writer
 
@@ -497,7 +496,7 @@ class MessageStore(dict):
     def _close_writer_cache(self):
         for table, wr in self._writer_cache.items():
             logging.info(f"Closing out stream for {table}")
-            wr.out_stream.close()
+            wr.writer.close()
 
 
 def format_message(message):

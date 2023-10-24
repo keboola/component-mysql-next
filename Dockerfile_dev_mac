@@ -1,6 +1,6 @@
-# FROM pypy:slim-bullseye
-
+# FROM pypy:3.10-slim-bullseye
 FROM debian:bullseye-slim
+
 RUN set -eux; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends ca-certificates; \
@@ -165,8 +165,8 @@ RUN apt-get install -y \
 
 # install Snowflake odbc
 WORKDIR /tmp
-RUN wget https://sfc-repo.snowflakecomputing.com/odbc/linux/3.1.1/snowflake-odbc-3.1.1.x86_64.deb
-RUN dpkg -i snowflake-odbc-3.1.1.x86_64.deb; apt-get install -y -f
+RUN wget https://sfc-repo.snowflakecomputing.com/odbc/linuxaarch64/3.1.1/snowflake-odbc-3.1.1.aarch64.deb
+RUN dpkg -i snowflake-odbc-3.1.1.aarch64.deb; apt-get install -y -f
 
 
 # Get Rust
