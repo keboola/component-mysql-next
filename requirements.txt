@@ -15,6 +15,7 @@ flake8==6.1.0
 freezegun==0.3.15
 idna==3.4
 keboola.component==1.4.3
+keboola.csvwriter==1.0.1
 mccabe==0.7.0
 mock==4.0.2
 mysql-replication==0.43.0
