@@ -1,5 +1,6 @@
 # FROM pypy:slim-bullseye
 
+### Custom image until this is merged https://foss.heptapod.net/pypy/pypy/-/commit/c9badbe42b469ffd22e75c3ed1a832a25c4a8a66
 FROM debian:bullseye-slim
 RUN set -eux; \
 	apt-get update; \
