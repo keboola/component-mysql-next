@@ -1,14 +1,16 @@
 version: "2"
 services:
   app: &app
-    build: ./Dockerfile_dev_mac
+    build:
+      context: .
+      dockerfile: Dockerfile_dev_mac
     environment:
       MYSQL_DB_HOST: mysql
       MYSQL_DB_SSL_HOST: mysql-ssl
       MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
       MYSQL_DB_USER: root
       MYSQL_DB_PASSWORD: rootpassword
-      MYSQL_DB_DATABASE: test
+      MYSQL_DB_DATABASE: cdc
       MYSQL_DB_PORT: 3306
     links:
       - mysql
@@ -16,8 +18,8 @@ services:
   dev:
     <<: *app
     volumes:
-        - ./:/code
-        - ./data:/data
+      - ./:/code
+      - ./data:/data
     environment:
       - KBC_DATADIR=/data
       - KBC_CONFIGID=12345
@@ -26,16 +28,21 @@ services:
     image: mysql:5.7.12
     command: mysqld --local-infile --port=3306 --default-authentication-plugin=mysql_native_password
     environment:
-      MYSQL_DATABASE: test
+      MYSQL_DATABASE: cdc
       MYSQL_ROOT_PASSWORD: rootpassword
+
   test:
     # Use to run flake8 and unittests checks
-    build: ./Dockerfile_dev_mac
+    <<: *app
+    links:
+      - mysql
     volumes:
       - ./:/code
       - ./data:/data
     environment:
-      - KBC_DATADIR=./data
+      - KBC_DATADIR=/data
+      - KBC_CONFIGID=12345
+      - KBC_COMPONENTID=kds-team.ex-mysql-next
     command:
       - /bin/sh
       - /code/scripts/build_and_test.sh
