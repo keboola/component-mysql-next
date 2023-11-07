@@ -38,11 +38,15 @@ services:
       - mysql
     volumes:
       - ./:/code
-      - ./data:/data
     environment:
-      - KBC_DATADIR=/data
-      - KBC_CONFIGID=12345
-      - KBC_COMPONENTID=kds-team.ex-mysql-next
+      KBC_COMPONENTID: kds-team.ex-mysql-next
+      MYSQL_DB_HOST: mysql
+      MYSQL_DB_SSL_HOST: mysql-ssl
+      MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
+      MYSQL_DB_USER: root
+      MYSQL_DB_PASSWORD: rootpassword
+      MYSQL_DB_DATABASE: test
+      MYSQL_DB_PORT: 3306
     command:
       - /bin/sh
       - /code/scripts/build_and_test.sh
