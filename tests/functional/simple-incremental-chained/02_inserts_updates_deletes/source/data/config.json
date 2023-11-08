@@ -33,12 +33,12 @@
   },
   "authorization": {
     "workspace": {
-      "host": "keboola.snowflakecomputing.com",
-      "user": "SAPI_WORKSPACE_742034376",
-      "password": "HGZjP7bzDqaMAZqqBr3NC3fU9ACYBHrg",
-      "database": "SAPI_5415",
-      "schema": "WORKSPACE_742034376",
-      "warehouse": "KEBOOLA_PROD"
+      "host": "{{env.SNFL_WORKSPACE_HOST}}",
+      "user": "{{env.SNFL_WORKSPACE_USER}}",
+      "password": "{{env.SNFL_WORKSPACE_PASSWORD}}",
+      "database": "{{env.SNFL_WORKSPACE_DATABASE}}",
+      "schema": "{{env.SNFL_WORKSPACE_SCHEMA}}",
+      "warehouse": "{{env.SNFL_WORKSPACE_WAREHOUSE}}"
     },
     "oauth_api": {
       "id": "OAUTH_API_ID",
