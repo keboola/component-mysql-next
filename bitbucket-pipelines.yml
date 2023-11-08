@@ -6,13 +6,17 @@ options:
 pipelines:
   default:
     - step:
+        caches:
+          - docker
         script:
           - export APP_IMAGE=$APP_IMAGE
           - export TAG=${BITBUCKET_BRANCH//\//-}
           - docker build . --tag=$APP_IMAGE
           - docker images
           - docker -v
+          - docker run $APP_IMAGE flake8 /code/ --config=/code/flake8.cfg
           # run functional tests
+          - docker-compose run wait
           - docker-compose run test
           # snfl version test tag
           - export REPOSITORY=`docker run --rm -e KBC_DEVELOPERPORTAL_USERNAME -e KBC_DEVELOPERPORTAL_PASSWORD -e KBC_DEVELOPERPORTAL_URL quay.io/keboola/developer-portal-cli-v2:latest ecr:get-repository $KBC_DEVELOPERPORTAL_VENDOR $KBC_DEVELOPERPORTAL_APP_SNFL`
@@ -30,7 +34,9 @@ pipelines:
             - docker build . --tag=$APP_IMAGE
             - docker images
             - docker -v
+            - docker run $APP_IMAGE flake8 /code/ --config=/code/flake8.cfg
             # run functional tests
+            - docker-compose run wait
             - docker-compose run test
             # push test image to ecr - uncomment for testing before deployment
             - echo "Pushing test image to repo. [tag=${TAG}]"

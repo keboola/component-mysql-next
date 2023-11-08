@@ -40,6 +40,9 @@
       "schema": "{{env.SNFL_WORKSPACE_SCHEMA}}",
       "warehouse": "{{env.SNFL_WORKSPACE_WAREHOUSE}}"
     },
+
+
+
     "oauth_api": {
       "id": "OAUTH_API_ID",
       "credentials": {

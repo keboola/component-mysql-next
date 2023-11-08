@@ -54,6 +54,14 @@ services:
       MYSQL_DB_PORT: 3306
       KBC_CONFIGID: 12345
       KBC_COMPONENTID: kds-team.ex-mysql-next
+
+      SNFL_WORKSPACE_HOST: keboola.snowflakecomputing.com
+      SNFL_WORKSPACE_USER: SAPI_WORKSPACE_742034376
+      SNFL_WORKSPACE_PASSWORD: HGZjP7bzDqaMAZqqBr3NC3fU9ACYBHrg
+      SNFL_WORKSPACE_DATABASE: SAPI_5415
+      SNFL_WORKSPACE_SCHEMA: WORKSPACE_742034376
+      SNFL_WORKSPACE_WAREHOUSE: KEBOOLA_PROD
+
     command:
       - /bin/sh
       - /code/scripts/build_and_test.sh
