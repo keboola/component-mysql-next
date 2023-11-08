@@ -69,7 +69,7 @@ class CustomDatadirTest(TestDataDir):
         tmp_path = f'{table_path}__tmp.csv'
         with open(table_path, 'r') as inp, open(tmp_path, 'w+') as outp:
             reader = csv.reader(inp)
-            writer = csv.writer(outp)
+            writer = csv.writer(outp, lineterminator='\n')
             for row in reader:
                 writer.writerow(row[column_slice])
 
@@ -86,9 +86,10 @@ class CustomDatadirTest(TestDataDir):
         """
         # help with CI package
         ci = CommonInterface(self.source_data_dir)
-        in_tables = glob.glob(f'{ci.tables_out_path}/*.csv')
+        in_tables: list = glob.glob(f'{ci.tables_out_path}/*.csv')
+        in_tables.extend(glob.glob(f'{ci.tables_out_path}/*.CSV'))
 
-        # we now we need to remove last 2 columns
+        # we now we need to remove last 2columns
         slice_to_keep = slice(0, -3)
 
         for in_table in in_tables:

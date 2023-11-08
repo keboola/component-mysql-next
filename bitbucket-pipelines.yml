@@ -30,7 +30,6 @@ pipelines:
             - docker build . --tag=$APP_IMAGE
             - docker images
             - docker -v
-
             # run functional tests
             - docker-compose run test
             # push test image to ecr - uncomment for testing before deployment
