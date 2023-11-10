@@ -10,11 +10,28 @@ RUN apt-get update
 
 # Get Ubuntu packages
 RUN apt-get install -y \
+    unzip \
     build-essential \
+    wget \
     curl \
-    libssl-dev \
-    openssl \
-    libopenblas-dev
+    unixodbc \
+    odbcinst \
+    unixodbc-dev \
+    openssl
+
+WORKDIR /tmp
+
+# Install DuckDB odbc
+RUN wget https://github.com/duckdb/duckdb/releases/download/v0.9.1/duckdb_odbc-linux-amd64.zip
+RUN mkdir duckdb_odbc
+RUN unzip duckdb_odbc-linux-amd64.zip -d duckdb_odbc
+# replace arch64 build driver (MAC)
+RUN wget https://github.com/duckdb/duckdb/releases/download/v0.9.1/duckdb_odbc-linux-aarch64.zip
+RUN unzip -o duckdb_odbc-linux-aarch64.zip -d duckdb_odbc
+WORKDIR /tmp/duckdb_odbc
+
+RUN bash unixodbc_setup.sh -s
+COPY ./.docker/duckdb_odbc.ini /etc/odbc.ini
 
 
 # Get Rust
@@ -29,7 +46,6 @@ RUN pypy -m ensurepip
 RUN pypy -m pip install -U pip
 RUN pypy -m pip install -U pip wheel
 RUN pypy -m pip install --upgrade pip
-RUN pypy -m pip install duckdb==0.7.0
 RUN pypy -m pip install -r /code/requirements.txt
 
 WORKDIR /code/

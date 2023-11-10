@@ -39,6 +39,7 @@ from typing import List
 from cryptography.utils import CryptographyDeprecationWarning
 
 import table_metadata
+from workspace_client import DuckDBClient
 
 with warnings.catch_warnings():
     warnings.filterwarnings('ignore', category=CryptographyDeprecationWarning)
@@ -1171,18 +1172,20 @@ class Component(KBCEnvHandler):
 
         import duckdb
         duckdb.connect(os.path.join(temp_db, 'file.db'))
-        sql = f"""
-               CREATE TABLE DEDUPE_TMP AS SELECT *,  
-               ROW_NUMBER() OVER (PARTITION BY {primary_keys_str} 
-               ORDER BY "{binlog_change_at_str}"::INT DESC) as __TMP_ROW_NUMBER
-                                           FROM
-                                              read_csv_auto('{table_path}', header=true, columns={datatypes})"""
-        duckdb.sql(sql)
-        duckdb.sql("DELETE FROM DEDUPE_TMP WHERE __TMP_ROW_NUMBER >1")
-        duckdb.sql("ALTER TABLE DEDUPE_TMP DROP COLUMN __TMP_ROW_NUMBER")
-        duckdb.sql(
-            f"COPY (SELECT * FROM DEDUPE_TMP ORDER BY {binlog_change_at_str}) "
-            f"TO '{temp_result}' (HEADER, DELIMITER ',');")
+        ws_client = DuckDBClient()
+        with ws_client.connect():
+            sql = f"""
+                   CREATE TABLE DEDUPE_TMP AS SELECT *,  
+                   ROW_NUMBER() OVER (PARTITION BY {primary_keys_str} 
+                   ORDER BY "{binlog_change_at_str}"::INT DESC) as __TMP_ROW_NUMBER
+                                               FROM
+                                                  read_csv_auto('{table_path}', header=true, columns={datatypes})"""
+            ws_client.execute_query(sql)
+            ws_client.execute_query("DELETE FROM DEDUPE_TMP WHERE __TMP_ROW_NUMBER >1")
+            ws_client.execute_query("ALTER TABLE DEDUPE_TMP DROP COLUMN __TMP_ROW_NUMBER")
+            ws_client.execute_query(
+                f"COPY (SELECT * FROM DEDUPE_TMP ORDER BY {binlog_change_at_str}) "
+                f"TO '{temp_result}' (HEADER, DELIMITER ',');")
 
         os.remove(table_path)
         shutil.move(temp_result, table_path)
