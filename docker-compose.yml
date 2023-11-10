@@ -10,8 +10,8 @@ services:
       MYSQL_DB_PASSWORD: rootpassword
       MYSQL_DB_DATABASE: test
       MYSQL_DB_PORT: 3306
-    links:
-      - mysql
+#    links:
+#      - mysql
   # for development purposes
   dev:
     <<: *app

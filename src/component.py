@@ -1155,42 +1155,34 @@ class Component(KBCEnvHandler):
 
         with open(table_path, 'r') as inp:
             header = csv.DictReader(inp).fieldnames
-        pkey_hashes = set()
 
-        def create_pkey_hash(row_record: dict):
-            try:
-                pkey_hash_str = '|'.join(row_record[idx] for idx in primary_keys)
-                return pkey_hash_str
-            except IndexError:
-                # TODO: remove temp debug statement
-                for idx in primary_keys:
-                    try:
-                        row_record[idx]
-                    except IndexError:
-                        logging.error(f"Pkey index {idx} not found in row: {row_record}")
-                        raise Exception(f"Pkey index {idx} not found in row: {row_record} "
-                                        f"for primary key: {primary_keys}")
+        datatypes = dict()
+        binlog_change_at_str = 'BINLOG_CHANGE_AT'
+        for h in header:
+            if h == 'BINLOG_CHANGE_AT' or h == '_BINLOG_CHANGE_AT':
+                datatypes[h] = 'INT'
+                binlog_change_at_str = h
+            else:
+                datatypes[h] = 'TEXT'
 
         fd, temp_result = tempfile.mkstemp()
-        # FIX line 1: field larger than field limit error
-        # as proposed here https://stackoverflow.com/questions/15063936/csv-error-field-larger-than-field-limit-131072
-        csv.field_size_limit(sys.maxsize)
-        with open(temp_result, 'w+', newline='', encoding='utf-8') as out_file, open(table_path, 'rb') as inp:
-            writer = csv.DictWriter(out_file, fieldnames=header, lineterminator='\n')
-            reader = csv.DictReader(core.utils.reverse_readline(inp, buf_size=buffer_size), fieldnames=header)
-            writer.writeheader()
-            for row in reader:
-                if not row:
-                    logging.warning("Empty row in result")
-                    continue
-                pkey_hash = create_pkey_hash(row)
-                if pkey_hash in pkey_hashes:
-                    continue
+        temp_db = tempfile.mkdtemp()
+        primary_keys_str = ','.join(primary_keys)
 
-                pkey_hashes.add(pkey_hash)
-
-                if list(row.values()) != header:
-                    writer.writerow(row)
+        import duckdb
+        duckdb.connect(os.path.join(temp_db, 'file.db'))
+        sql = f"""
+               CREATE TABLE DEDUPE_TMP AS SELECT *,  
+               ROW_NUMBER() OVER (PARTITION BY {primary_keys_str} 
+               ORDER BY "{binlog_change_at_str}"::INT DESC) as __TMP_ROW_NUMBER
+                                           FROM
+                                              read_csv_auto('{table_path}', header=true, columns={datatypes})"""
+        duckdb.sql(sql)
+        duckdb.sql("DELETE FROM DEDUPE_TMP WHERE __TMP_ROW_NUMBER >1")
+        duckdb.sql("ALTER TABLE DEDUPE_TMP DROP COLUMN __TMP_ROW_NUMBER")
+        duckdb.sql(
+            f"COPY (SELECT * FROM DEDUPE_TMP ORDER BY {binlog_change_at_str}) "
+            f"TO '{temp_result}' (HEADER, DELIMITER ',');")
 
         os.remove(table_path)
         shutil.move(temp_result, table_path)

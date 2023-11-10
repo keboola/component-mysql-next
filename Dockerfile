@@ -13,7 +13,9 @@ RUN apt-get install -y \
     build-essential \
     curl \
     libssl-dev \
-    openssl
+    openssl \
+    libopenblas-dev
+
 
 # Get Rust
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
@@ -22,11 +24,12 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN pip install flake8
 
-
 # requirements
 RUN pypy -m ensurepip
+RUN pypy -m pip install -U pip
 RUN pypy -m pip install -U pip wheel
 RUN pypy -m pip install --upgrade pip
+RUN pypy -m pip install duckdb==0.7.0
 RUN pypy -m pip install -r /code/requirements.txt
 
 WORKDIR /code/
