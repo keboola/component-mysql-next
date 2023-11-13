@@ -1167,16 +1167,13 @@ class Component(KBCEnvHandler):
                 datatypes[h] = 'TEXT'
 
         fd, temp_result = tempfile.mkstemp()
-        temp_db = tempfile.mkdtemp()
         primary_keys_str = ','.join(primary_keys)
 
-        import duckdb
-        duckdb.connect(os.path.join(temp_db, 'file.db'))
         ws_client = DuckDBClient()
         with ws_client.connect():
             sql = f"""
-                   CREATE TABLE DEDUPE_TMP AS SELECT *,  
-                   ROW_NUMBER() OVER (PARTITION BY {primary_keys_str} 
+                   CREATE TABLE DEDUPE_TMP AS SELECT *,
+                   ROW_NUMBER() OVER (PARTITION BY {primary_keys_str}
                    ORDER BY "{binlog_change_at_str}"::INT DESC) as __TMP_ROW_NUMBER
                                                FROM
                                                   read_csv_auto('{table_path}', header=true, columns={datatypes})"""

@@ -26,6 +26,9 @@ WORKDIR /tmp
 RUN wget https://github.com/duckdb/duckdb/releases/download/v0.9.1/duckdb_odbc-linux-amd64.zip
 RUN mkdir duckdb_odbc
 RUN unzip duckdb_odbc-linux-amd64.zip -d duckdb_odbc
+# replace arch64 build driver (MAC)
+RUN wget https://github.com/duckdb/duckdb/releases/download/v0.9.1/duckdb_odbc-linux-aarch64.zip
+RUN unzip -o duckdb_odbc-linux-aarch64.zip -d duckdb_odbc
 WORKDIR /tmp/duckdb_odbc
 
 RUN bash unixodbc_setup.sh -s

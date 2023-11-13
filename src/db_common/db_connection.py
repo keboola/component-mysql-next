@@ -227,18 +227,17 @@ class ODBCConnection(DbConnection):
                                           {"query": query, "parameters": bind_parameters}) from error
 
         try:
-            if cursor.rowcount > 0:
-                try:
-                    for res in cursor.fetchall():
-                        yield res
-                except pypyodbc.ProgrammingError as e:
-                    # empty result
-                    if 'Invalid cursor state' in str(e):
-                        yield []
-                    else:
-                        raise
-
-            else:
+            try:
+                for res in cursor.fetchall():
+                    yield res
+            except pypyodbc.ProgrammingError as e:
+                # empty result
+                if 'Invalid cursor state' in str(e):
+                    yield []
+                else:
+                    raise
+            except TypeError:
                 yield []
+
         except Exception as e:
             raise e
