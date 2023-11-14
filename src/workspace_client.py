@@ -86,6 +86,9 @@ class DuckDBClient(WorkspaceStagingClient):
         logging.info("Connecting to database.")
         try:
             self._connection.connect()
+            self.execute_query("SET temp_directory	='/tmp/dbtmp';")
+            # self.execute_query("SET threads = 1;")
+            self.execute_query("SET memory_limit='2GB';")
             yield self
 
         except Exception as e:
