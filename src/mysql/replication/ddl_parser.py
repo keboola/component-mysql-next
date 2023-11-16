@@ -59,6 +59,9 @@ class AlterStatementParser:
             return False
         if statement.tokens[idx].normalized == 'INDEX':
             return False
+            return False
+        if statement.tokens[idx].normalized == 'KEY':
+            return False
 
         return True
 
