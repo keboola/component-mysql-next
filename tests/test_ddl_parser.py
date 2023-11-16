@@ -478,6 +478,24 @@ class TestComponent(unittest.TestCase):
 
         self.assertEqual([change1, change2, change3], table_changes)
 
+    def test_drop_key(self):
+        drop = """ALTER TABLE `ttt`.`delivery_menus` DROP KEY `dmb_id`"""
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([], table_changes)
+
+    def test_drop_column_key(self):
+        drop = """ALTER TABLE `ttt`.`delivery_menus` DROP `KEY`"""
+
+        change = TableSchemaChange(TableChangeType.DROP_COLUMN,
+                                   table_name='delivery_menus',
+                                   schema='ttt',
+                                   column_name='KEY',
+                                   query=drop)
+        table_changes = self.parser.get_table_changes(drop, '')
+
+        self.assertEqual([change], table_changes)
+
 
 if __name__ == "__main__":
     # import sys;sys.argv = ['', 'Test.testName']
