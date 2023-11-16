@@ -1,4 +1,4 @@
-version: "2"
+version: "3.3"
 services:
   app: &app
     build: .
@@ -8,7 +8,7 @@ services:
       MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
       MYSQL_DB_USER: root
       MYSQL_DB_PASSWORD: rootpassword
-      MYSQL_DB_DATABASE: test
+      MYSQL_DB_DATABASE: cdc
       MYSQL_DB_PORT: 3306
     links:
       - mysql
@@ -16,26 +16,48 @@ services:
   dev:
     <<: *app
     volumes:
-        - ./:/code
-        - ./data:/data
+      - ./:/code
+      - ./data:/data
     environment:
       - KBC_DATADIR=/data
       - KBC_CONFIGID=12345
       - KBC_COMPONENTID=kds-team.ex-mysql-next
   mysql:
     image: mysql:5.7.12
-    command: mysqld --local-infile --port=3306 --default-authentication-plugin=mysql_native_password
+    command: --local-infile --datadir=/var/lib/mysql --server-id=1 --log-bin=/var/lib/mysql/mysql-bin.log --binlog_do_db=cdc
     environment:
-      MYSQL_DATABASE: test
+      MYSQL_DATABASE: cdc
       MYSQL_ROOT_PASSWORD: rootpassword
+  wait:
+    image: waisbrot/wait
+    depends_on:
+      - mysql
+    environment:
+      - TARGETS=mysql:3306
+      - TIMEOUT=200
   test:
     # Use to run flake8 and unittests checks
-    build: .
+    <<: *app
+    links:
+      - mysql
     volumes:
       - ./:/code
-      - ./data:/data
     environment:
-      - KBC_DATADIR=./data
+      MYSQL_DB_HOST: mysql
+      MYSQL_DB_SSL_HOST: mysql-ssl
+      MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
+      MYSQL_DB_USER: root
+      MYSQL_DB_PASSWORD: rootpassword
+      MYSQL_DB_DATABASE: cdc
+      MYSQL_DB_PORT: 3306
+      KBC_CONFIGID: 12345
+      KBC_COMPONENTID: kds-team.ex-mysql-next
+      SNFL_WORKSPACE_HOST: ${SNFL_WORKSPACE_HOST}
+      SNFL_WORKSPACE_USER: ${SNFL_WORKSPACE_USER}
+      SNFL_WORKSPACE_PASSWORD: ${SNFL_WORKSPACE_PASSWORD}
+      SNFL_WORKSPACE_DATABASE: ${SNFL_WORKSPACE_DATABASE}
+      SNFL_WORKSPACE_SCHEMA: ${SNFL_WORKSPACE_SCHEMA}
+      SNFL_WORKSPACE_WAREHOUSE: ${SNFL_WORKSPACE_WAREHOUSE}
     command:
       - /bin/sh
       - /code/scripts/build_and_test.sh

@@ -47,16 +47,9 @@ venv/
 ENV/
 virtualenv/
 
-*.manifest
-*.spec
-*.json
-!output_config.json
-*.txt
-*.xml
-process_mappings.py
 
 # Handling for data path
-data/
+/data/
 
 # VSCode Folder
 .vscode/

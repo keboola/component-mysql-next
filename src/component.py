@@ -33,7 +33,6 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
     ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
-
 from ssh.ssh_utils import generate_ssh_key_pair
 from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
@@ -579,8 +578,8 @@ def write_schema_message(catalog_entry, message_store=None, bookmark_properties=
 class Component(ComponentBase):
     """Keboola extractor component."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, data_path_override: str = None):
+        super().__init__(data_path_override=data_path_override)
 
         self.params: dict
 
@@ -600,7 +599,7 @@ class Component(ComponentBase):
         }
         self._snowflake_client = SnowflakeClient(**snfwlk_credentials)
 
-    def _init_configuration(self):
+    def init_configuration(self):
         logging.info('Loading configuration...')
         if not is_legacy_config(self.configuration.parameters):
             self.validate_configuration_parameters(Configuration.get_dataclass_required_parameters())
@@ -618,7 +617,7 @@ class Component(ComponentBase):
         # TODO: Update to more clear environment variable; used must set local time to UTC.
         os.environ['TZ'] = 'UTC'
 
-    def _init_connection_params(self):
+    def init_connection_params(self):
 
         if not is_legacy_config(self.configuration.parameters):
             cfg = Configuration.load_from_dict(self.configuration.parameters)
@@ -679,8 +678,8 @@ class Component(ComponentBase):
 
     def run(self):
         """Execute main component extraction process."""
-        self._init_configuration()
-        self._init_connection_params()
+        self.init_configuration()
+        self.init_connection_params()
         self._init_workspace_client()
 
         file_input_path = self._check_file_inputs()  # noqa
@@ -1683,13 +1682,13 @@ class Component(ComponentBase):
     # ##### SYNC ACTIONS
     @sync_action('testConnection')
     def test_connection(self):
-        self._init_connection_params()
+        self.init_connection_params()
         with self.init_mysql_client() as client:
             client.ping()
 
     @sync_action('get_schemas')
     def get_schemas(self):
-        self._init_connection_params()
+        self.init_connection_params()
         with self.init_mysql_client() as client:
             schemas = mysql.client.get_schemas(client)
             return [
@@ -1698,7 +1697,7 @@ class Component(ComponentBase):
 
     @sync_action('get_tables')
     def get_tables(self):
-        self._init_connection_params()
+        self.init_connection_params()
         with self.init_mysql_client() as client:
             params = self.configuration.parameters
             databases = params.get(KEY_DATABASES) or params.get('source_settings', {}).get('schemas')

@@ -1,14 +1,16 @@
-version: "2"
+version: "3.3"
 services:
   app: &app
-    build: ./Dockerfile_dev_mac
+    build:
+      context: .
+      dockerfile: Dockerfile_dev_mac
     environment:
       MYSQL_DB_HOST: mysql
       MYSQL_DB_SSL_HOST: mysql-ssl
       MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
       MYSQL_DB_USER: root
       MYSQL_DB_PASSWORD: rootpassword
-      MYSQL_DB_DATABASE: test
+      MYSQL_DB_DATABASE: cdc
       MYSQL_DB_PORT: 3306
     links:
       - mysql
@@ -16,26 +18,50 @@ services:
   dev:
     <<: *app
     volumes:
-        - ./:/code
-        - ./data:/data
+      - ./:/code
+      - ./data:/data
     environment:
       - KBC_DATADIR=/data
       - KBC_CONFIGID=12345
       - KBC_COMPONENTID=kds-team.ex-mysql-next
   mysql:
     image: mysql:5.7.12
-    command: mysqld --local-infile --port=3306 --default-authentication-plugin=mysql_native_password
+    command: --local-infile --datadir=/var/lib/mysql --server-id=1 --log-bin=/var/lib/mysql/mysql-bin.log --binlog_do_db=cdc
     environment:
-      MYSQL_DATABASE: test
+      MYSQL_DATABASE: cdc
       MYSQL_ROOT_PASSWORD: rootpassword
+  wait:
+    image: waisbrot/wait
+    depends_on:
+      - mysql
+    environment:
+      - TARGETS=mysql:3306
+      - TIMEOUT=200
   test:
     # Use to run flake8 and unittests checks
-    build: ./Dockerfile_dev_mac
+    <<: *app
+    links:
+      - mysql
     volumes:
       - ./:/code
-      - ./data:/data
     environment:
-      - KBC_DATADIR=./data
+      MYSQL_DB_HOST: mysql
+      MYSQL_DB_SSL_HOST: mysql-ssl
+      MYSQL_DB_SSL_BAD_CN_HOST: mysql-different-cn
+      MYSQL_DB_USER: root
+      MYSQL_DB_PASSWORD: rootpassword
+      MYSQL_DB_DATABASE: cdc
+      MYSQL_DB_PORT: 3306
+      KBC_CONFIGID: 12345
+      KBC_COMPONENTID: kds-team.ex-mysql-next
+
+      SNFL_WORKSPACE_HOST: keboola.snowflakecomputing.com
+      SNFL_WORKSPACE_USER: SAPI_WORKSPACE_742034376
+      SNFL_WORKSPACE_PASSWORD: HGZjP7bzDqaMAZqqBr3NC3fU9ACYBHrg
+      SNFL_WORKSPACE_DATABASE: SAPI_5415
+      SNFL_WORKSPACE_SCHEMA: WORKSPACE_742034376
+      SNFL_WORKSPACE_WAREHOUSE: KEBOOLA_PROD
+
     command:
       - /bin/sh
       - /code/scripts/build_and_test.sh

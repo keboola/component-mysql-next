@@ -1,0 +1,62 @@
+{
+  "parameters": {
+    "debug": true,
+     "db_settings": {
+      "host": "{{env.MYSQL_DB_HOST}}",
+      "port": 3306,
+      "user": "{{env.MYSQL_DB_USER}}",
+      "#password": "{{env.MYSQL_DB_PASSWORD}}",
+      "use_ssh": false
+    },
+    "destination": {
+      "load_type": "incremental_load",
+      "outputBucket": ""
+    },
+    "sync_options": {
+      "handle_binary": "plain",
+      "snapshot_mode": "initial"
+    },
+    "source_settings": {
+      "tables": [
+        "{{env.MYSQL_DB_DATABASE}}.sales"
+      ],
+      "schemas": [
+        "{{env.MYSQL_DB_DATABASE}}"
+      ]
+    },
+    "advanced_options": {
+      "max_execution_time": "",
+      "show_binary_log_config": {
+        "method": "direct"
+      }
+    }
+  },
+  "authorization": {
+    "workspace": {
+      "host": "{{env.SNFL_WORKSPACE_HOST}}",
+      "user": "{{env.SNFL_WORKSPACE_USER}}",
+      "password": "{{env.SNFL_WORKSPACE_PASSWORD}}",
+      "database": "{{env.SNFL_WORKSPACE_DATABASE}}",
+      "schema": "{{env.SNFL_WORKSPACE_SCHEMA}}",
+      "warehouse": "{{env.SNFL_WORKSPACE_WAREHOUSE}}"
+    },
+    "oauth_api": {
+      "id": "OAUTH_API_ID",
+      "credentials": {
+        "id": "main",
+        "authorizedFor": "Myself",
+        "creator": {
+          "id": "1234",
+          "description": "me@keboola.com"
+        },
+        "created": "2016-01-31 00:13:30",
+        "#data": "{\"refresh_token\":\"XXXXX-TOKEN\"}",
+        "oauthVersion": "2.0",
+        "appKey": "12345",
+        "#appSecret": "123qwe-CiN"
+      }
+    }
+  },
+  "action": "run",
+  "image_parameters": {}
+}
