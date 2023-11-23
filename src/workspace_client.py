@@ -42,7 +42,6 @@ class SnowflakeClient:
             self._connection.connect()
             list(self._connection.perform_query("ALTER SESSION SET JDBC_QUERY_RESULT_FORMAT='JSON'"))
             yield self
-
         except Exception as e:
             raise ExtractorUserException(f"Login to database failed, please check your credentials. Detail: {e}") from e
         finally:
@@ -53,8 +52,8 @@ class SnowflakeClient:
         self.close_connection()
 
     def close_connection(self):
-        logging.debug("Closing the outer connection.")
-        self._connection.connection.close()
+        logging.info("Closing the outer connection.")
+        # self._connection.connection.close()
 
     def execute_query(self, query):
         """
