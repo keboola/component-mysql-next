@@ -1,9 +1,9 @@
 import csv
 import datetime
 import glob
-import logging
 import os
 import shutil
+import tempfile
 import unittest
 
 from datadirtest import DataDirTester, TestDataDir
@@ -52,17 +52,27 @@ class TestDatabaseEnvironment:
 
 class CustomDatadirTest(TestDataDir):
     def setUp(self):
-        db_client = None
+
         try:
             comp = Component(data_path_override=self.source_data_dir)
             comp.init_configuration()
             comp.init_connection_params()
             db_client = TestDatabaseEnvironment(MySQLConnection(comp.mysql_config_params))
         except Exception as e:
-            logging.warning(e)
+            raise e
 
         self.context_parameters['db_client'] = db_client
         super().setUp()
+
+    def _create_temporary_copy(self):
+        temp_dir = tempfile.gettempdir()
+        dst_path = os.path.join(temp_dir, 'test_data')
+        if os.path.exists(dst_path):
+            shutil.rmtree(dst_path)
+        if not os.path.exists(self.orig_dir):
+            raise ValueError(f"{self.orig_dir} does not exist. ")
+        shutil.copytree(self.orig_dir, dst_path)
+        return dst_path
 
     @staticmethod
     def _remove_column_slice(table_path: str, column_slice: slice):
