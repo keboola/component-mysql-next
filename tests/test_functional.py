@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
 
 from datadirtest import DataDirTester, TestDataDir
 from freezegun import freeze_time
@@ -65,7 +66,7 @@ class CustomDatadirTest(TestDataDir):
         super().setUp()
 
     def _create_temporary_copy(self):
-        temp_dir = tempfile.gettempdir()
+        temp_dir = tempfile.mkdtemp(prefix=Path(self.orig_dir).name, dir='/tmp')
         dst_path = os.path.join(temp_dir, 'test_data')
         if os.path.exists(dst_path):
             shutil.rmtree(dst_path)
