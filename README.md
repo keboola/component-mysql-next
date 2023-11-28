@@ -145,6 +145,9 @@ it is necessary to select Binary data handling strategy:
 - **hex** - data is converted to hex representation of binary string using bytes.hex() method,
 - **base64** - data is converted to a base64 string, using base64.b64encode() method.
 
+#### Geometry types
+
+Geometry types are returned as Python bytestring, e.g.  `b'\x00\x00\x00\x00\x01\x03\00\x00\xf0?\x00\x00\x00\x00\x00\x00\0\x00\x00\x00\xf0?'`
 
 ### Data Source
 

@@ -222,9 +222,9 @@ class ODBCConnection(DbConnection):
         try:
             cursor.execute(query, bind_parameters)
         except pypyodbc.DatabaseError as e:
-            error, = e.args
-            raise ConnectionUserException(f"Query failed with error: {error.message}",
-                                          {"query": query, "parameters": bind_parameters}) from error
+            error_code, message = e.args
+            raise ConnectionUserException(f"Query failed with error: {error_code}: {message}",
+                                          {"query": query, "parameters": bind_parameters}) from e
 
         try:
             if cursor.rowcount > 0:
