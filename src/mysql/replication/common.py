@@ -28,7 +28,7 @@ TABLE_HEADERS_PATH = os.path.join(tempfile.gettempdir(), 'table_headers.csv')
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
-CSV_CHUNK_SIZE = 1000
+CSV_CHUNK_SIZE = 50000
 SYNC_STARTED_AT = datetime.datetime.utcnow().strftime(utils.DATETIME_FMT_SAFE)
 # TODO: strip _ only when NATIVE TYPES are enabled
 # originally
