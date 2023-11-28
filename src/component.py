@@ -4,7 +4,6 @@ import base64
 import binascii
 import copy
 import csv
-import glob
 import itertools
 import json
 import logging
@@ -17,6 +16,7 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext, contextmanager
 from io import StringIO
+from pathlib import Path
 from typing import List
 
 from cryptography.utils import CryptographyDeprecationWarning
@@ -81,6 +81,7 @@ SUPPORTED_STRING_TYPES = {'char', 'enum', 'longtext', 'mediumtext', 'text', 'var
 SUPPORTED_BLOB_TYPES = {"tinyblob", "blob", "mediumblob"}
 SUPPORTED_FLOAT_TYPES = {'double', 'float'}
 SUPPORTED_DATETIME_TYPES = {'date', 'datetime', 'time', 'timestamp'}
+SUPPORTED_GEOM_TYPES = {'polygon'}
 SET_TYPE = 'set'
 BYTES_FOR_INTEGER_TYPE = {
     'tinyint': 1,
@@ -163,6 +164,9 @@ def schema_for_column(c):
 
     elif data_type in BINARY_TYPES:
         result.type = ['null', 'binary']
+
+    elif data_type in SUPPORTED_GEOM_TYPES:
+        result.type = ['null', 'string']
 
     else:
         result = Schema(None, inclusion='unsupported', description='Unsupported column type {}'.format(column_type))
@@ -961,12 +965,13 @@ class Component(ComponentBase):
         logging.info(f"Uploading data into table {result_table_name} in stage")
         if is_full_sync:
             # chunks if fullsync
-            tables = glob.glob(os.path.join(table_path, '*.csv'))
+            file_name = Path(table_path).name
+            file_pattern = f"{table_path}/{file_name[:-4]}*{file_name[-4:]}"
+            # tables = glob.glob(os.path.join(table_path, '*.csv'))
             file_format = self._snowflake_client.DEFAULT_FILE_FORMAT.copy()
             file_format['SKIP_HEADER'] = 0
-            for table in tables:
-                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table,
-                                                                     file_format=file_format)
+            self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, file_pattern,
+                                                                 file_format=file_format)
 
         else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)
