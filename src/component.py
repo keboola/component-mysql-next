@@ -4,6 +4,7 @@ import base64
 import binascii
 import copy
 import csv
+import glob
 import itertools
 import json
 import logging
@@ -16,7 +17,6 @@ from collections import namedtuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext, contextmanager
 from io import StringIO
-from pathlib import Path
 from typing import List
 
 from cryptography.utils import CryptographyDeprecationWarning
@@ -765,31 +765,31 @@ class Component(ComponentBase):
                 tables_and_columns_order = {t: [col.upper() for col in v] for t, v in
                                             message_store.full_sync_headers.items()}
 
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                    futures = {
-                        executor.submit(self._write_result_table, entry, message_store,
-                                        tables_and_columns_order): entry for
-                        entry in [entry for entry in catalog.to_dict()['streams']
-                                  if entry['metadata'][0]['metadata'].get('selected')]
-                    }
-                    for future in as_completed(futures):
-                        if future.exception():
-                            raise UserException(
-                                f"Could not create table: {futures[future].get('result_table_name')},"
-                                f" reason: {future.exception()}") from future.exception()
-
-                        future.result()
-
-                    # write schema changes if present.
                 with self._snowflake_client.connect():
-                    chc_path = os.path.join(self.tables_out_path, 'SCHEMA_CHANGES.csv')
-                    if os.path.exists(chc_path):
-                        self._create_table_in_stage('SCHEMA_CHANGES', chc_path,
-                                                    primary_key_columns=['column_name', 'query', 'timestamp'],
-                                                    table_column_metadata=self.get_schema_changes_metadata(),
-                                                    is_full_sync=False,
-                                                    dedupe=False)
-                self.write_state_file(message_store.get_state())
+                    with ThreadPoolExecutor(max_workers=10) as executor:
+                        futures = {
+                            executor.submit(self._write_result_table, entry, message_store,
+                                            tables_and_columns_order): entry for
+                            entry in [entry for entry in catalog.to_dict()['streams']
+                                      if entry['metadata'][0]['metadata'].get('selected')]
+                        }
+                        for future in as_completed(futures):
+                            if future.exception():
+                                raise UserException(
+                                    f"Could not create table: {futures[future].get('result_table_name')},"
+                                    f" reason: {future.exception()}") from future.exception()
+
+                            future.result()
+
+                        # write schema changes if present.
+                        chc_path = os.path.join(self.tables_out_path, 'SCHEMA_CHANGES.csv')
+                        if os.path.exists(chc_path):
+                            self._create_table_in_stage('SCHEMA_CHANGES', chc_path,
+                                                        primary_key_columns=['column_name', 'query', 'timestamp'],
+                                                        table_column_metadata=self.get_schema_changes_metadata(),
+                                                        is_full_sync=False,
+                                                        dedupe=False)
+                    self.write_state_file(message_store.get_state())
 
                 # QA: Walk through output destination
                 self.walk_path(path=self.tables_out_path, is_pre_manifest=False)
@@ -906,9 +906,9 @@ class Component(ComponentBase):
         logging.info("Ordering columns for sliced upload.")
         # order metadata
         table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
-        with self._snowflake_client.connect():
-            self._create_table_in_stage(result_table_name, table_specific_sliced_path,
-                                        primary_keys, table_column_metadata, output_is_sliced)
+
+        self._create_table_in_stage(result_table_name, table_specific_sliced_path,
+                                    primary_keys, table_column_metadata, output_is_sliced)
 
         self.create_manifests(entry, self.tables_out_path,
                               columns=list(table_column_metadata.keys()),
@@ -965,13 +965,12 @@ class Component(ComponentBase):
         logging.info(f"Uploading data into table {result_table_name} in stage")
         if is_full_sync:
             # chunks if fullsync
-            file_name = Path(table_path).name
-            file_pattern = f"{table_path}/{file_name[:-4]}*{file_name[-4:]}"
-            # tables = glob.glob(os.path.join(table_path, '*.csv'))
+            tables = glob.glob(os.path.join(table_path, '*.csv'))
             file_format = self._snowflake_client.DEFAULT_FILE_FORMAT.copy()
             file_format['SKIP_HEADER'] = 0
-            self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, file_pattern,
-                                                                 file_format=file_format)
+            for table in tables:
+                self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table,
+                                                                     file_format=file_format)
 
         else:
             self._snowflake_client.copy_csv_into_table_from_file(result_table_name, columns, column_types, table_path)

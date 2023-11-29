@@ -2,9 +2,6 @@ import logging
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-import backoff
-import pypyodbc
-
 from db_common.db_connection import ODBCConnection
 
 
@@ -136,7 +133,6 @@ class SnowflakeClient:
 
         self.execute_query(query)
 
-    @backoff.on_exception(backoff.expo, pypyodbc.Error, max_tries=3)
     def copy_csv_into_table_from_file(self, table_name: str, table_columns: list[str], column_types: list[dict],
                                       csv_file_path: str,
                                       file_format: dict = None):
