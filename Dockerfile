@@ -22,8 +22,8 @@ RUN apt-get install -y \
 
 # install Snowflake odbc
 WORKDIR /tmp
-RUN wget https://sfc-repo.snowflakecomputing.com/odbc/linux/3.1.1/snowflake-odbc-3.1.1.x86_64.deb
-RUN dpkg -i snowflake-odbc-3.1.1.x86_64.deb; apt-get install -y -f
+RUN wget https://sfc-repo.snowflakecomputing.com/odbc/linux/3.1.3/snowflake-odbc-3.1.3.x86_64.deb
+RUN dpkg -i snowflake-odbc-3.1.3.x86_64.deb; apt-get install -y -f
 
 
 # Get Rust
