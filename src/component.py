@@ -765,24 +765,23 @@ class Component(ComponentBase):
                 tables_and_columns_order = {t: [col.upper() for col in v] for t, v in
                                             message_store.full_sync_headers.items()}
 
-                with self._snowflake_client.connect():
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    futures = {
+                        executor.submit(self._write_result_table, entry, message_store,
+                                        tables_and_columns_order): entry for
+                        entry in [entry for entry in catalog.to_dict()['streams']
+                                  if entry['metadata'][0]['metadata'].get('selected')]
+                    }
+                    for future in as_completed(futures):
+                        if future.exception():
+                            raise UserException(
+                                f"Could not create table: {futures[future].get('result_table_name')},"
+                                f" reason: {future.exception()}") from future.exception()
 
-                    with ThreadPoolExecutor(max_workers=10) as executor:
-                        futures = {
-                            executor.submit(self._write_result_table, entry, message_store,
-                                            tables_and_columns_order): entry for
-                            entry in [entry for entry in catalog.to_dict()['streams']
-                                      if entry['metadata'][0]['metadata'].get('selected')]
-                        }
-                        for future in as_completed(futures):
-                            if future.exception():
-                                raise UserException(
-                                    f"Could not create table: {futures[future].get('result_table_name')},"
-                                    f" reason: {future.exception()}") from future.exception()
-
-                            future.result()
+                        future.result()
 
                     # write schema changes if present.
+                with self._snowflake_client.connect():
                     chc_path = os.path.join(self.tables_out_path, 'SCHEMA_CHANGES.csv')
                     if os.path.exists(chc_path):
                         self._create_table_in_stage('SCHEMA_CHANGES', chc_path,
@@ -907,8 +906,9 @@ class Component(ComponentBase):
         logging.info("Ordering columns for sliced upload.")
         # order metadata
         table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
-        self._create_table_in_stage(result_table_name, table_specific_sliced_path,
-                                    primary_keys, table_column_metadata, output_is_sliced)
+        with self._snowflake_client.connect():
+            self._create_table_in_stage(result_table_name, table_specific_sliced_path,
+                                        primary_keys, table_column_metadata, output_is_sliced)
 
         self.create_manifests(entry, self.tables_out_path,
                               columns=list(table_column_metadata.keys()),

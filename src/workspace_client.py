@@ -151,6 +151,7 @@ class SnowflakeClient:
 
         # create temp stage
         self.create_temp_stage(table_name, file_format)
+        self.execute_query('commit')
         # copy to stage
         stage_sql = f"PUT file://{csv_file_path} @\"{table_name}\" AUTO_COMPRESS=TRUE;"
         self.execute_query(stage_sql)
