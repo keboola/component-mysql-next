@@ -280,7 +280,7 @@ def sync_query(cursor, catalog_entry, state, select_sql, columns, stream_version
     return rows_saved
 
 
-def _add_kbc_metadata_to_rows(rows, catalog_entry):
+def _add_kbc_metadata_to_schema(catalog_entry):
     """Add metadata for Keboola. Can presume not there since should only be called for full sync."""
     # Add headers to schema definition (data is added in write step)
     catalog_entry.schema.properties[KBC_SYNCED] = core.schema.Schema(type=["null", "string"], format="date-time")
@@ -288,7 +288,16 @@ def _add_kbc_metadata_to_rows(rows, catalog_entry):
     catalog_entry.schema.properties[BINLOG_CHANGE_AT] = core.schema.Schema(type=["null", "integer"])
     catalog_entry.schema.properties[BINLOG_READ_AT] = core.schema.Schema(type=["null", "integer"])
 
-    return rows
+
+def _create_headers(cursor):
+    # Fetch column names from first item in cursor description tuple
+    headers = list()
+    for i in cursor.description:
+        headers.append(i[0])
+    for column in KBC_METADATA_COLS:
+        headers.append(column)
+
+    return headers
 
 
 def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql, columns, stream_version,
@@ -307,61 +316,45 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
 
     try:
         cursor.execute(select_sql)
-        while has_more_data:
-            chunk_start = utils.now()
-            current_chunk += 1
 
-            query_output_rows = cursor.fetchmany(CSV_CHUNK_SIZE)
+        _add_kbc_metadata_to_schema(catalog_entry)
 
-            if query_output_rows:
-                number_of_rows = len(query_output_rows)
+        headers = _create_headers(cursor)
+        logging.debug(f'Headers of table {catalog_entry.table_name} = {headers}')
+        message_store.full_sync_headers[catalog_entry.table_name] = headers
 
-                # Add Keboola metadata columns
-                rows = _add_kbc_metadata_to_rows(query_output_rows, catalog_entry)
-                logging.debug('Fetched {} rows from query result'.format(number_of_rows))
+        destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv', '')
+        if not os.path.exists(destination_output_path):
+            os.mkdir(destination_output_path)
 
-                if current_chunk == 1:
+        csv_path = os.path.join(
+            destination_output_path, catalog_entry.table_name.upper() + '-' + str(current_chunk) + '.csv')
 
-                    # Fetch column names from first item in cursor description tuple
-                    headers = list()
-                    for i in cursor.description:
-                        headers.append(i[0])
-                    for column in KBC_METADATA_COLS:
-                        headers.append(column)
+        with open(csv_path, 'w', encoding='utf-8', newline='') as output_data_file:
+            writer = csv.DictWriter(output_data_file, fieldnames=headers, quoting=csv.QUOTE_MINIMAL)
 
-                    logging.debug(f'Headers of table {catalog_entry.table_name} = {headers}')
+            while has_more_data:
+                current_chunk += 1
+                chunk_start = utils.now()
+                query_output_rows = cursor.fetchmany(CSV_CHUNK_SIZE)
 
-                    message_store.full_sync_headers[catalog_entry.table_name] = headers
+                if query_output_rows:
+                    logging.debug(f'Fetched {len(query_output_rows)} rows from query result')
 
-                destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv',
-                                                       '')
+                    for row in query_output_rows:
+                        row_with_metadata = row + KBC_METADATA
+                        row_dict = dict(zip(headers, row_with_metadata))
+                        row_to_write = handle_binary_data(row_dict, catalog_entry.binary_columns,
+                                                          message_store.binary_data_handler, True)
+                        row_to_write = handle_boolean_data(row_to_write, catalog_entry.full_schema.properties)
+                        writer.writerow(row_to_write)
 
-                if not os.path.exists(destination_output_path):
-                    os.mkdir(destination_output_path)
-
-                csv_path = os.path.join(destination_output_path, catalog_entry.table_name.upper() + '-' +
-                                        str(current_chunk) + '.csv')
-
-                with open(csv_path, 'w', encoding='utf-8', newline='') as output_data_file:
-                    writer = csv.DictWriter(output_data_file, fieldnames=headers, quoting=csv.QUOTE_MINIMAL)
-                    for row in rows:
-                        rows_with_metadata = row + KBC_METADATA
-                        rows_dict = dict(zip(headers, rows_with_metadata))
-
-                        rows_to_write = handle_binary_data(rows_dict, catalog_entry.binary_columns,
-                                                           message_store.binary_data_handler, True)
-                        rows_to_write = handle_boolean_data(rows_to_write, catalog_entry.full_schema.properties)
-
-                        writer.writerow(rows_to_write)
-
-                chunk_end = utils.now()
-                chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
-                logging.info(
-                    'Chunk {} had processing time: {} seconds'.format(current_chunk, chunk_processing_duration))
-
-            else:
-                has_more_data = False
-
+                    chunk_end = utils.now()
+                    chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
+                    logging.info(
+                        f'Chunk {current_chunk} had processing time: {chunk_processing_duration} seconds')
+                else:
+                    has_more_data = False
     except Exception:
         logging.error('Failed to execute query {}'.format(query_string))
         raise
