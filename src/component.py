@@ -1083,19 +1083,9 @@ class Component(ComponentBase):
         binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)
-        key_properties = common.get_key_properties(catalog_entry)  # noqa
-
         if is_view:
             raise Exception(
-                "Unable to replicate stream({}) with binlog because it is a view.".format(catalog_entry.stream))
-
-        log_file = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_file')
-
-        log_pos = core.get_bookmark(state, catalog_entry.tap_stream_id, 'log_pos')
-
-        max_pk_values = core.get_bookmark(state, catalog_entry.tap_stream_id, 'max_pk_values')
-
-        last_pk_fetched = core.get_bookmark(state, catalog_entry.tap_stream_id, 'last_pk_fetched')  # noqa
+                f"Unable to replicate stream({catalog_entry.stream}) with binlog because it is a view.")
 
         write_schema_message(catalog_entry, message_store=message_store)
 
@@ -1105,33 +1095,17 @@ class Component(ComponentBase):
         table_schema = Component._build_schema_cache_from_catalog_entry(catalog_entry, full=True)
         state = core.update_schema_in_state(state, {catalog_entry.tap_stream_id: table_schema})
 
-        if log_file and log_pos and max_pk_values:
-            logging.info("Resuming initial full table sync for LOG_BASED stream %s", catalog_entry.tap_stream_id)
-            full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                         tables_destination=tables_destination, message_store=message_store)
+        logging.info(f"Performing initial full table sync for LOG_BASED table {catalog_entry.tap_stream_id}")
 
-        else:
-            logging.info("Performing initial full table sync for LOG_BASED table {}".format(
-                catalog_entry.tap_stream_id))
+        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
 
-            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
+        current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
+        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
-            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
-            state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
-
-            if full_table.sync_is_resumable(mysql_conn, catalog_entry):
-                # We must save log_file and log_pos across FULL_TABLE syncs when performing
-                # a resumable full table sync
-                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
-                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
-
-                full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                             tables_destination=tables_destination, message_store=message_store)
-            else:
-                full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                             tables_destination=tables_destination, message_store=message_store)
-                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
-                state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
+        full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                     tables_destination=tables_destination, message_store=message_store)
+        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
+        state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
     @staticmethod
     def _build_schema_cache_from_catalog_entry(catalog_entry, full=False):
