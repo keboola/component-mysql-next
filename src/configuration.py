@@ -126,7 +126,7 @@ class LoadType(str, Enum):
 class DestinationSettings(ConfigurationBase):
     load_type: LoadType = LoadType.incremental_load
     include_schema_name: bool = True
-    output_bucket: str = ''
+    outputBucket: str = ''
 
     @property
     def is_incremental_load(self) -> bool:
@@ -255,7 +255,7 @@ def convert_to_legacy(config: Configuration):
     legacy_cfg["fetchObjectsOnly"] = False
     legacy_cfg["storageMappingsFile"] = "mappings"
     legacy_cfg["appendMode"] = config.destination.load_type == LoadType.append_only
-    legacy_cfg[KEY_OUTPUT_BUCKET] = config.destination.output_bucket
+    legacy_cfg[KEY_OUTPUT_BUCKET] = config.destination.outputBucket
     legacy_cfg["debug"] = config.debug
     # tables
     legacy_cfg[KEY_DATABASES] = config.source_settings.schemas
