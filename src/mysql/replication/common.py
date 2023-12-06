@@ -28,7 +28,8 @@ TABLE_HEADERS_PATH = os.path.join(tempfile.gettempdir(), 'table_headers.csv')
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
-CSV_CHUNK_SIZE = 50000
+CSV_CHUNK_SIZE = 1000
+LOG_INTERVAL = 50000
 SYNC_STARTED_AT = datetime.datetime.utcnow().strftime(utils.DATETIME_FMT_SAFE)
 # TODO: strip _ only when NATIVE TYPES are enabled
 # originally
@@ -308,7 +309,6 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
     logging.info('Running query {}'.format(query_string))
 
     # Chunk Processing
-    has_more_data = True
     current_chunk = 0
 
     logging.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
@@ -333,28 +333,17 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
         with open(csv_path, 'w', encoding='utf-8', newline='') as output_data_file:
             writer = csv.DictWriter(output_data_file, fieldnames=headers, quoting=csv.QUOTE_MINIMAL)
 
-            while has_more_data:
-                current_chunk += 1
-                chunk_start = utils.now()
-                query_output_rows = cursor.fetchmany(CSV_CHUNK_SIZE)
+            for i, row in enumerate(cursor):
+                row_with_metadata = row + KBC_METADATA
+                row_dict = dict(zip(headers, row_with_metadata))
+                row_to_write = handle_binary_data(row_dict, catalog_entry.binary_columns,
+                                                  message_store.binary_data_handler, True)
+                row_to_write = handle_boolean_data(row_to_write, catalog_entry.full_schema.properties)
+                writer.writerow(row_to_write)
 
-                if query_output_rows:
-                    logging.debug(f'Fetched {len(query_output_rows)} rows from query result')
+                if not i % LOG_INTERVAL:
+                    logging.info(f'Processed {i} records')
 
-                    for row in query_output_rows:
-                        row_with_metadata = row + KBC_METADATA
-                        row_dict = dict(zip(headers, row_with_metadata))
-                        row_to_write = handle_binary_data(row_dict, catalog_entry.binary_columns,
-                                                          message_store.binary_data_handler, True)
-                        row_to_write = handle_boolean_data(row_to_write, catalog_entry.full_schema.properties)
-                        writer.writerow(row_to_write)
-
-                    chunk_end = utils.now()
-                    chunk_processing_duration = (chunk_end - chunk_start).total_seconds()
-                    logging.info(
-                        f'Chunk {current_chunk} had processing time: {chunk_processing_duration} seconds')
-                else:
-                    has_more_data = False
     except Exception:
         logging.error('Failed to execute query {}'.format(query_string))
         raise
