@@ -290,6 +290,11 @@ def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool 
             for (k, cols) in itertools.groupby(columns, lambda c: (c.table_schema, c.table_name)):
                 cols = list(cols)
                 (table_schema, table_name) = k
+                # between the time when we fetched columns and table info some tables may have been deleted
+                # TODO: do not discover entire catalogue (scan entire db)
+                if not table_info.get(table_schema, {}).get(table_name):
+                    continue
+
                 schema = Schema(type='object', properties={c.column_name: schema_for_column(c) for c in cols})
                 md = create_column_metadata(cols)
                 md_map = metadata.to_map(md)
