@@ -303,6 +303,7 @@ def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool 
 
                 is_view = table_info[table_schema][table_name]['is_view']
                 primary_keys = table_info[table_schema][table_name].get('primary_keys')
+                row_count = None
 
                 if table_schema in table_info and table_name in table_info[table_schema]:
                     row_count = table_info[table_schema][table_name].get('row_count')
@@ -329,8 +330,9 @@ def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool 
                     stream_name = f"{table_schema}_{table_name}".replace(".", "_")
                 entry = CatalogEntry(table=table_name, stream=stream_name, metadata=metadata.to_list(md_map),
                                      tap_stream_id=common.generate_tap_stream_id(table_schema, table_name),
-                                     schema=schema, primary_keys=primary_keys, database=table_schema,
-                                     binary_columns=binary_columns, include_schema_name=include_schema_name)
+                                     schema=schema, primary_keys=primary_keys, row_count=row_count,
+                                     database=table_schema, binary_columns=binary_columns,
+                                     include_schema_name=include_schema_name)
 
                 entries.append(entry)
 
@@ -470,6 +472,8 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
             stream=catalog_entry.stream,
             table=catalog_entry.table,
             include_schema_name=catalog_entry.include_schema_name,
+            primary_keys=catalog_entry.primary_keys,
+            row_count=catalog_entry.row_count,
             schema=Schema(
                 type='object',
                 properties={col: discovered_table.schema.properties[col]
