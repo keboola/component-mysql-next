@@ -302,7 +302,6 @@ def _create_headers(cursor):
 
 def sync_query_bulk(cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql,
                     params, tables_destination: str = None, message_store: core.MessageStore = None):
-    replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')  # noqa
 
     query_string = cursor.mogrify(select_sql, params)
     start_time = utils.now()
