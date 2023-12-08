@@ -300,18 +300,15 @@ def _create_headers(cursor):
     return headers
 
 
-def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql, columns, stream_version,
+def sync_query_bulk(cursor: pymysql.cursors.Cursor, catalog_entry, state, select_sql,
                     params, tables_destination: str = None, message_store: core.MessageStore = None):
     replication_key = core.get_bookmark(state, catalog_entry.tap_stream_id, 'replication_key')  # noqa
 
     query_string = cursor.mogrify(select_sql, params)
+    start_time = utils.now()
+
     logging.info('Running query {}'.format(query_string))
-
-    # Chunk Processing
-    current_chunk = 0
-
-    logging.info('Starting chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
-    all_chunks_start_time = utils.now()
+    logging.info(f'Starting processing for stream {catalog_entry.tap_stream_id}')
 
     try:
         cursor.execute(select_sql)
@@ -323,11 +320,10 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
         message_store.full_sync_headers[catalog_entry.table_name] = headers
 
         destination_output_path = os.path.join(tables_destination, catalog_entry.table_name.upper() + '.csv', '')
+        csv_path = os.path.join(destination_output_path, f'{catalog_entry.table_name.upper()}-1.csv')
+
         if not os.path.exists(destination_output_path):
             os.mkdir(destination_output_path)
-
-        csv_path = os.path.join(
-            destination_output_path, catalog_entry.table_name.upper() + '-' + str(current_chunk) + '.csv')
 
         with open(csv_path, 'w', encoding='utf-8', newline='') as output_data_file:
             writer = csv.DictWriter(output_data_file, fieldnames=headers, quoting=csv.QUOTE_MINIMAL)
@@ -344,13 +340,12 @@ def sync_query_bulk(conn, cursor: pymysql.cursors.Cursor, catalog_entry, state, 
                     logging.info(f'Processed {i} records')
 
     except Exception:
-        logging.error('Failed to execute query {}'.format(query_string))
+        logging.error(f'Failed to execute query {query_string}')
         raise
 
-    logging.info('Finished chunk processing for stream {}'.format(catalog_entry.tap_stream_id))
+    logging.info(f'Finished processing for stream {catalog_entry.tap_stream_id}')
 
-    all_chunks_end_time = utils.now()
-    full_chunk_processing_duration = (all_chunks_end_time - all_chunks_start_time).total_seconds()
-    logging.info('Total processing time: {} seconds'.format(full_chunk_processing_duration))
+    processing_duration = (utils.now() - start_time).total_seconds()
+    logging.info(f'Total processing time: {processing_duration} seconds')
 
     core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
