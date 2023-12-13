@@ -336,7 +336,7 @@ def sync_query_bulk(cursor: pymysql.cursors.Cursor, catalog_entry, state, select
                 writer.writerow(row_to_write)
 
                 if not i % LOG_INTERVAL:
-                    logging.info(f'Processed {i}/{catalog_entry.row_count} records')
+                    logging.info(f'Processed {i} records')
 
     except Exception:
         logging.error(f'Failed to execute query {query_string}')
