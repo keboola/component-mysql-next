@@ -270,7 +270,7 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
             if perform_resumable_sync:
                 logging.info("Full table sync is resumable based on primary key definition, replicating incrementally")
 
-                state = update_incremental_full_table_state(catalog_entry, state, cur)
+                state = update_incremental_full_table_state(catalog_entry, state, cursor)
                 pk_clause = generate_pk_clause(catalog_entry, state)
 
             select_sql += pk_clause
