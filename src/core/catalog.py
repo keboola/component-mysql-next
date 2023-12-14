@@ -152,6 +152,7 @@ class Catalog:
             entry.stream_alias = stream.get('stream_alias')
             entry.metadata = stream.get('metadata')
             entry.primary_keys = stream.get('primary_keys')
+            entry.row_count = stream.get('row_count')
             entry.replication_method = stream.get('replication_method')
             entry.binary_columns = stream.get('binary_columns')
             entry.include_schema_name = stream.get('include_schema_name')
