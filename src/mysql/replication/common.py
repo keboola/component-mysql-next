@@ -28,7 +28,7 @@ TABLE_HEADERS_PATH = os.path.join(tempfile.gettempdir(), 'table_headers.csv')
 original_convert_datetime = pymysql.converters.convert_datetime
 original_convert_date = pymysql.converters.convert_date
 
-LOG_INTERVAL = 50000
+LOG_INTERVAL = 200_000
 SYNC_STARTED_AT = datetime.datetime.utcnow().strftime(utils.DATETIME_FMT_SAFE)
 # TODO: strip _ only when NATIVE TYPES are enabled
 # originally
@@ -336,7 +336,7 @@ def sync_query_bulk(cursor: pymysql.cursors.Cursor, catalog_entry, state, select
                 writer.writerow(row_to_write)
 
                 if not i % LOG_INTERVAL:
-                    logging.info(f'Processed {i} records')
+                    logging.info(f'Processed {i} records from table {catalog_entry.table_name}')
 
     except Exception:
         logging.error(f'Failed to execute query {query_string}')
