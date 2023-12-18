@@ -1086,8 +1086,8 @@ class Component(ComponentBase):
 
         core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
-    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
-                                  message_store: core.MessageStore = None):
+    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns,
+                                  tables_destination: str = None, message_store: core.MessageStore = None):
         binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)

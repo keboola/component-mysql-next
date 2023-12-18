@@ -167,8 +167,9 @@ def get_replicas(mysql_conn) -> list[str]:
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             # TODO: check returned value
-            replicas = _get_replicas(cur, 'SHOW REPLICAS;') \
-                            or _get_replicas(cur, 'SHOW SLAVE HOSTS;')
+            replicas = (
+                _get_replicas(cur, 'SHOW REPLICAS;')
+                or _get_replicas(cur, 'SHOW SLAVE HOSTS;'))
 
             if replicas is None:
                 raise AppError("Couldn't fetch replicas.")
