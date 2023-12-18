@@ -94,6 +94,22 @@ class DbOptions(ConfigurationBase):
 
 
 @dataclass
+class ReplicaDbOptions(ConfigurationBase):
+    sync_from_replica: bool
+    host_port: str
+    user: str
+    pswd_password: str
+
+    @property
+    def host(self) -> str:
+        return self.host_port.split(':')[0]
+
+    @property
+    def port(self) -> int:
+        return int(self.host_port.split(':')[1])
+
+
+@dataclass
 class SourceSettings(ConfigurationBase):
     schemas: list[str] = dataclasses.field(default_factory=list)
     tables: list[str] = dataclasses.field(default_factory=list)
@@ -137,6 +153,7 @@ class DestinationSettings(ConfigurationBase):
 class Configuration(ConfigurationBase):
     # Connection options
     db_settings: DbOptions
+    replica_db_settings: ReplicaDbOptions
     advanced_options: DbAdvancedParameters = dataclasses.field(default_factory=lambda: ConfigTree({}))
     source_settings: SourceSettings = dataclasses.field(default_factory=lambda: ConfigTree({}))
     sync_options: SyncOptions = dataclasses.field(default_factory=lambda: ConfigTree())
@@ -153,6 +170,12 @@ KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
 KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
+KEY_SYNC_FROM_REPLICA = 'sync_from_replica'
+KEY_MYSQL_REPLICA_HOST_PORT = 'replica_host_port'
+KEY_MYSQL_REPLICA_HOST = 'replica_host'
+KEY_MYSQL_REPLICA_PORT = 'replica_port'
+KEY_MYSQL_REPLICA_USER = 'replica_username'
+KEY_MYSQL_REPLICA_PWD = '#replica_password'
 KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_OUTPUT_BUCKET = 'outputBucket'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
@@ -248,6 +271,13 @@ def convert_to_legacy(config: Configuration):
     # ssl
     legacy_cfg[KEY_USE_SSL] = config.db_settings.use_ssl
     legacy_cfg[KEY_VERIFY_CERT] = config.db_settings.ssl_options.verifyCert
+
+    # replica db server
+    legacy_cfg[KEY_SYNC_FROM_REPLICA] = config.replica_db_settings.sync_from_replica
+    legacy_cfg[KEY_MYSQL_REPLICA_PORT] = config.replica_db_settings.port
+    legacy_cfg[KEY_MYSQL_REPLICA_HOST] = config.replica_db_settings.host
+    legacy_cfg[KEY_MYSQL_REPLICA_USER] = config.replica_db_settings.user
+    legacy_cfg[KEY_MYSQL_REPLICA_PWD] = config.replica_db_settings.pswd_password
 
     legacy_cfg[KEY_MAX_EXECUTION_TIME] = config.advanced_options.max_execution_time
     legacy_cfg['show_binary_log_config'] = dataclasses.asdict(config.advanced_options.show_binary_log_config)

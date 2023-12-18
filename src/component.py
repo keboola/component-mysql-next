@@ -32,7 +32,8 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL, KEY_USE_SSL, KEY_MAX_EXECUTION_TIME, \
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
-    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
+    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC, KEY_MYSQL_REPLICA_USER, \
+    KEY_MYSQL_REPLICA_PWD, KEY_SYNC_FROM_REPLICA, KEY_MYSQL_REPLICA_HOST, KEY_MYSQL_REPLICA_PORT
 from ssh.ssh_utils import generate_ssh_key_pair
 from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
@@ -675,9 +676,13 @@ class Component(ComponentBase):
                 'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
 
     @contextmanager
-    def init_mysql_client(self) -> MySQLConnection:
+    def init_mysql_client(self, mysql_config_params=None) -> MySQLConnection:
         connection_context = self.get_conn_context_manager()
-        mysql_client = MySQLConnection(self.mysql_config_params)
+        if mysql_config_params is not None:
+            mysql_client = MySQLConnection(mysql_config_params)
+        else:
+            mysql_client = MySQLConnection(self.mysql_config_params)
+
         try:
             if not isinstance(connection_context, nullcontext):
                 connection_context.start()
@@ -1081,8 +1086,7 @@ class Component(ComponentBase):
 
         core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
-    @staticmethod
-    def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
+    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
                                   message_store: core.MessageStore = None):
         binlog.verify_binlog_config(mysql_conn)
 
@@ -1106,8 +1110,26 @@ class Component(ComponentBase):
         current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
-        full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                     tables_destination=tables_destination, message_store=message_store)
+        if self.params[KEY_SYNC_FROM_REPLICA]:
+            try:
+                replica_config_params = {
+                    **self.mysql_config_params,
+                    'host': self.params[KEY_MYSQL_REPLICA_HOST],
+                    'port': self.params[KEY_MYSQL_REPLICA_PORT],
+                    'user': self.params[KEY_MYSQL_REPLICA_USER],
+                    'password': self.params[KEY_MYSQL_REPLICA_PWD],
+                }
+            except KeyError:
+                # likely could be handled from the config via required fields or something
+                raise UserException("Can't sync from replica server - replica params not specified")
+
+            with self.init_mysql_client(replica_config_params) as mysql_replica_conn:
+                full_table.sync_table_chunks(mysql_replica_conn, catalog_entry, state, columns, stream_version,
+                                             tables_destination=tables_destination, message_store=message_store)
+        else:
+            full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                         tables_destination=tables_destination, message_store=message_store)
+
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
@@ -1681,6 +1703,13 @@ class Component(ComponentBase):
             return [
                 SelectElement(schema) for schema in schemas
             ]
+
+    @sync_action('get_replicas')
+    def get_replicas(self):
+        self.init_connection_params()
+        with self.init_mysql_client() as client:
+            replicas = mysql.client.get_replicas(client)
+            return [SelectElement(replica) for replica in replicas]
 
     @sync_action('get_tables')
     def get_tables(self):
