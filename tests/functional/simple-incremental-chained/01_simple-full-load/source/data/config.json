@@ -8,6 +8,7 @@
       "#password": "{{env.MYSQL_DB_PASSWORD}}",
       "use_ssh": false
     },
+    "replica_db_settings": {},
     "destination": {
       "load_type": "incremental_load",
       "outputBucket": ""
