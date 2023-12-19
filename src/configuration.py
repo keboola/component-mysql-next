@@ -99,6 +99,7 @@ class DbOptions(ReplicaDbOptions):
     sync_from_replica: bool = False
     replica_db_settings: Union[ReplicaDbOptions, NoneType] = None
 
+
 @dataclass
 class SourceSettings(ConfigurationBase):
     schemas: list[str] = dataclasses.field(default_factory=list)
