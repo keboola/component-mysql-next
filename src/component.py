@@ -705,7 +705,7 @@ class Component(ComponentBase):
                 self.mysql_replica_config_params['host'] = LOCAL_ADDRESS
                 self.mysql_replica_config_params['port'] = SSH_BIND_PORT
             else:
-                logging.info(f'Connecting directly to database via port {self.params[KEY_REPLICA_MYSQL_PORT]}')
+                logging.info(f'Connecting directly to database replica via port {self.params[KEY_REPLICA_MYSQL_PORT]}')
         else:
             self.mysql_replica_config_params = {}
 
@@ -713,8 +713,10 @@ class Component(ComponentBase):
     def init_mysql_client(self, use_replica=False) -> MySQLConnection:
         connection_context = self.get_conn_context_manager()
         if use_replica:
+            logging.info(f'Creating connection to database replica')
             mysql_client = MySQLConnection(self.mysql_replica_config_params)
         else:
+            logging.info(f'Creating connection to database Master')
             mysql_client = MySQLConnection(self.mysql_config_params)
 
         try:
