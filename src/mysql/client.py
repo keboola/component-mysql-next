@@ -9,7 +9,6 @@ import ssl
 import backoff
 import pymysql
 from pymysql.constants import CLIENT
-from core.exceptions import AppError
 
 from typing import Union
 
@@ -153,29 +152,6 @@ def get_schemas(mysql_conn) -> list[str]:
             for res in cur.fetchall():
                 schemas.append(res[0])
             return schemas
-
-
-def _get_replicas(cursor, sql_statement):
-    try:
-        cursor.execute(sql_statement)
-        return cursor.fetchall()
-    except Exception:
-        pass
-
-
-def get_replicas(mysql_conn) -> list[str]:
-    with connect_with_backoff(mysql_conn) as open_conn:
-        with open_conn.cursor() as cur:
-            # TODO: check returned value
-            replicas = (
-                _get_replicas(cur, 'SHOW REPLICAS;') or
-                _get_replicas(cur, 'SHOW SLAVE HOSTS;'))
-
-            if replicas is None:
-                raise AppError("Couldn't fetch replicas.")
-
-            replicas = [replica[0] for replica in replicas]
-            return replicas
 
 
 def get_tables(mysql_conn, schemas: list[str] = None) -> list[dict]:
