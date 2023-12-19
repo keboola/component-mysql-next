@@ -32,8 +32,10 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL, KEY_USE_SSL, KEY_MAX_EXECUTION_TIME, \
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
-    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC, KEY_MYSQL_REPLICA_USER, \
-    KEY_MYSQL_REPLICA_PWD, KEY_SYNC_FROM_REPLICA, KEY_MYSQL_REPLICA_HOST, KEY_MYSQL_REPLICA_PORT
+    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC, KEY_SYNC_FROM_REPLICA, \
+    KEY_REPLICA_MYSQL_HOST, KEY_REPLICA_MYSQL_PORT, KEY_REPLICA_MYSQL_USER, KEY_REPLICA_MYSQL_PWD, \
+    KEY_REPLICA_USE_SSL, KEY_REPLICA_SSL_CA, KEY_REPLICA_VERIFY_CERT, KEY_REPLICA_USE_SSH_TUNNEL, \
+    KEY_REPLICA_SSH_PORT, KEY_REPLICA_SSH_USERNAME, KEY_REPLICA_SSH_PRIVATE_KEY, KEY_REPLICA_SSH_HOST
 from ssh.ssh_utils import generate_ssh_key_pair
 from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
@@ -675,11 +677,43 @@ class Component(ComponentBase):
             logging.info(
                 'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
 
+        if self.params.get(KEY_SYNC_FROM_REPLICA):
+            self.mysql_replica_config_params = {
+                "host": self.params.get(KEY_REPLICA_MYSQL_HOST),
+                "port": self.params.get(KEY_REPLICA_MYSQL_PORT),
+                "user": self.params.get(KEY_REPLICA_MYSQL_USER),
+                "password": self.params.get(KEY_REPLICA_MYSQL_PWD),
+                "ssl": self.params.get(KEY_REPLICA_USE_SSL),
+                "ssl_ca": self.params.get(KEY_REPLICA_SSL_CA),
+                "verify_mode": self.params.get(KEY_REPLICA_VERIFY_CERT) or False,
+                "connect_timeout": CONNECT_TIMEOUT,
+                "max_execution_time": max_execution_time
+            }
+
+            if self.params.get(KEY_REPLICA_USE_SSH_TUNNEL):
+                self._validate_parameters(
+                    self.params,
+                    mandatory_params=[
+                        KEY_REPLICA_SSH_PORT,
+                        KEY_REPLICA_SSH_USERNAME,
+                        KEY_REPLICA_SSH_PRIVATE_KEY,
+                        KEY_REPLICA_SSH_HOST
+                    ],
+                    _type='SSH Options'
+                )
+                logging.info(f'Connecting via SSH tunnel over bind port {SSH_BIND_PORT}')
+                self.mysql_replica_config_params['host'] = LOCAL_ADDRESS
+                self.mysql_replica_config_params['port'] = SSH_BIND_PORT
+            else:
+                logging.info(f'Connecting directly to database via port {self.params[KEY_REPLICA_MYSQL_PORT]}')
+        else:
+            self.mysql_replica_config_params = {}
+
     @contextmanager
-    def init_mysql_client(self, mysql_config_params=None) -> MySQLConnection:
+    def init_mysql_client(self, use_replica=False) -> MySQLConnection:
         connection_context = self.get_conn_context_manager()
-        if mysql_config_params is not None:
-            mysql_client = MySQLConnection(mysql_config_params)
+        if use_replica:
+            mysql_client = MySQLConnection(self.mysql_replica_config_params)
         else:
             mysql_client = MySQLConnection(self.mysql_config_params)
 
@@ -1111,19 +1145,7 @@ class Component(ComponentBase):
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
         if self.params[KEY_SYNC_FROM_REPLICA]:
-            try:
-                replica_config_params = {
-                    **self.mysql_config_params,
-                    'host': self.params[KEY_MYSQL_REPLICA_HOST],
-                    'port': self.params[KEY_MYSQL_REPLICA_PORT],
-                    'user': self.params[KEY_MYSQL_REPLICA_USER],
-                    'password': self.params[KEY_MYSQL_REPLICA_PWD],
-                }
-            except KeyError:
-                # likely could be handled from the config via required fields or something
-                raise UserException("Can't sync from replica server - replica params not specified")
-
-            with self.init_mysql_client(replica_config_params) as mysql_replica_conn:
+            with self.init_mysql_client(use_replica=True) as mysql_replica_conn:
                 full_table.sync_table_chunks(mysql_replica_conn, catalog_entry, state, columns, stream_version,
                                              tables_destination=tables_destination, message_store=message_store)
         else:
@@ -1695,6 +1717,12 @@ class Component(ComponentBase):
         with self.init_mysql_client() as client:
             client.ping()
 
+    @sync_action('testConnection')
+    def test_replica_connection(self):
+        self.init_connection_params()
+        with self.init_mysql_client(use_replica=True) as client:
+            client.ping()
+
     @sync_action('get_schemas')
     def get_schemas(self):
         self.init_connection_params()
@@ -1703,13 +1731,6 @@ class Component(ComponentBase):
             return [
                 SelectElement(schema) for schema in schemas
             ]
-
-    @sync_action('get_replicas')
-    def get_replicas(self):
-        self.init_connection_params()
-        with self.init_mysql_client() as client:
-            replicas = mysql.client.get_replicas(client)
-            return [SelectElement(replica) for replica in replicas]
 
     @sync_action('get_tables')
     def get_tables(self):
