@@ -124,7 +124,7 @@
         },
         "sync_from_replica": {
           "type": "boolean",
-          "title": "Sync from replica server",
+          "title": "Sync from replica server (if checked - test connection button uses replica credentials)",
           "format": "checkbox",
           "default": false,
           "options": {
