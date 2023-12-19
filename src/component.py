@@ -1714,13 +1714,7 @@ class Component(ComponentBase):
     @sync_action('testConnection')
     def test_connection(self):
         self.init_connection_params()
-        with self.init_mysql_client() as client:
-            client.ping()
-
-    @sync_action('testConnection')
-    def test_replica_connection(self):
-        self.init_connection_params()
-        with self.init_mysql_client(use_replica=True) as client:
+        with self.init_mysql_client(use_replica=self.params.get(KEY_SYNC_FROM_REPLICA)) as client:
             client.ping()
 
     @sync_action('get_schemas')

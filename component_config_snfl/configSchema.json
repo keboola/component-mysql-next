@@ -68,7 +68,7 @@
               "use_ssh": true
             }
           },
-          "propertyOrder": 70,
+          "propertyOrder": 60,
           "title": "SSH Tunnel",
           "type": "object",
           "description": "",
@@ -130,7 +130,7 @@
           "options": {
             "grid_columns": 12
           },
-          "propertyOrder": 60
+          "propertyOrder": 70
         },
         "replica_db_settings": {
           "type": "object",
@@ -248,11 +248,6 @@
                   }
                 }
               }
-            },
-            "test_replica_connection": {
-              "type": "button",
-              "format": "test-connection",
-              "propertyOrder": 500
             }
           }
         }
