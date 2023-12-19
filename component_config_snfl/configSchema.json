@@ -121,6 +121,140 @@
           "type": "button",
           "format": "test-connection",
           "propertyOrder": 500
+        },
+        "sync_from_replica": {
+          "type": "boolean",
+          "title": "Sync from replica server",
+          "format": "checkbox",
+          "default": false,
+          "options": {
+            "grid_columns": 12
+          },
+          "propertyOrder": 60
+        },
+        "replica_db_settings": {
+          "type": "object",
+          "format": "grid-strict",
+          "title": "Replica Authorization",
+          "description": "The connector",
+          "options": {
+            "dependencies": {
+              "sync_from_replica": true
+            }
+          },
+          "required": [
+            "#password",
+            "host",
+            "port",
+            "user"
+          ],
+          "properties": {
+            "host": {
+              "type": "string",
+              "title": "Hostname",
+              "propertyOrder": 1,
+              "options": {
+                "grid_columns": 8
+              }
+            },
+            "port": {
+              "type": "integer",
+              "title": "Port",
+              "default": 3306,
+              "propertyOrder": 10,
+              "options": {
+                "grid_columns": 4
+              }
+            },
+            "user": {
+              "type": "string",
+              "title": "User",
+              "propertyOrder": 20,
+              "options": {
+                "grid_columns": 12
+              }
+            },
+            "#password": {
+              "type": "string",
+              "title": "Password",
+              "format": "password",
+              "propertyOrder": 40,
+              "options": {
+                "grid_columns": 12
+              }
+            },
+            "use_ssh": {
+              "type": "boolean",
+              "title": "SSH Tunnel",
+              "format": "checkbox",
+              "default": false,
+              "options": {
+                "grid_columns": 12
+              },
+              "propertyOrder": 60
+            },
+            "ssh_options": {
+              "options": {
+                "grid_columns": 12,
+                "dependencies": {
+                  "use_ssh": true
+                }
+              },
+              "propertyOrder": 70,
+              "title": "SSH Tunnel",
+              "type": "object",
+              "description": "",
+              "properties": {
+                "host": {
+                  "propertyOrder": 1,
+                  "title": "SSH host",
+                  "type": "string",
+                  "description": "The host name or host IP associated with your SSH server (Note: Don't use load balancer as host)"
+                },
+                "port": {
+                  "propertyOrder": 2,
+                  "title": "SSH port",
+                  "default": 22,
+                  "type": "number",
+                  "description": "Custom SSH port"
+                },
+                "username": {
+                  "propertyOrder": 10,
+                  "title": "Username",
+                  "description": "The SSH User for connecting to your SSH server",
+                  "type": "string"
+                },
+                "#private_key": {
+                  "propertyOrder": 20,
+                  "title": "Private key",
+                  "type": "string",
+                  "format": "textarea",
+                  "options": {
+                    "input_height": "150px"
+                  },
+                  "description": "The private key of the key pair associated with your SSH server"
+                },
+                "generate_key": {
+                  "type": "button",
+                  "format": "sync-action",
+                  "title": "Generate SSH Key Pair",
+                  "description": "Generate your own SSH Key Pair",
+                  "propertyOrder": 100,
+                  "options": {
+                    "async": {
+                      "label": "Generate SSH Key Pair",
+                      "action": "generate_ssh_key"
+                    }
+                  }
+                }
+              }
+            },
+            "test_replica_connection": {
+              "type": "button",
+              "format": "test-connection",
+              "propertyOrder": 500
+            }
+          }
         }
       },
       "propertyOrder": 1

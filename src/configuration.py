@@ -83,7 +83,7 @@ class DbAdvancedParameters(ConfigurationBase):
 
 
 @dataclass
-class DbOptions(ConfigurationBase):
+class ReplicaDbOptions(ConfigurationBase):
     host: str
     port: int
     user: str
@@ -93,6 +93,11 @@ class DbOptions(ConfigurationBase):
     use_ssl: bool = False
     ssl_options: SSLConfiguration = dataclasses.field(default_factory=lambda: ConfigTree({}))
 
+
+@dataclass
+class DbOptions(ReplicaDbOptions):
+    sync_from_replica: bool = False
+    replica_db_settings: Union[ReplicaDbOptions, NoneType] = None
 
 @dataclass
 class SourceSettings(ConfigurationBase):
@@ -138,8 +143,6 @@ class DestinationSettings(ConfigurationBase):
 class Configuration(ConfigurationBase):
     # Connection options
     db_settings: DbOptions
-    sync_from_replica: bool = False
-    replica_db_settings: Union[DbOptions, NoneType] = None
     advanced_options: DbAdvancedParameters = dataclasses.field(default_factory=lambda: ConfigTree({}))
     source_settings: SourceSettings = dataclasses.field(default_factory=lambda: ConfigTree({}))
     sync_options: SyncOptions = dataclasses.field(default_factory=lambda: ConfigTree())
@@ -275,25 +278,25 @@ def convert_to_legacy(config: Configuration):
     legacy_cfg[KEY_VERIFY_CERT] = config.db_settings.ssl_options.verifyCert
 
     # replica db server
-    legacy_cfg[KEY_SYNC_FROM_REPLICA] = config.sync_from_replica
-    if config.sync_from_replica:
-        legacy_cfg[KEY_REPLICA_MYSQL_PORT] = config.replica_db_settings.port
-        legacy_cfg[KEY_REPLICA_MYSQL_HOST] = config.replica_db_settings.host
-        legacy_cfg[KEY_REPLICA_MYSQL_USER] = config.replica_db_settings.user
-        legacy_cfg[KEY_REPLICA_MYSQL_PWD] = config.replica_db_settings.pswd_password
+    legacy_cfg[KEY_SYNC_FROM_REPLICA] = config.db_settings.sync_from_replica
+    if config.db_settings.sync_from_replica:
+        legacy_cfg[KEY_REPLICA_MYSQL_PORT] = config.db_settings.replica_db_settings.port
+        legacy_cfg[KEY_REPLICA_MYSQL_HOST] = config.db_settings.replica_db_settings.host
+        legacy_cfg[KEY_REPLICA_MYSQL_USER] = config.db_settings.replica_db_settings.user
+        legacy_cfg[KEY_REPLICA_MYSQL_PWD] = config.db_settings.replica_db_settings.pswd_password
 
         # replica ssh
-        legacy_cfg[KEY_REPLICA_USE_SSH_TUNNEL] = config.replica_db_settings.use_ssh
-        if config.replica_db_settings.use_ssh:
-            legacy_cfg[KEY_REPLICA_SSH_HOST] = config.replica_db_settings.ssh_options.host
-            legacy_cfg[KEY_REPLICA_SSH_PORT] = config.replica_db_settings.ssh_options.port
-            legacy_cfg[KEY_REPLICA_SSH_USERNAME] = config.replica_db_settings.ssh_options.username
+        legacy_cfg[KEY_REPLICA_USE_SSH_TUNNEL] = config.db_settings.replica_db_settings.use_ssh
+        if config.db_settings.replica_db_settings.use_ssh:
+            legacy_cfg[KEY_REPLICA_SSH_HOST] = config.db_settings.replica_db_settings.ssh_options.host
+            legacy_cfg[KEY_REPLICA_SSH_PORT] = config.db_settings.replica_db_settings.ssh_options.port
+            legacy_cfg[KEY_REPLICA_SSH_USERNAME] = config.db_settings.replica_db_settings.ssh_options.username
 
-            message_bytes = config.replica_db_settings.ssh_options.pswd_private_key.encode('utf-8')
+            message_bytes = config.db_settings.replica_db_settings.ssh_options.pswd_private_key.encode('utf-8')
             legacy_cfg[KEY_REPLICA_SSH_PRIVATE_KEY] = base64.b64encode(message_bytes).decode('utf-8')
         # replica ssl
-        legacy_cfg[KEY_REPLICA_USE_SSL] = config.replica_db_settings.use_ssl
-        legacy_cfg[KEY_REPLICA_VERIFY_CERT] = config.replica_db_settings.ssl_options.verifyCert
+        legacy_cfg[KEY_REPLICA_USE_SSL] = config.db_settings.replica_db_settings.use_ssl
+        legacy_cfg[KEY_REPLICA_VERIFY_CERT] = config.db_settings.replica_db_settings.ssl_options.verifyCert
 
     legacy_cfg[KEY_MAX_EXECUTION_TIME] = config.advanced_options.max_execution_time
     legacy_cfg['show_binary_log_config'] = dataclasses.asdict(config.advanced_options.show_binary_log_config)
