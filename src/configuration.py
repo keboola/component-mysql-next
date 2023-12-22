@@ -166,14 +166,6 @@ KEY_REPLICA_MYSQL_HOST = 'replica_host'
 KEY_REPLICA_MYSQL_PORT = 'replica_port'
 KEY_REPLICA_MYSQL_USER = 'replica_username'
 KEY_REPLICA_MYSQL_PWD = '#replica_password'
-KEY_REPLICA_USE_SSL = 'replica_ssl'
-KEY_REPLICA_SSL_CA = 'replica_sslCa'
-KEY_REPLICA_VERIFY_CERT = 'replica_verifyCert'
-KEY_REPLICA_USE_SSH_TUNNEL = 'replica_sshTunnel'
-KEY_REPLICA_SSH_PORT = 'replica_sshPort'
-KEY_REPLICA_SSH_USERNAME = 'replica_sshUser'
-KEY_REPLICA_SSH_PRIVATE_KEY = '#replica_sshBase64PrivateKey'
-KEY_REPLICA_SSH_HOST = 'replica_sshHost'
 
 KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_OUTPUT_BUCKET = 'outputBucket'
@@ -232,13 +224,6 @@ legacy_example = {
     "#sshBase64PrivateKey": "",
     "sshHost": "",
     "sshUser": "",
-    "replica_sslCa": "",
-    "replica_ssl": False,
-    "replica_sshPublicKey": "",
-    "replica_sshTunnel": False,
-    "#replica_sshBase64PrivateKey": "",
-    "replica_sshHost": "",
-    "replica_sshUser": "",
     "show_binary_log_config": {
         "method": "direct",
         "endpoint_url": "https://app.shipmonk.com/api/keboola/get-binary-logs"
@@ -285,19 +270,6 @@ def convert_to_legacy(config: Configuration):
         legacy_cfg[KEY_REPLICA_MYSQL_HOST] = config.db_settings.replica_db_settings.host
         legacy_cfg[KEY_REPLICA_MYSQL_USER] = config.db_settings.replica_db_settings.user
         legacy_cfg[KEY_REPLICA_MYSQL_PWD] = config.db_settings.replica_db_settings.pswd_password
-
-        # replica ssh
-        legacy_cfg[KEY_REPLICA_USE_SSH_TUNNEL] = config.db_settings.replica_db_settings.use_ssh
-        if config.db_settings.replica_db_settings.use_ssh:
-            legacy_cfg[KEY_REPLICA_SSH_HOST] = config.db_settings.replica_db_settings.ssh_options.host
-            legacy_cfg[KEY_REPLICA_SSH_PORT] = config.db_settings.replica_db_settings.ssh_options.port
-            legacy_cfg[KEY_REPLICA_SSH_USERNAME] = config.db_settings.replica_db_settings.ssh_options.username
-
-            message_bytes = config.db_settings.replica_db_settings.ssh_options.pswd_private_key.encode('utf-8')
-            legacy_cfg[KEY_REPLICA_SSH_PRIVATE_KEY] = base64.b64encode(message_bytes).decode('utf-8')
-        # replica ssl
-        legacy_cfg[KEY_REPLICA_USE_SSL] = config.db_settings.replica_db_settings.use_ssl
-        legacy_cfg[KEY_REPLICA_VERIFY_CERT] = config.db_settings.replica_db_settings.ssl_options.verifyCert
 
     legacy_cfg[KEY_MAX_EXECUTION_TIME] = config.advanced_options.max_execution_time
     legacy_cfg['show_binary_log_config'] = dataclasses.asdict(config.advanced_options.show_binary_log_config)

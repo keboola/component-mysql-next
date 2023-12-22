@@ -22,7 +22,7 @@ from typing import List
 from cryptography.utils import CryptographyDeprecationWarning
 from keboola.component import ComponentBase, UserException
 from keboola.component.base import sync_action
-from keboola.component.sync_actions import ValidationResult, SelectElement
+from keboola.component.sync_actions import ValidationResult, SelectElement, MessageType
 
 import configuration
 import mysql
@@ -33,9 +33,7 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
     ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC, KEY_SYNC_FROM_REPLICA, \
-    KEY_REPLICA_MYSQL_HOST, KEY_REPLICA_MYSQL_PORT, KEY_REPLICA_MYSQL_USER, KEY_REPLICA_MYSQL_PWD, \
-    KEY_REPLICA_USE_SSL, KEY_REPLICA_SSL_CA, KEY_REPLICA_VERIFY_CERT, KEY_REPLICA_USE_SSH_TUNNEL, \
-    KEY_REPLICA_SSH_PORT, KEY_REPLICA_SSH_USERNAME, KEY_REPLICA_SSH_PRIVATE_KEY, KEY_REPLICA_SSH_HOST
+    KEY_REPLICA_MYSQL_HOST, KEY_REPLICA_MYSQL_PORT, KEY_REPLICA_MYSQL_USER, KEY_REPLICA_MYSQL_PWD
 from ssh.ssh_utils import generate_ssh_key_pair
 from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
@@ -683,25 +681,15 @@ class Component(ComponentBase):
                 "port": self.params.get(KEY_REPLICA_MYSQL_PORT),
                 "user": self.params.get(KEY_REPLICA_MYSQL_USER),
                 "password": self.params.get(KEY_REPLICA_MYSQL_PWD),
-                "ssl": self.params.get(KEY_REPLICA_USE_SSL),
-                "ssl_ca": self.params.get(KEY_REPLICA_SSL_CA),
-                "verify_mode": self.params.get(KEY_REPLICA_VERIFY_CERT) or False,
+                "ssl": self.params.get(KEY_USE_SSL),
+                "ssl_ca": self.params.get(KEY_SSL_CA),
+                "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
                 "connect_timeout": CONNECT_TIMEOUT,
                 "max_execution_time": max_execution_time
             }
 
-            if self.params.get(KEY_REPLICA_USE_SSH_TUNNEL):
-                self._validate_parameters(
-                    self.params,
-                    mandatory_params=[
-                        KEY_REPLICA_SSH_PORT,
-                        KEY_REPLICA_SSH_USERNAME,
-                        KEY_REPLICA_SSH_PRIVATE_KEY,
-                        KEY_REPLICA_SSH_HOST
-                    ],
-                    _type='SSH Options'
-                )
-                logging.info(f'Connecting via SSH tunnel over bind port {SSH_BIND_PORT}')
+            if self.params[KEY_USE_SSH_TUNNEL]:
+                logging.info(f'Connecting to replica via SSH tunnel over bind port {SSH_BIND_PORT}')
                 self.mysql_replica_config_params['host'] = LOCAL_ADDRESS
                 self.mysql_replica_config_params['port'] = SSH_BIND_PORT
             else:
@@ -1713,11 +1701,24 @@ class Component(ComponentBase):
                 return None
 
     # ##### SYNC ACTIONS
-    @sync_action('testConnection')
-    def test_connection(self):
+    @sync_action('test_connection')
+    def test_connection(self) -> ValidationResult:
         self.init_connection_params()
-        with self.init_mysql_client(use_replica=self.params.get(KEY_SYNC_FROM_REPLICA)) as client:
-            client.ping()
+        try:
+            with self.init_mysql_client() as client:
+                client.ping()
+                message = '- **Master**: :white_check_mark: Connection successful\n'
+        except Exception as e:
+            message = f'- **Master**: :x: Connection failed: {e}\n'
+
+        try:
+            with self.init_mysql_client(use_replica=True) as client:
+                client.ping()
+                message += '- **Replica**: :white_check_mark: Connection successful'
+        except Exception as e:
+            message += f'- **Replica**: :x: Connection failed: {e}'
+
+        return ValidationResult(message, MessageType.SUCCESS)
 
     @sync_action('get_schemas')
     def get_schemas(self):
