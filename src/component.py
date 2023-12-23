@@ -1701,8 +1701,8 @@ class Component(ComponentBase):
                 return None
 
     # ##### SYNC ACTIONS
-    @sync_action('test_connection')
-    def test_connection(self) -> ValidationResult:
+    @sync_action('test_connections')
+    def test_connections(self) -> ValidationResult:
         self.init_connection_params()
         try:
             with self.init_mysql_client() as client:

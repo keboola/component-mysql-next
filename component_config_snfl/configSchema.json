@@ -182,14 +182,14 @@
             }
           }
         },
-        "test_connection": {
+        "test_connections": {
           "type": "button",
           "format": "sync-action",
           "propertyOrder": 90,
           "options": {
             "async": {
-              "label": "TEST CONNECTION",
-              "action": "test_connection"
+              "label": "TEST CONNECTIONS",
+              "action": "test_connections"
             }
           }
         }
