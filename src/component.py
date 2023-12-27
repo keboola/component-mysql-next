@@ -1701,7 +1701,7 @@ class Component(ComponentBase):
                 return None
 
     # ##### SYNC ACTIONS
-    @sync_action('test_connections')
+    @sync_action('testConnection')
     def test_connections(self) -> ValidationResult:
         self.init_connection_params()
         try:
