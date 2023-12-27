@@ -68,6 +68,7 @@ from mysql.client import connect_with_backoff, MySQLConnection, get_execution_ti
 # Define mandatory parameter constants, matching Config Schema.
 
 SSH_BIND_PORT = 3307
+REPLICA_SSH_BIND_PORT = 13307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 100
 
@@ -689,9 +690,9 @@ class Component(ComponentBase):
             }
 
             if self.params[KEY_USE_SSH_TUNNEL]:
-                logging.info(f'Connecting to replica via SSH tunnel over bind port {SSH_BIND_PORT}')
+                logging.info(f'Connecting to replica via SSH tunnel over bind port {REPLICA_SSH_BIND_PORT}')
                 self.mysql_replica_config_params['host'] = LOCAL_ADDRESS
-                self.mysql_replica_config_params['port'] = SSH_BIND_PORT
+                self.mysql_replica_config_params['port'] = REPLICA_SSH_BIND_PORT
             else:
                 logging.info(f'Connecting directly to database replica via port {self.params[KEY_REPLICA_MYSQL_PORT]}')
         else:
@@ -699,7 +700,7 @@ class Component(ComponentBase):
 
     @contextmanager
     def init_mysql_client(self, use_replica=False) -> MySQLConnection:
-        connection_context = self.get_conn_context_manager()
+        connection_context = self.get_conn_context_manager(use_replica)
         if use_replica:
             logging.info('Creating connection to database replica')
             mysql_client = MySQLConnection(self.mysql_replica_config_params)
@@ -1602,7 +1603,7 @@ class Component(ComponentBase):
                                     'so no binlog de-duplication will occur, '
                                     'records must be processed downstream'.format(csv_table_path))
 
-    def get_conn_context_manager(self):
+    def get_conn_context_manager(self, use_replica=False):
         if self.params[KEY_USE_SSH_TUNNEL]:
             b64_input_key = self.params.get(KEY_SSH_PRIVATE_KEY)
             input_key = None
@@ -1614,13 +1615,14 @@ class Component(ComponentBase):
                 exit(1)
 
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
+            ssh_bind_port = REPLICA_SSH_BIND_PORT if use_replica else SSH_BIND_PORT
             context_manager = SSHTunnelForwarder(
                 (self.params[KEY_SSH_HOST], self.params[KEY_SSH_PORT]),
                 ssh_username=self.params[KEY_SSH_USERNAME],
                 ssh_pkey=pkey_from_input,
                 remote_bind_address=(
                     self.params[KEY_MYSQL_HOST], self.params[KEY_MYSQL_PORT]),
-                local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
+                local_bind_address=(LOCAL_ADDRESS, ssh_bind_port),
                 ssh_config_file=None,
                 allow_agent=False
             )
