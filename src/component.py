@@ -1709,16 +1709,17 @@ class Component(ComponentBase):
         try:
             with self.init_mysql_client() as client:
                 client.ping()
-                message = '- **Master**: :white_check_mark: Connection successful\n'
+                message = '- **Master**: ✅ Connection successful!\n'
         except Exception as e:
-            message = f'- **Master**: :x: Connection failed: {e}\n'
+            message = f'- **Master**: ❌ Connection failed: {e}\n'
 
-        try:
-            with self.init_mysql_client(use_replica=True) as client:
-                client.ping()
-                message += '- **Replica**: :white_check_mark: Connection successful'
-        except Exception as e:
-            message += f'- **Replica**: :x: Connection failed: {e}'
+        if self.params.get(KEY_SYNC_FROM_REPLICA):
+            try:
+                with self.init_mysql_client(use_replica=True) as client:
+                    client.ping()
+                    message += '- **Replica**: ✅ Connection successful!'
+            except Exception as e:
+                message += f'- **Replica**: ❌ Connection failed: `{e}`'
 
         return ValidationResult(message, MessageType.SUCCESS)
 
