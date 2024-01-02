@@ -1711,7 +1711,7 @@ class Component(ComponentBase):
                 client.ping()
                 message = '- **Master**: ✅ Connection successful!\n'
         except Exception as e:
-            message = f'- **Master**: ❌ Connection failed: {e}\n'
+            message = f'- **Master**: ❌ Connection failed: `{e}`\n'
 
         if self.params.get(KEY_SYNC_FROM_REPLICA):
             try:
