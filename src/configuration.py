@@ -3,9 +3,10 @@ import dataclasses
 import json
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import dataconf
+from dataconf.utils import NoneType
 from pyhocon import ConfigTree
 
 KEY_INCLUDE_SCHEMA_NAME = 'include_schema_name'
@@ -82,7 +83,7 @@ class DbAdvancedParameters(ConfigurationBase):
 
 
 @dataclass
-class DbOptions(ConfigurationBase):
+class ReplicaDbOptions(ConfigurationBase):
     host: str
     port: int
     user: str
@@ -91,6 +92,12 @@ class DbOptions(ConfigurationBase):
     ssh_options: SSHConfiguration = dataclasses.field(default_factory=lambda: ConfigTree({}))
     use_ssl: bool = False
     ssl_options: SSLConfiguration = dataclasses.field(default_factory=lambda: ConfigTree({}))
+
+
+@dataclass
+class DbOptions(ReplicaDbOptions):
+    sync_from_replica: bool = False
+    replica_db_settings: Union[ReplicaDbOptions, NoneType] = None
 
 
 @dataclass
@@ -153,6 +160,13 @@ KEY_MYSQL_HOST = 'host'
 KEY_MYSQL_PORT = 'port'
 KEY_MYSQL_USER = 'username'
 KEY_MYSQL_PWD = '#password'
+
+KEY_SYNC_FROM_REPLICA = 'sync_from_replica'
+KEY_REPLICA_MYSQL_HOST = 'replica_host'
+KEY_REPLICA_MYSQL_PORT = 'replica_port'
+KEY_REPLICA_MYSQL_USER = 'replica_username'
+KEY_REPLICA_MYSQL_PWD = '#replica_password'
+
 KEY_INCREMENTAL_SYNC = 'runIncrementalSync'
 KEY_OUTPUT_BUCKET = 'outputBucket'
 KEY_USE_SSH_TUNNEL = 'sshTunnel'
@@ -248,6 +262,14 @@ def convert_to_legacy(config: Configuration):
     # ssl
     legacy_cfg[KEY_USE_SSL] = config.db_settings.use_ssl
     legacy_cfg[KEY_VERIFY_CERT] = config.db_settings.ssl_options.verifyCert
+
+    # replica db server
+    legacy_cfg[KEY_SYNC_FROM_REPLICA] = config.db_settings.sync_from_replica
+    if config.db_settings.sync_from_replica:
+        legacy_cfg[KEY_REPLICA_MYSQL_PORT] = config.db_settings.replica_db_settings.port
+        legacy_cfg[KEY_REPLICA_MYSQL_HOST] = config.db_settings.replica_db_settings.host
+        legacy_cfg[KEY_REPLICA_MYSQL_USER] = config.db_settings.replica_db_settings.user
+        legacy_cfg[KEY_REPLICA_MYSQL_PWD] = config.db_settings.replica_db_settings.pswd_password
 
     legacy_cfg[KEY_MAX_EXECUTION_TIME] = config.advanced_options.max_execution_time
     legacy_cfg['show_binary_log_config'] = dataclasses.asdict(config.advanced_options.show_binary_log_config)

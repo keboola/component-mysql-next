@@ -22,7 +22,7 @@ from typing import List
 from cryptography.utils import CryptographyDeprecationWarning
 from keboola.component import ComponentBase, UserException
 from keboola.component.base import sync_action
-from keboola.component.sync_actions import ValidationResult, SelectElement
+from keboola.component.sync_actions import ValidationResult, SelectElement, MessageType
 
 import configuration
 import mysql
@@ -32,7 +32,8 @@ from configuration import is_legacy_config, Configuration, KEY_OBJECTS_ONLY, KEY
     KEY_MYSQL_PWD, KEY_USE_SSH_TUNNEL, KEY_USE_SSL, KEY_MAX_EXECUTION_TIME, \
     KEY_SSL_CA, KEY_VERIFY_CERT, KEY_DATABASES, KEY_TABLE_MAPPINGS_JSON, \
     MANDATORY_PARS, KEY_APPEND_MODE, KEY_SSH_PRIVATE_KEY, KEY_SSH_USERNAME, KEY_SSH_HOST, KEY_SSH_PORT, LOCAL_ADDRESS, \
-    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC
+    ENV_COMPONENT_ID, ENV_CONFIGURATION_ID, KEY_OUTPUT_BUCKET, KEY_INCREMENTAL_SYNC, KEY_SYNC_FROM_REPLICA, \
+    KEY_REPLICA_MYSQL_HOST, KEY_REPLICA_MYSQL_PORT, KEY_REPLICA_MYSQL_USER, KEY_REPLICA_MYSQL_PWD
 from ssh.ssh_utils import generate_ssh_key_pair
 from table_metadata import column_metadata_to_schema
 from workspace_client import SnowflakeClient
@@ -67,6 +68,7 @@ from mysql.client import connect_with_backoff, MySQLConnection, get_execution_ti
 # Define mandatory parameter constants, matching Config Schema.
 
 SSH_BIND_PORT = 3307
+REPLICA_SSH_BIND_PORT = 13307
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 100
 
@@ -674,10 +676,38 @@ class Component(ComponentBase):
             logging.info(
                 'Connecting directly to database via port {}'.format(self.params[KEY_MYSQL_PORT]))
 
+        if self.params.get(KEY_SYNC_FROM_REPLICA):
+            self.mysql_replica_config_params = {
+                "host": self.params.get(KEY_REPLICA_MYSQL_HOST),
+                "port": self.params.get(KEY_REPLICA_MYSQL_PORT),
+                "user": self.params.get(KEY_REPLICA_MYSQL_USER),
+                "password": self.params.get(KEY_REPLICA_MYSQL_PWD),
+                "ssl": self.params.get(KEY_USE_SSL),
+                "ssl_ca": self.params.get(KEY_SSL_CA),
+                "verify_mode": self.params.get(KEY_VERIFY_CERT) or False,
+                "connect_timeout": CONNECT_TIMEOUT,
+                "max_execution_time": max_execution_time
+            }
+
+            if self.params[KEY_USE_SSH_TUNNEL]:
+                logging.info(f'Connecting to replica via SSH tunnel over bind port {REPLICA_SSH_BIND_PORT}')
+                self.mysql_replica_config_params['host'] = LOCAL_ADDRESS
+                self.mysql_replica_config_params['port'] = REPLICA_SSH_BIND_PORT
+            else:
+                logging.info(f'Connecting directly to database replica via port {self.params[KEY_REPLICA_MYSQL_PORT]}')
+        else:
+            self.mysql_replica_config_params = {}
+
     @contextmanager
-    def init_mysql_client(self) -> MySQLConnection:
-        connection_context = self.get_conn_context_manager()
-        mysql_client = MySQLConnection(self.mysql_config_params)
+    def init_mysql_client(self, use_replica=False) -> MySQLConnection:
+        connection_context = self.get_conn_context_manager(use_replica)
+        if use_replica:
+            logging.info('Creating connection to database replica')
+            mysql_client = MySQLConnection(self.mysql_replica_config_params)
+        else:
+            logging.info('Creating connection to database Master')
+            mysql_client = MySQLConnection(self.mysql_config_params)
+
         try:
             if not isinstance(connection_context, nullcontext):
                 connection_context.start()
@@ -1081,9 +1111,8 @@ class Component(ComponentBase):
 
         core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
-    @staticmethod
-    def do_sync_historical_binlog(mysql_conn, config, catalog_entry, state, columns, tables_destination: str = None,
-                                  message_store: core.MessageStore = None):
+    def do_sync_historical_binlog(self, mysql_conn, config, catalog_entry, state, columns,
+                                  tables_destination: str = None, message_store: core.MessageStore = None):
         binlog.verify_binlog_config(mysql_conn)
 
         is_view = common.get_is_view(catalog_entry)
@@ -1106,8 +1135,14 @@ class Component(ComponentBase):
         current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
-        full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                     tables_destination=tables_destination, message_store=message_store)
+        if self.params[KEY_SYNC_FROM_REPLICA]:
+            with self.init_mysql_client(use_replica=True) as mysql_replica_conn:
+                full_table.sync_table_chunks(mysql_replica_conn, catalog_entry, state, columns, stream_version,
+                                             tables_destination=tables_destination, message_store=message_store)
+        else:
+            full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                         tables_destination=tables_destination, message_store=message_store)
+
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
 
@@ -1568,7 +1603,7 @@ class Component(ComponentBase):
                                     'so no binlog de-duplication will occur, '
                                     'records must be processed downstream'.format(csv_table_path))
 
-    def get_conn_context_manager(self):
+    def get_conn_context_manager(self, use_replica=False):
         if self.params[KEY_USE_SSH_TUNNEL]:
             b64_input_key = self.params.get(KEY_SSH_PRIVATE_KEY)
             input_key = None
@@ -1580,13 +1615,14 @@ class Component(ComponentBase):
                 exit(1)
 
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
+            ssh_bind_port = REPLICA_SSH_BIND_PORT if use_replica else SSH_BIND_PORT
             context_manager = SSHTunnelForwarder(
                 (self.params[KEY_SSH_HOST], self.params[KEY_SSH_PORT]),
                 ssh_username=self.params[KEY_SSH_USERNAME],
                 ssh_pkey=pkey_from_input,
                 remote_bind_address=(
                     self.params[KEY_MYSQL_HOST], self.params[KEY_MYSQL_PORT]),
-                local_bind_address=(LOCAL_ADDRESS, SSH_BIND_PORT),
+                local_bind_address=(LOCAL_ADDRESS, ssh_bind_port),
                 ssh_config_file=None,
                 allow_agent=False
             )
@@ -1668,10 +1704,24 @@ class Component(ComponentBase):
 
     # ##### SYNC ACTIONS
     @sync_action('testConnection')
-    def test_connection(self):
+    def test_connections(self) -> ValidationResult:
         self.init_connection_params()
-        with self.init_mysql_client() as client:
-            client.ping()
+        try:
+            with self.init_mysql_client() as client:
+                client.ping()
+                message = '- **Master**: ✅ Connection successful!\n'
+        except Exception as e:
+            message = f'- **Master**: ❌ Connection failed: `{e}`\n'
+
+        if self.params.get(KEY_SYNC_FROM_REPLICA):
+            try:
+                with self.init_mysql_client(use_replica=True) as client:
+                    client.ping()
+                    message += '- **Replica**: ✅ Connection successful!'
+            except Exception as e:
+                message += f'- **Replica**: ❌ Connection failed: `{e}`'
+
+        return ValidationResult(message, MessageType.SUCCESS)
 
     @sync_action('get_schemas')
     def get_schemas(self):

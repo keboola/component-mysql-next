@@ -28,13 +28,15 @@ def connect_with_backoff(connection):
     return connection
 
 
-def get_execution_time_parameter(cursor: pymysql.connections.Connection.cursor):
+def get_db_version(cursor: pymysql.connections.Connection.cursor):
     cursor.execute('SELECT VERSION()')
     version = cursor.fetchone()[0]
-    is_maria_db = 'MariaDB' in version
-    exec_time_variable = 'max_execution_time'
-    if is_maria_db:
-        exec_time_variable = 'max_statement_time'
+    return version
+
+
+def get_execution_time_parameter(cursor: pymysql.connections.Connection.cursor):
+    version = get_db_version(cursor)
+    exec_time_variable = 'max_statement_time' if 'MariaDB' in version else 'max_execution_time'
     return exec_time_variable
 
 

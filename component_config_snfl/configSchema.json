@@ -6,6 +6,7 @@
   ],
   "properties": {
     "db_settings": {
+      "propertyOrder": 1,
       "type": "object",
       "format": "grid-strict",
       "title": "Authorization",
@@ -20,7 +21,7 @@
         "host": {
           "type": "string",
           "title": "Hostname",
-          "propertyOrder": 1,
+          "propertyOrder": 10,
           "options": {
             "grid_columns": 8
           }
@@ -29,7 +30,7 @@
           "type": "integer",
           "title": "Port",
           "default": 3306,
-          "propertyOrder": 10,
+          "propertyOrder": 20,
           "options": {
             "grid_columns": 4
           }
@@ -37,7 +38,7 @@
         "user": {
           "type": "string",
           "title": "User",
-          "propertyOrder": 20,
+          "propertyOrder": 30,
           "options": {
             "grid_columns": 12
           }
@@ -51,24 +52,88 @@
             "grid_columns": 12
           }
         },
+        "sync_from_replica": {
+          "propertyOrder": 50,
+          "type": "boolean",
+          "title": "Sync from replica server",
+          "format": "checkbox",
+          "default": false,
+          "options": {
+            "grid_columns": 12
+          }
+        },
+        "replica_db_settings": {
+          "propertyOrder": 60,
+          "type": "object",
+          "format": "grid-strict",
+          "title": "Replica Authorization",
+          "description": "The connector",
+          "options": {
+            "dependencies": {
+              "sync_from_replica": true
+            }
+          },
+          "required": [
+            "#password",
+            "host",
+            "port",
+            "user"
+          ],
+          "properties": {
+            "host": {
+              "type": "string",
+              "title": "Hostname",
+              "propertyOrder": 1,
+              "options": {
+                "grid_columns": 8
+              }
+            },
+            "port": {
+              "type": "integer",
+              "title": "Port",
+              "default": 3306,
+              "propertyOrder": 2,
+              "options": {
+                "grid_columns": 4
+              }
+            },
+            "user": {
+              "type": "string",
+              "title": "User",
+              "propertyOrder": 3,
+              "options": {
+                "grid_columns": 12
+              }
+            },
+            "#password": {
+              "type": "string",
+              "title": "Password",
+              "format": "password",
+              "propertyOrder": 4,
+              "options": {
+                "grid_columns": 12
+              }
+            }
+          }
+        },
         "use_ssh": {
+          "propertyOrder": 70,
           "type": "boolean",
           "title": "SSH Tunnel",
           "format": "checkbox",
           "default": false,
           "options": {
             "grid_columns": 12
-          },
-          "propertyOrder": 60
+          }
         },
         "ssh_options": {
+          "propertyOrder": 80,
           "options": {
             "grid_columns": 12,
             "dependencies": {
               "use_ssh": true
             }
           },
-          "propertyOrder": 70,
           "title": "SSH Tunnel",
           "type": "object",
           "description": "",
@@ -87,13 +152,13 @@
               "description": "Custom SSH port"
             },
             "username": {
-              "propertyOrder": 10,
+              "propertyOrder": 3,
               "title": "Username",
               "description": "The SSH User for connecting to your SSH server",
               "type": "string"
             },
             "#private_key": {
-              "propertyOrder": 20,
+              "propertyOrder": 4,
               "title": "Private key",
               "type": "string",
               "format": "textarea",
@@ -103,11 +168,11 @@
               "description": "The private key of the key pair associated with your SSH server"
             },
             "generate_key": {
+              "propertyOrder": 5,
               "type": "button",
               "format": "sync-action",
               "title": "Generate SSH Key Pair",
               "description": "Generate your own SSH Key Pair",
-              "propertyOrder": 100,
               "options": {
                 "async": {
                   "label": "Generate SSH Key Pair",
@@ -119,14 +184,19 @@
         },
         "test_connection": {
           "type": "button",
-          "format": "test-connection",
-          "propertyOrder": 500
+          "format": "sync-action",
+          "propertyOrder": 90,
+          "options": {
+            "async": {
+              "label": "TEST CONNECTION",
+              "action": "testConnection"
+            }
+          }
         }
-      },
-      "propertyOrder": 1
+      }
     },
     "advanced_options": {
-      "propertyOrder": 5,
+      "propertyOrder": 2,
       "title": "Advanced Options",
       "type": "object",
       "description": "",
@@ -204,7 +274,7 @@
     "source_settings": {
       "title": "Data Source",
       "type": "object",
-      "propertyOrder": 10,
+      "propertyOrder": 3,
       "properties": {
         "schemas": {
           "type": "array",
@@ -247,13 +317,13 @@
     "sync_options": {
       "title": "Sync Options",
       "type": "object",
-      "propertyOrder": 10,
+      "propertyOrder": 4,
       "properties": {
         "snapshot_mode": {
+          "propertyOrder": 1,
           "type": "string",
           "title": "Replication Mode",
           "description": " Standard mode performs full sync of the tables on the first run. The mode 'Snapshot Only' will perform full sync each time.",
-          "propertyOrder": 1,
           "enum": [
             "initial",
             "snapshot_only"
@@ -266,6 +336,7 @@
           }
         },
         "handle_binary": {
+          "propertyOrder": 2,
           "type": "string",
           "title": "Binary data handler",
           "default": "plain",
@@ -274,15 +345,14 @@
             "hex",
             "base64"
           ],
-          "description": "Marks how to handle binary data:<ul><li><strong>plain</strong> - data in decoded from binary to string using Python's <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.decode' target='_blank'>bytes.decode()</a></i> method,</li><li><strong>hex</strong> - data is converted to hex representation of binary string using <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.hex' target='_blank'>bytes.hex()</a></i> method,</li><li><strong>base64</strong> - data is converted to a base64 string, using <i><a href='https://docs.python.org/3/library/base64.html#base64.b64encode' target='_blank'>base64.b64encode()</a></i> method.</li></ul>All trailing or leading null bytes are replaced.",
-          "propertyOrder": 1100
+          "description": "Marks how to handle binary data:<ul><li><strong>plain</strong> - data in decoded from binary to string using Python's <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.decode' target='_blank'>bytes.decode()</a></i> method,</li><li><strong>hex</strong> - data is converted to hex representation of binary string using <i><a href='https://docs.python.org/3/library/stdtypes.html#bytes.hex' target='_blank'>bytes.hex()</a></i> method,</li><li><strong>base64</strong> - data is converted to a base64 string, using <i><a href='https://docs.python.org/3/library/base64.html#base64.b64encode' target='_blank'>base64.b64encode()</a></i> method.</li></ul>All trailing or leading null bytes are replaced."
         }
       }
     },
     "destination": {
       "title": "Destination",
       "type": "object",
-      "propertyOrder": 600,
+      "propertyOrder": 5,
       "required": [
         "load_type"
       ],
@@ -302,14 +372,14 @@
             ]
           },
           "description": "If Full load is used, the destination table will be overwritten every run. If Incremental Load is used, data will be upserted into the destination table.",
-          "propertyOrder": 30
+          "propertyOrder": 1
         },
         "outputBucket": {
           "type": "string",
           "title": "Output Bucket",
           "default": "",
           "description": "(Optional) The name of bucket in Keboola storage where the data. Keboola will create a bucket for you if not specified",
-          "propertyOrder": 40
+          "propertyOrder": 2
         }
       }
     }
