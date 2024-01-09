@@ -397,8 +397,9 @@ def reverse_readline(file, buf_size=8192):
             if c == '"':
                 quoting = not quoting
             elif c == '\n' and part and not quoting:
-                yield part[::-1]
+                # NULLBYTE removal to prevent line contains NULL byte issues
+                yield part[::-1].replace('\0', '')
                 part = ''
             part += c
     if part:
-        yield part[::-1]
+        yield part[::-1].replace('\0', '')
