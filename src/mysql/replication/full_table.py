@@ -211,24 +211,10 @@ def sync_table(mysql_conn, catalog_entry, state, columns, stream_version):
     # if not initial_full_table_complete and not (version_exists and state_version is None):
     #     core.write_message(activate_version_message)
 
-    perform_resumable_sync = sync_is_resumable(mysql_conn, catalog_entry)
-
-    pk_clause = ""
-
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cur:
             select_sql = common.generate_select_sql(catalog_entry, columns)
-
-            if perform_resumable_sync:
-                logging.info("Full table sync is "
-                             "resumable based on primary key definition, replicating incrementally")
-
-                state = update_incremental_full_table_state(catalog_entry, state, cur)
-                pk_clause = generate_pk_clause(catalog_entry, state)
-
-            select_sql += pk_clause
             params = {}
-
             common.sync_query(cur, catalog_entry, state, select_sql, columns, stream_version, params)
 
     # clear max pk value and last pk fetched upon successful sync
@@ -259,23 +245,10 @@ def sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
     # if not initial_full_table_complete and not (version_exists and state_version is None):
     #     core.write_message(activate_version_message)
 
-    perform_resumable_sync = sync_is_resumable(mysql_conn, catalog_entry)
-
-    pk_clause = ""
-
     with connect_with_backoff(mysql_conn) as open_conn:
         with open_conn.cursor() as cursor:
             select_sql = common.generate_select_sql(catalog_entry, columns)
-
-            if perform_resumable_sync:
-                logging.info("Full table sync is resumable based on primary key definition, replicating incrementally")
-
-                state = update_incremental_full_table_state(catalog_entry, state, cursor)
-                pk_clause = generate_pk_clause(catalog_entry, state)
-
-            select_sql += pk_clause
             params = {}
-
             common.sync_query_bulk(cursor, catalog_entry, state, select_sql, params,
                                    tables_destination, message_store=message_store)
 
