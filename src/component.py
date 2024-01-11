@@ -731,9 +731,7 @@ class Component(ComponentBase):
         self.walk_path(self.files_in_path)
         self.walk_path(self.tables_in_path)
 
-        use_replica = self.params.get(KEY_SYNC_FROM_REPLICA)
-
-        with self.init_mysql_client(use_replica=use_replica) as mysql_client:
+        with self.init_mysql_client() as mysql_client:
 
             self.log_server_params(mysql_client)
 
@@ -1137,8 +1135,13 @@ class Component(ComponentBase):
         current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
-        full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
-                                     tables_destination=tables_destination, message_store=message_store)
+        if self.params[KEY_SYNC_FROM_REPLICA]:
+            with self.init_mysql_client(use_replica=True) as mysql_replica_conn:
+                full_table.sync_table_chunks(mysql_replica_conn, catalog_entry, state, columns, stream_version,
+                                             tables_destination=tables_destination, message_store=message_store)
+        else:
+            full_table.sync_table_chunks(mysql_conn, catalog_entry, state, columns, stream_version,
+                                         tables_destination=tables_destination, message_store=message_store)
 
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_file', current_log_file)
         state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'log_pos', current_log_pos)
