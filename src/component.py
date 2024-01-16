@@ -1623,7 +1623,7 @@ class Component(ComponentBase):
                 db_params = self.mysql_config_params
 
             context_manager = SSHTunnelForwarder(
-                (self.db_params[KEY_SSH_HOST], self.db_params[KEY_SSH_PORT]),
+                (self.params[KEY_SSH_HOST], self.params[KEY_SSH_PORT]),
                 ssh_username=self.params[KEY_SSH_USERNAME],
                 ssh_pkey=pkey_from_input,
                 remote_bind_address=(
