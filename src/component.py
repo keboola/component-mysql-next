@@ -68,7 +68,7 @@ from mysql.client import connect_with_backoff, MySQLConnection, get_execution_ti
 # Define mandatory parameter constants, matching Config Schema.
 
 SSH_BIND_PORT = 3307
-REPLICA_SSH_BIND_PORT = 13307
+REPLICA_SSH_BIND_PORT = 3308
 CONNECT_TIMEOUT = 30
 FLUSH_STORE_THRESHOLD = 100
 
@@ -1617,17 +1617,16 @@ class Component(ComponentBase):
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
             if use_replica:
                 ssh_bind_port = REPLICA_SSH_BIND_PORT
-                db_params = self.mysql_replica_config_params
+                bind_address = (self.params[KEY_REPLICA_MYSQL_HOST], self.params[KEY_REPLICA_MYSQL_PORT])
             else:
                 ssh_bind_port = SSH_BIND_PORT
-                db_params = self.mysql_config_params
+                bind_address = (self.params[KEY_MYSQL_HOST], self.params[KEY_MYSQL_PORT])
 
             context_manager = SSHTunnelForwarder(
                 (self.params[KEY_SSH_HOST], self.params[KEY_SSH_PORT]),
                 ssh_username=self.params[KEY_SSH_USERNAME],
                 ssh_pkey=pkey_from_input,
-                remote_bind_address=(
-                    db_params[KEY_MYSQL_HOST], db_params[KEY_MYSQL_PORT]),
+                remote_bind_address=bind_address,
                 local_bind_address=(LOCAL_ADDRESS, ssh_bind_port),
                 ssh_config_file=None,
                 allow_agent=False
