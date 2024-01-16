@@ -1615,13 +1615,19 @@ class Component(ComponentBase):
                 exit(1)
 
             pkey_from_input = paramiko.RSAKey.from_private_key(StringIO(input_key))
-            ssh_bind_port = REPLICA_SSH_BIND_PORT if use_replica else SSH_BIND_PORT
+            if use_replica:
+                ssh_bind_port = REPLICA_SSH_BIND_PORT
+                db_params = self.mysql_replica_config_params
+            else:
+                ssh_bind_port = SSH_BIND_PORT
+                db_params = self.mysql_config_params
+
             context_manager = SSHTunnelForwarder(
-                (self.params[KEY_SSH_HOST], self.params[KEY_SSH_PORT]),
+                (self.db_params[KEY_SSH_HOST], self.db_params[KEY_SSH_PORT]),
                 ssh_username=self.params[KEY_SSH_USERNAME],
                 ssh_pkey=pkey_from_input,
                 remote_bind_address=(
-                    self.params[KEY_MYSQL_HOST], self.params[KEY_MYSQL_PORT]),
+                    db_params[KEY_MYSQL_HOST], db_params[KEY_MYSQL_PORT]),
                 local_bind_address=(LOCAL_ADDRESS, ssh_bind_port),
                 ssh_config_file=None,
                 allow_agent=False
