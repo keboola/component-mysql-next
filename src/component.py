@@ -756,7 +756,7 @@ class Component(KBCEnvHandler):
 
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'initial_binlog_complete', False)
 
-            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn)
+            current_log_file, current_log_pos = binlog.fetch_current_log_file_and_pos(mysql_conn, config)
             state = core.write_bookmark(state, catalog_entry.tap_stream_id, 'version', stream_version)
 
             if full_table.sync_is_resumable(mysql_conn, catalog_entry):
