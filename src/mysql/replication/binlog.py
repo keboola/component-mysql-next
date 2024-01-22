@@ -95,17 +95,12 @@ def verify_log_file_exists(binary_logs, log_file, log_pos):
                         "greater than current position ({}).".format(log_pos, log_file, current_log_pos))
 
 
-def fetch_current_log_file_and_pos(mysql_conn):
-    with connect_with_backoff(mysql_conn) as open_conn:
-        with open_conn.cursor() as cur:
-            cur.execute("SHOW MASTER STATUS")
-            result = cur.fetchone()
-
-            if result is None:
-                raise Exception("MySQL binary logging is not enabled.")
-            current_log_file, current_log_pos = result[0:2]
-
-            return current_log_file, current_log_pos
+def fetch_current_log_file_and_pos(mysql_conn, config):
+    show_binlog_method_factory = ShowBinlogMethodFactory(mysql_conn, config.get('show_binary_log_config', {}))
+    show_binlog_method = show_binlog_method_factory.get_show_binlog_method()
+    binlogs = show_binlog_method()
+    current_log_file, current_log_pos = binlogs[-1]  # last binlog record corresponds to show master status
+    return current_log_file, current_log_pos
 
 
 def fetch_server_id(mysql_conn):
@@ -392,14 +387,14 @@ def handle_schema_change_event(binlog_event: QueryEventWithSchemaChanges, messag
         message_store.write_schema_change_message(row)
 
 
-def _run_binlog_sync(mysql_conn, reader: BinLogStreamReaderAlterTracking, binlog_streams_map, state, columns={},
+def _run_binlog_sync(mysql_conn, config, reader: BinLogStreamReaderAlterTracking, binlog_streams_map, state, columns={},
                      message_store: core.MessageStore = None):
     time_extracted = utils.now()
 
     rows_saved = 0
     events_skipped = 0
 
-    current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn)
+    current_log_file, current_log_pos = fetch_current_log_file_and_pos(mysql_conn, config)
     parsing_log_file = ''
     parsing_log_pos = current_log_pos
 
@@ -598,7 +593,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
         )
 
         logging.info("Starting binlog replication with log_file=%s, log_pos=%s", log_file, log_pos)
-        _run_binlog_sync(mysql_conn, reader, binlog_streams_map, state, columns, message_store=message_store)
+        _run_binlog_sync(mysql_conn, config, reader, binlog_streams_map, state, columns, message_store=message_store)
     except Exception as e:
         logging.exception(e)
         raise e
