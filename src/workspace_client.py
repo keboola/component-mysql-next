@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from db_common.db_connection import ODBCConnection
 
+MAX_QUERY_TIMEOUT = 3600
+
 
 @dataclass
 class Credentials:
@@ -41,6 +43,8 @@ class SnowflakeClient:
         try:
             self._connection.connect()
             list(self._connection.perform_query("ALTER SESSION SET JDBC_QUERY_RESULT_FORMAT='JSON'"))
+            list(
+                self._connection.perform_query(f"ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = {MAX_QUERY_TIMEOUT}"))
             yield self
         except Exception as e:
             raise ExtractorUserException(f"Login to database failed, please check your credentials. Detail: {e}") from e
