@@ -218,25 +218,28 @@ def get_min_log_pos_per_log_file(binlog_streams_map, state):
     return min_log_pos_per_file
 
 
-def calculate_bookmark(show_binlog_method, binlog_streams_map, state):
+def calculate_bookmark(show_binlog_method, binlog_streams_map, state, is_append_mode: bool = False):
     min_log_pos_per_file = get_min_log_pos_per_log_file(binlog_streams_map, state)
 
     binary_logs = show_binlog_method()
+    if not binary_logs:
+        raise Exception("Unable to replicate binlog stream because no binary logs exist on the server.")
 
-    if binary_logs:
-        server_logs_set = {log[0] for log in binary_logs}
-        state_logs_set = set(min_log_pos_per_file.keys())
-        expired_logs = state_logs_set.difference(server_logs_set)
+    # use first position if no state is present
+    if not min_log_pos_per_file and is_append_mode:
+        min_log_pos_per_file = {binary_logs[0][0]: {'log_pos': 4}}
 
-        if expired_logs:
-            raise Exception("Unable to replicate binlog stream because the following binary log(s) no longer "
-                            "exist: {}".format(", ".join(expired_logs)))
+    server_logs_set = {log[0] for log in binary_logs}
+    state_logs_set = set(min_log_pos_per_file.keys())
+    expired_logs = state_logs_set.difference(server_logs_set)
 
-        for log_file in sorted(server_logs_set):
-            if min_log_pos_per_file.get(log_file):
-                return log_file, min_log_pos_per_file[log_file]['log_pos'], binary_logs
+    if expired_logs:
+        raise Exception("Unable to replicate binlog stream because the following binary log(s) no longer "
+                        "exist: {}".format(", ".join(expired_logs)))
 
-    raise Exception("Unable to replicate binlog stream because no binary logs exist on the server.")
+    for log_file in sorted(server_logs_set):
+        if min_log_pos_per_file.get(log_file):
+            return log_file, min_log_pos_per_file[log_file]['log_pos'], binary_logs
 
 
 def update_bookmarks(state, binlog_streams_map, log_file, log_pos):
@@ -556,7 +559,7 @@ class ShowBinlogMethodFactory:
 
 
 def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None,
-                       schemas=[], tables=[], columns={}):
+                       schemas=[], tables=[], columns={}, is_append_mode: bool = False):
     last_table_schema_cache = state.get(bookmarks.KEY_LAST_TABLE_SCHEMAS, {})
     binlog_streams_map = generate_streams_map(binlog_streams)
 
@@ -567,7 +570,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
     shbn_factory = ShowBinlogMethodFactory(mysql_conn, config.get('show_binary_log_config', {}))
     show_binlog_method = shbn_factory.get_show_binlog_method()
 
-    log_file, log_pos, binary_logs = calculate_bookmark(show_binlog_method, binlog_streams_map, state)
+    log_file, log_pos, binary_logs = calculate_bookmark(show_binlog_method, binlog_streams_map, state, is_append_mode)
 
     verify_log_file_exists(binary_logs, log_file, log_pos)
 
