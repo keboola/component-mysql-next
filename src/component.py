@@ -238,29 +238,26 @@ def discover_catalog(mysql_conn, config, append_mode, include_schema_name: bool 
                 }
 
                 # Get primary keys
-                if append_mode is True:
-                    table_info[db][table]['primary_keys'] = []
-                else:
-                    pk_sql = """
-                    SELECT
-                        k.column_name
-                    FROM
-                        information_schema.table_constraints t
-                        INNER JOIN information_schema.key_column_usage k
-                            USING(constraint_name, table_schema, table_name)
-                    WHERE
-                        t.constraint_type='PRIMARY KEY'
-                        AND t.table_schema = '{}'
-                        AND t.table_name='{}';""".format(db, table)
-                    cur.execute(pk_sql)
+                pk_sql = """
+                SELECT
+                    k.column_name
+                FROM
+                    information_schema.table_constraints t
+                    INNER JOIN information_schema.key_column_usage k
+                        USING(constraint_name, table_schema, table_name)
+                WHERE
+                    t.constraint_type='PRIMARY KEY'
+                    AND t.table_schema = '{}'
+                    AND t.table_name='{}';""".format(db, table)
+                cur.execute(pk_sql)
 
+                rec = cur.fetchone()
+                table_primary_keys = []
+                while rec is not None:
+                    table_primary_keys.append(rec[0])
                     rec = cur.fetchone()
-                    table_primary_keys = []
-                    while rec is not None:
-                        table_primary_keys.append(rec[0])
-                        rec = cur.fetchone()
 
-                    table_info[db][table]['primary_keys'] = table_primary_keys
+                table_info[db][table]['primary_keys'] = table_primary_keys
 
             cur.execute("""
                 SELECT c.table_schema,
@@ -492,7 +489,6 @@ def resolve_catalog(discovered_catalog, streams_to_sync) -> Catalog:
     return result
 
 
-# TODO: Add check for change in schema for new column, if so full sync that table.
 def get_non_binlog_streams(mysql_conn, catalog, config, state, append_mode):
     """Returns the Catalog of data we're going to sync for all SELECT-based
     streams (i.e. INCREMENTAL, FULL_TABLE, and LOG_BASED that require a historical
@@ -577,7 +573,8 @@ def get_binlog_streams(mysql_conn, catalog, config, state, append_mode):
         stream_state = state.get('bookmarks', {}).get(stream.tap_stream_id)
         logging.debug(stream_state)
 
-        if replication_method.upper() == 'LOG_BASED' and not binlog_stream_requires_historical(stream, state):
+        if (replication_method.upper() == 'LOG_BASED' and (
+                append_mode or not binlog_stream_requires_historical(stream, state))):
             binlog_streams.append(stream)
 
     return resolve_catalog(discovered, binlog_streams)
@@ -946,8 +943,10 @@ class Component(ComponentBase):
         # order metadata
         table_column_metadata = self._order_metadata(table_column_metadata, ordered_columns)
 
+        append_mode = self.params.get(KEY_APPEND_MODE, False)
         self._create_table_in_stage(result_table_name, table_specific_sliced_path,
-                                    primary_keys, table_column_metadata, output_is_sliced)
+                                    primary_keys, table_column_metadata,
+                                    output_is_sliced, dedupe=not append_mode)
 
         self.create_manifests(entry, self.tables_out_path,
                               columns=list(table_column_metadata.keys()),
@@ -1242,27 +1241,34 @@ class Component(ComponentBase):
 
     @staticmethod
     def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
-                            message_store: core.MessageStore = None, schemas=[], tables=[], columns={}):
+                            message_store: core.MessageStore = None, schemas=[], tables=[], columns={},
+                            append_mode=False):
         if binlog_catalog.streams:
             for stream in binlog_catalog.streams:
                 write_schema_message(stream, message_store=message_store)
 
             with metrics.job_timer('sync_binlog'):
                 binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state,
-                                          message_store=message_store, schemas=schemas, tables=tables, columns=columns)
+                                          message_store=message_store, schemas=schemas, tables=tables, columns=columns,
+                                          is_append_mode=append_mode)
 
     def do_sync(self, mysql_conn, config, mysql_config, catalog, state,
                 message_store: core.MessageStore = None, schemas=[], tables=[], columns={}):
-        non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state,
-                                                    self.params.get(KEY_APPEND_MODE))
-        logging.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
-        binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state, self.params.get(KEY_APPEND_MODE))
-        logging.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
 
-        self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
-                                     tables_destination=self.tables_out_path, message_store=message_store)
+        # append mode does not perform full syncs
+        append_mode = self.params.get(KEY_APPEND_MODE)
+        if not append_mode:
+            non_binlog_catalog = get_non_binlog_streams(mysql_conn, catalog, config, state,
+                                                        append_mode)
+            logging.info('Number of non-binlog tables to process: {}'.format(len(non_binlog_catalog)))
+            self.sync_non_binlog_streams(mysql_conn, non_binlog_catalog, config, state,
+                                         tables_destination=self.tables_out_path, message_store=message_store)
+
+        binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state, append_mode)
+        logging.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
         self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
-                                 message_store=message_store, schemas=schemas, tables=tables, columns=columns)
+                                 message_store=message_store, schemas=schemas, tables=tables, columns=columns,
+                                 append_mode=append_mode)
 
     @staticmethod
     def log_server_params(mysql_conn):
