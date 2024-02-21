@@ -317,7 +317,7 @@ class TestComponent(unittest.TestCase):
         change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
                                     table_name='receive',
                                     schema='cdc',
-                                    column_name='TYPE',
+                                    column_name='type',
                                     data_type='VARCHAR(255)',
                                     query=normalized)
         table_changes = self.parser.get_table_changes(add_single, 'cdc')
@@ -495,6 +495,39 @@ class TestComponent(unittest.TestCase):
         table_changes = self.parser.get_table_changes(drop, '')
 
         self.assertEqual([change], table_changes)
+
+    def test_add_w_comment(self):
+        add = """ALTER TABLE shipping_cogs_rate_response ADD zone VARCHAR(255) DEFAULT NULL,ADD billable_weight DECIMAL(19, 4) 
+        DEFAULT NULL COMMENT '(DC2Type:weight_value4)',ADD billable_weight_unit VARCHAR(255) DEFAULT NULL,
+        ADD fuel_surcharge_percentage DECIMAL(19, 4) DEFAULT NULL COMMENT '(DC2Type:percentage4)', ALGORITHM=INSTANT"""
+        normalized = self.normalize_sql(add)
+        change1 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='shipping_cogs_rate_response',
+                                    schema='',
+                                    data_type='VARCHAR(255)',
+                                    column_name='zone',
+                                    query=normalized)
+        change2 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='shipping_cogs_rate_response',
+                                    schema='',
+                                    data_type='DECIMAL(19, 4)',
+                                    column_name='billable_weight',
+                                    query=normalized)
+        change3 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='shipping_cogs_rate_response',
+                                    schema='',
+                                    data_type='VARCHAR(255)',
+                                    column_name='billable_weight_unit',
+                                    query=normalized)
+        change4 = TableSchemaChange(TableChangeType.ADD_COLUMN,
+                                    table_name='shipping_cogs_rate_response',
+                                    schema='',
+                                    data_type='DECIMAL(19, 4)',
+                                    column_name='fuel_surcharge_percentage',
+                                    query=normalized)
+        table_changes = self.parser.get_table_changes(add, '')
+
+        self.assertEqual([change1, change2, change3, change4], table_changes)
 
 
 if __name__ == "__main__":
