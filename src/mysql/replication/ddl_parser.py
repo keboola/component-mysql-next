@@ -245,6 +245,8 @@ class AlterStatementParser:
                 if element.upper() != 'ADD':
                     continue
                 first_keyword_index, element = self._get_element_next_to_position(statement, add_keyword_index)
+                if schema_change is None:
+                    raise RuntimeError(f"Invalid ALTER statement query: {statement.normalized}")
                 schema_changes.append(schema_change)
 
             # save schema change on end, should never be empty
@@ -316,7 +318,16 @@ class AlterStatementParser:
                                                      schema_name,
                                                      add_statement,
                                                      normalized_statement.normalized))
+        self._validate_table_changes(table_changes)
         return table_changes
+
+    def _validate_table_changes(self, table_changes: List[TableSchemaChange]):
+        errors = []
+        for change in table_changes:
+            if not change.table_name:
+                errors.append(f"Failed to parse table name from {change.query}")
+        if errors:
+            raise RuntimeError(f"Failed to parse ALTER statements: {', '.join(errors)}")
 
     def get_table_changes(self, sql: str, schema: str) -> List[TableSchemaChange]:
         normalized_statements = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True,
