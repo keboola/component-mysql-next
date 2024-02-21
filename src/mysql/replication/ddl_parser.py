@@ -203,7 +203,7 @@ class AlterStatementParser:
                 if self._is_column_keyword(value):
                     next_index, column_name = self._get_element_next_to_position(statement, idx)
                 else:
-                    column_name = value.normalized
+                    column_name = value.value
                 # next one is always datatype
                 next_index, data_type = self._get_element_next_to_position(statement, next_index)
                 schema_change = TableSchemaChange(TableChangeType.ADD_COLUMN, table_name, schema,
@@ -245,6 +245,8 @@ class AlterStatementParser:
                 if element.upper() != 'ADD':
                     continue
                 first_keyword_index, element = self._get_element_next_to_position(statement, add_keyword_index)
+                if schema_change is None:
+                    raise RuntimeError(f"Invalid ALTER statement query: {statement.normalized}")
                 schema_changes.append(schema_change)
 
             # save schema change on end, should never be empty
@@ -298,13 +300,35 @@ class AlterStatementParser:
         drop_statement = Statement(alter_tokens + change_tokens['DROP']) if change_tokens['DROP'] else Statement([])
         return add_statement, drop_statement
 
+    def _normalize_whitespaces(self, statement: TokenList):
+        """
+        There can never be two empty characters in a row, remove the additional ones
+        Args:
+            statement:
+
+        Returns:
+
+        """
+        tokens = []
+        for idx, t in enumerate(statement.tokens):
+            if idx == 0:
+                tokens.append(t)
+            elif t.ttype in [sqlparse.tokens.Whitespace]:
+                if statement.tokens[idx - 1].ttype in [sqlparse.tokens.Whitespace]:
+                    continue
+                tokens.append(t)
+            else:
+                tokens.append(t)
+        return TokenList(tokens)
+
     def _process_add_drop_changes(self, table_name, schema_name, normalized_statement):
         first_type = normalized_statement.tokens[6].normalized
         table_changes = []
         # because some statements including FIRST were invalidly parsed as identifier groups
         # happens when tokens of type Keyword are separated by comma
         flattened_tokens = self.__ungroup_identifier_lists(normalized_statement)
-        add_statement, drop_statement = self._split_drop_add(flattened_tokens,
+        normalized = self._normalize_whitespaces(flattened_tokens)
+        add_statement, drop_statement = self._split_drop_add(normalized,
                                                              change_type=first_type)
 
         table_changes.extend(self._process_drop_event(table_name,
@@ -316,7 +340,16 @@ class AlterStatementParser:
                                                      schema_name,
                                                      add_statement,
                                                      normalized_statement.normalized))
+        self._validate_table_changes(table_changes)
         return table_changes
+
+    def _validate_table_changes(self, table_changes: List[TableSchemaChange]):
+        errors = []
+        for change in table_changes:
+            if not change.table_name:
+                errors.append(f"Failed to parse table name from {change.query}")
+        if errors:
+            raise RuntimeError(f"Failed to parse ALTER statements: {', '.join(errors)}")
 
     def get_table_changes(self, sql: str, schema: str) -> List[TableSchemaChange]:
         normalized_statements = sqlparse.parse(sqlparse.format(sql, strip_comments=True, reindent_aligned=True,
