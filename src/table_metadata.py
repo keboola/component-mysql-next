@@ -20,6 +20,10 @@ class ColumnSchema:
 
 
 def is_type_with_length(source_type: str, types_with_length: list[str]):
+    # remove length from type
+    if '(' in source_type:
+        source_type = source_type.split('(')[0]
+
     for t in types_with_length:
         if source_type.upper() in t.upper():
             return True
