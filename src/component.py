@@ -635,6 +635,7 @@ class Component(KBCEnvHandler):
         KBCEnvHandler.__init__(self, MANDATORY_PARS, data_path=data_path,
                                log_level=logging.DEBUG if debug else logging.INFO)
 
+        logging.warning(pymysql.__version__)
         if self.cfg_params.get(KEY_DEBUG, False) is True:
             logger = logging.getLogger()
             logger.setLevel(logging.DEBUG)
