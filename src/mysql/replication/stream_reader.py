@@ -1,6 +1,7 @@
 import functools
 import logging
 import struct
+import time
 from distutils.version import LooseVersion
 from enum import Enum
 from typing import List
@@ -28,6 +29,8 @@ except ImportError:
 # 2013 Connection Lost
 # 2006 MySQL server has gone away
 MYSQL_EXPECTED_ERROR_CODES = [2013, 2006]
+MYSQL_SLEEP_CODE = 4052
+SLEEP_FOR = 60
 
 
 class SchemaOffsyncError(Exception):
@@ -660,6 +663,9 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                 if code in MYSQL_EXPECTED_ERROR_CODES:
                     self._BinLogStreamReader__connected_ctl = False
                     raise pymysql.OperationalError("Getting the initial schema failed, server unreachable!") from error
+                elif code == MYSQL_SLEEP_CODE:
+                    logging.warning(f"Detected error code {code}. Sleeping for {SLEEP_FOR} seconds before retrying.")
+                    time.sleep(i)
                 else:
                     raise error
 
