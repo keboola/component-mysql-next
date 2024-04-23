@@ -29,7 +29,6 @@ except ImportError:
 # 2006 MySQL server has gone away
 MYSQL_EXPECTED_ERROR_CODES = [2013, 2006]
 MYSQL_SLAVE_ID_ERROR_CODE = 4052
-SLEEP_FOR = 60
 
 
 class SchemaOffsyncError(Exception):
