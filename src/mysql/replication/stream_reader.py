@@ -1,7 +1,6 @@
 import functools
 import logging
 import struct
-import time
 from distutils.version import LooseVersion
 from enum import Enum
 from typing import List
