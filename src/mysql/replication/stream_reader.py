@@ -466,6 +466,12 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                     self._stream_connection.close()
                     self._BinLogStreamReader__connected_stream = False
                     continue
+                elif code == MYSQL_SLEEP_CODE:
+                    logging.warning(f"Detected error code {code}. Sleeping for {SLEEP_FOR} seconds before retrying.")
+                    self._stream_connection.close()
+                    self._BinLogStreamReader__connected_stream = False
+                    time.sleep(MYSQL_SLEEP_CODE)
+                    continue
                 raise
 
             if pkt.is_eof_packet():
@@ -663,9 +669,6 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                 if code in MYSQL_EXPECTED_ERROR_CODES:
                     self._BinLogStreamReader__connected_ctl = False
                     raise pymysql.OperationalError("Getting the initial schema failed, server unreachable!") from error
-                elif code == MYSQL_SLEEP_CODE:
-                    logging.warning(f"Detected error code {code}. Sleeping for {SLEEP_FOR} seconds before retrying.")
-                    time.sleep(i)
                 else:
                     raise error
 
