@@ -579,7 +579,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
         logging.info("Using provided server_id=%s", server_id)
     else:
         unique_id = uuid.uuid4()
-        server_id = unique_id.int
+        server_id = unique_id.int % 10000
         logging.info("No server_id provided, random server_id will be used: %s", server_id)
 
     connection_wrapper = make_connection_wrapper(config)
