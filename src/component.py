@@ -1275,17 +1275,16 @@ class Component(ComponentBase):
 
     def _build_unique_server_id(self) -> int:
         """
-        Returns unique server id based on the configuration and context in the project it runs to ensure uniqueness.
-        Returns:
-
+        Returns a unique server id based on the configuration and context in which the project runs, ensuring it is
+        suitable for a range of a signed 4-byte integer.
         """
         config_id = self.environment_variables.config_id or 1
         branch_id = self.environment_variables.branch_id or 2
         project_id = self.environment_variables.project_id or 3
 
-        # make sure it's not exceeding the max Long value
-        server_id = int(f"{project_id}{config_id}{branch_id}") % (2 ** 63 - 1)
-        logging.info(f"Unique server id: {server_id}")
+        unique_string = f"{project_id}{config_id}{branch_id}"
+        server_id = hash(unique_string) % (2 ** 30)
+
         return server_id
 
     @staticmethod
