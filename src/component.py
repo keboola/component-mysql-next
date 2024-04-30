@@ -1240,7 +1240,7 @@ class Component(ComponentBase):
         core.write_message(core.StateMessage(value=copy.deepcopy(state)), message_store=message_store)
 
     @staticmethod
-    def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
+    def sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state, server_id,
                             message_store: core.MessageStore = None, schemas=[], tables=[], columns={},
                             append_mode=False):
         if binlog_catalog.streams:
@@ -1248,7 +1248,7 @@ class Component(ComponentBase):
                 write_schema_message(stream, message_store=message_store)
 
             with metrics.job_timer('sync_binlog'):
-                binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state,
+                binlog.sync_binlog_stream(mysql_conn, mysql_config, binlog_catalog.streams, state, server_id,
                                           message_store=message_store, schemas=schemas, tables=tables, columns=columns,
                                           is_append_mode=append_mode)
 
@@ -1266,9 +1266,27 @@ class Component(ComponentBase):
 
         binlog_catalog = get_binlog_streams(mysql_conn, catalog, config, state, append_mode)
         logging.info('Number of binlog catalog tables to process: {}'.format(len(binlog_catalog)))
-        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state,
+
+        server_id = self._build_unique_server_id()
+
+        self.sync_binlog_streams(mysql_conn, binlog_catalog, mysql_config, state, server_id,
                                  message_store=message_store, schemas=schemas, tables=tables, columns=columns,
                                  append_mode=append_mode)
+
+    def _build_unique_server_id(self) -> int:
+        """
+        Returns unique server id based on the configuration and context in the project it runs to ensure uniqueness.
+        Returns:
+
+        """
+        config_id = self.environment_variables.config_id or 1
+        branch_id = self.environment_variables.branch_id or 2
+        project_id = self.environment_variables.project_id or 3
+
+        # make sure it's not exceeding the max Long value
+        server_id = int(f"{project_id}{config_id}{branch_id}") % (2 ** 63 - 1)
+        logging.info(f"Unique server id: {server_id}")
+        return server_id
 
     @staticmethod
     def log_server_params(mysql_conn):
