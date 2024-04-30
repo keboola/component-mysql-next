@@ -558,7 +558,7 @@ class ShowBinlogMethodFactory:
         return binlogs
 
 
-def sync_binlog_stream(mysql_conn, config, binlog_streams, state, server_id: str,
+def sync_binlog_stream(mysql_conn, config, binlog_streams, state, server_id: int,
                        message_store: core.MessageStore = None, schemas=[], tables=[], columns={},
                        is_append_mode: bool = False):
 
