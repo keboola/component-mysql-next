@@ -635,9 +635,10 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                     self._BinLogStreamReader__connect_to_ctl()
 
                 cur = self._ctl_connection.cursor()
+
                 query = cur.mogrify("""SELECT
                         COLUMN_NAME, COLLATION_NAME, CHARACTER_SET_NAME,
-                        COLUMN_COMMENT, COLUMN_TYPE, COLUMN_KEY, ORDINAL_POSITION, DATA_TYPE,
+                        COLUMN_COMMENT, COLUMN_TYPE, COLUMN_KEY, ORDINAL_POSITION, DATA_TYPE, CHARACTER_OCTET_LENGTH,
                         defaults.DEFAULT_COLLATION_NAME,
                         defaults.DEFAULT_CHARSET
                     FROM
