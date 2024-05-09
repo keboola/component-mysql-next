@@ -576,7 +576,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, server_id: int
 
     verify_log_file_exists(binary_logs, log_file, log_pos)
 
-    logging.info(f"Using provided server_id: {server_id}")
+    logging.info(f"Using server_id: {server_id}")
 
     connection_wrapper = make_connection_wrapper(config)
 
