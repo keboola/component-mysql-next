@@ -29,6 +29,7 @@ except ImportError:
 # 2006 MySQL server has gone away
 MYSQL_EXPECTED_ERROR_CODES = [2013, 2006]
 
+
 class SchemaOffsyncError(Exception):
     pass
 
