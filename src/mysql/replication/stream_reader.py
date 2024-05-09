@@ -28,8 +28,6 @@ except ImportError:
 # 2013 Connection Lost
 # 2006 MySQL server has gone away
 MYSQL_EXPECTED_ERROR_CODES = [2013, 2006]
-MYSQL_SLAVE_ID_ERROR_CODE = 4052
-
 
 class SchemaOffsyncError(Exception):
     pass
@@ -464,8 +462,6 @@ class BinLogStreamReaderAlterTracking(BinLogStreamReader):
                     self._stream_connection.close()
                     self._BinLogStreamReader__connected_stream = False
                     continue
-                elif code == MYSQL_SLAVE_ID_ERROR_CODE:
-                    logging.warning(f"Detected Slave ID error code: {code}.")
                 raise
 
             if pkt.is_eof_packet():
