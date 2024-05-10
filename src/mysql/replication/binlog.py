@@ -558,8 +558,10 @@ class ShowBinlogMethodFactory:
         return binlogs
 
 
-def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store: core.MessageStore = None,
-                       schemas=[], tables=[], columns={}, is_append_mode: bool = False):
+def sync_binlog_stream(mysql_conn, config, binlog_streams, state, server_id: int,
+                       message_store: core.MessageStore = None, schemas=[], tables=[], columns={},
+                       is_append_mode: bool = False):
+
     last_table_schema_cache = state.get(bookmarks.KEY_LAST_TABLE_SCHEMAS, {})
     binlog_streams_map = generate_streams_map(binlog_streams)
 
@@ -574,12 +576,7 @@ def sync_binlog_stream(mysql_conn, config, binlog_streams, state, message_store:
 
     verify_log_file_exists(binary_logs, log_file, log_pos)
 
-    if config.get('server_id'):
-        server_id = int(config.get('server_id'))
-        logging.info("Using provided server_id=%s", server_id)
-    else:
-        server_id = fetch_server_id(mysql_conn)
-        logging.info("No server_id provided, will use global server_id=%s", server_id)
+    logging.info(f"Using server_id: {server_id}")
 
     connection_wrapper = make_connection_wrapper(config)
 
