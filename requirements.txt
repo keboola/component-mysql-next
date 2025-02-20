@@ -10,7 +10,7 @@ mock==4.0.2
 mysql-replication==0.43.0
 paramiko==2.7.2
 pendulum==1.2.0
-PyMySQL==1.1.0
+PyMySQL==1.1.1
 pytz==2020.1
 simplejson==3.17.0
 sshtunnel==0.4.0
